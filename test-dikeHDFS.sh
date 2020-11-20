@@ -42,6 +42,5 @@ docker run --rm=true $DOCKER_INTERACTIVE_RUN \
   -v "${ROOT_DIR}/build/.gnupg:${DOCKER_HOME_DIR}/.gnupg" \
   -u "${USER_ID}" \
   --network dike-net \
-  --name dikehdfs \
   "dike-hdfs-build-${USER_NAME}" "$@"
 
