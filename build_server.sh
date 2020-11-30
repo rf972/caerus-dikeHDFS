@@ -17,7 +17,7 @@
 
 set -e               # exit on error
 
-cd "$(dirname "$0")" # connect to root
+pushd "$(dirname "$0")" # connect to root
 
 ROOT_DIR=$(pwd)
 DOCKER_DIR=docker
@@ -33,15 +33,23 @@ DOCKER_HOME_DIR=${DOCKER_HOME_DIR:-/home/${USER_NAME}}
 # in non interactive mode
 DOCKER_INTERACTIVE_RUN=${DOCKER_INTERACTIVE_RUN-"-i -t"}
 
+# By mapping the .m2 directory you can do an mvn install from
+# within the container and use the result on your normal
+# system.  And this also is a significant speedup in subsequent
+# builds because the dependencies are downloaded only once.
+mkdir -p ${ROOT_DIR}/build/.m2
+mkdir -p ${ROOT_DIR}/build/.gnupg
+mkdir -p ${ROOT_DIR}/opt/volume
+
 docker run --rm=true $DOCKER_INTERACTIVE_RUN \
   -v "${ROOT_DIR}/external/hadoop:${DOCKER_HOME_DIR}/hadoop" \
   -v "${ROOT_DIR}/server:${DOCKER_HOME_DIR}/server" \
+  -v "${ROOT_DIR}/config:${DOCKER_HOME_DIR}/config" \
   -v "${ROOT_DIR}/opt/volume:/opt/volume" \
-  -w "${DOCKER_HOME_DIR}/server/hadoop/hadoop" \
+  -w "${DOCKER_HOME_DIR}/server" \
   -v "${ROOT_DIR}/build/.m2:${DOCKER_HOME_DIR}/.m2" \
   -v "${ROOT_DIR}/build/.gnupg:${DOCKER_HOME_DIR}/.gnupg" \
   -u "${USER_ID}" \
-  --network dike-net \
-  --name dikehdfs \
   "dike-hdfs-build-${USER_NAME}" "$@"
 
+popd
