@@ -3,7 +3,8 @@
 set -e               # exit on error
 
 pushd ~/hadoop
-mvn package --no-snapshot-updates  -Pdist,native -DskipTests -Dtar
+mvn install --no-snapshot-updates  -Pdist,native -DskipTests -Dtar
+#mvn package --no-snapshot-updates  -Pdist,native -DskipTests -Dtar
 
 tar -xzf hadoop-dist/target/hadoop-3.4.0-SNAPSHOT.tar.gz --directory ~/server/hadoop
 

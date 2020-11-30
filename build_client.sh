@@ -20,6 +20,8 @@ set -e               # exit on error
 pushd "$(dirname "$0")" # connect to root
 
 ROOT_DIR=$(pwd)
+DOCKER_DIR=docker
+DOCKER_FILE="${DOCKER_DIR}/Dockerfile"
 
 USER_NAME=${SUDO_USER:=$USER}
 USER_ID=$(id -u "${USER_NAME}")
@@ -37,19 +39,24 @@ DOCKER_INTERACTIVE_RUN=${DOCKER_INTERACTIVE_RUN-"-i -t"}
 # builds because the dependencies are downloaded only once.
 mkdir -p ${ROOT_DIR}/build/.m2
 mkdir -p ${ROOT_DIR}/build/.gnupg
-mkdir -p ${ROOT_DIR}/client
 
-#
+# Creation of example
 # CMD="mvn -B archetype:generate -DarchetypeGroupId=org.apache.maven.archetypes -DgroupId=org.dike-hdfs -DartifactId=dikeclient"
+#
+# Compilation
+# CMD="mvn package"
+#
+# Test
+# java -classpath target/dikeclient-1.0.jar org.dike.hdfs.DikeClient
 #
 
 docker run --rm=true $DOCKER_INTERACTIVE_RUN \
-  -v "${ROOT_DIR}/../external/hadoop:${DOCKER_HOME_DIR}/hadoop" \
   -v "${ROOT_DIR}/client:${DOCKER_HOME_DIR}/client" \
-  -w "${DOCKER_HOME_DIR}/client" \
+  -v "${ROOT_DIR}/config:${DOCKER_HOME_DIR}/config" \
+  -w "${DOCKER_HOME_DIR}/client/dikeclient" \
   -v "${ROOT_DIR}/build/.m2:${DOCKER_HOME_DIR}/.m2" \
   -v "${ROOT_DIR}/build/.gnupg:${DOCKER_HOME_DIR}/.gnupg" \
   -u "${USER_ID}" \
-  "dike-hdfs-build-${USER_NAME}" "$@"
+  "dike-hdfs-build-${USER_NAME}" "/bin/bash"
 
 popd
