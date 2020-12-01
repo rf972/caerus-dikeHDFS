@@ -47,8 +47,8 @@ mkdir -p ${ROOT_DIR}/build/.gnupg
 # CMD="mvn package"
 #
 # Test
-# java -classpath target/dikeclient-1.0.jar org.dike.hdfs.DikeClient
-#
+# //java -classpath target/dikeclient-1.0.jar org.dike.hdfs.DikeClient
+# java -classpath target/dikeclient-1.0-jar-with-dependencies.jar org.dike.hdfs.DikeClient
 
 docker run --rm=true $DOCKER_INTERACTIVE_RUN \
   -v "${ROOT_DIR}/client:${DOCKER_HOME_DIR}/client" \
@@ -57,6 +57,7 @@ docker run --rm=true $DOCKER_INTERACTIVE_RUN \
   -v "${ROOT_DIR}/build/.m2:${DOCKER_HOME_DIR}/.m2" \
   -v "${ROOT_DIR}/build/.gnupg:${DOCKER_HOME_DIR}/.gnupg" \
   -u "${USER_ID}" \
+  --network dike-net \
   "dike-hdfs-build-${USER_NAME}" "/bin/bash"
 
 popd

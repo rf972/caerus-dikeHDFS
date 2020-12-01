@@ -34,6 +34,12 @@ DOCKER_HOME_DIR=${DOCKER_HOME_DIR:-/home/${USER_NAME}}
 DOCKER_INTERACTIVE_RUN=${DOCKER_INTERACTIVE_RUN-"-i -t"}
 CMD="sbin/start-dfs.sh && tail -f logs/hadoop-peter-namenode-dikehdfs.log"
 
+if [ $1 = "-d" ]; then
+  echo "Entering debug mode"
+  echo "sbin/start-dfs.sh"
+  CMD="/bin/bash"
+fi
+
 docker run --rm=true $DOCKER_INTERACTIVE_RUN \
   -v "${ROOT_DIR}/external/hadoop:${DOCKER_HOME_DIR}/hadoop" \
   -v "${ROOT_DIR}/server:${DOCKER_HOME_DIR}/server" \
