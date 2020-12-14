@@ -49,6 +49,10 @@ mkdir -p ${ROOT_DIR}/build/.gnupg
 # Test
 # //java -classpath target/dikeclient-1.0.jar org.dike.hdfs.DikeClient
 # java -classpath target/dikeclient-1.0-jar-with-dependencies.jar org.dike.hdfs.DikeClient
+#
+# //java -Xdebug -Xrunjdwp:transport=dt_socket,address=8000,server=y,suspend=y -Xmx1g -classpath target/dikeclient-1.0-jar-with-dependencies.jar org.dike.hdfs.DikeClient /test.txt
+# java -Xdebug -agentlib:jdwp=transport=dt_socket,server=y,suspend=y,address=*:8000 -Xmx1g -classpath target/dikeclient-1.0-jar-with-dependencies.jar org.dike.hdfs.DikeClient /test.txt
+
 
 docker run --rm=true $DOCKER_INTERACTIVE_RUN \
   -v "${ROOT_DIR}/client:${DOCKER_HOME_DIR}/client" \
@@ -58,6 +62,7 @@ docker run --rm=true $DOCKER_INTERACTIVE_RUN \
   -v "${ROOT_DIR}/build/.gnupg:${DOCKER_HOME_DIR}/.gnupg" \
   -u "${USER_ID}" \
   --network dike-net \
+  -p 8000:8000 \
   "dike-hdfs-build-${USER_NAME}" "/bin/bash"
 
 popd

@@ -33,9 +33,12 @@ DOCKER_HOME_DIR=${DOCKER_HOME_DIR:-/home/${USER_NAME}}
 # in non interactive mode
 DOCKER_INTERACTIVE_RUN=${DOCKER_INTERACTIVE_RUN-"-i -t"}
 
+# bin/hdfs dfs -put /data/lineitem.tbl /lineitem.tbl
+
 docker run --rm=true $DOCKER_INTERACTIVE_RUN \
   -v "${ROOT_DIR}/external/hadoop:${DOCKER_HOME_DIR}/hadoop" \
   -v "${ROOT_DIR}/server:${DOCKER_HOME_DIR}/server" \
+  -v "${ROOT_DIR}/../dike/minio/data/tpch-test:/data" \
   -v "${ROOT_DIR}/opt/volume:/opt/volume" \
   -w "${DOCKER_HOME_DIR}/server/hadoop/hadoop" \
   -v "${ROOT_DIR}/build/.m2:${DOCKER_HOME_DIR}/.m2" \
