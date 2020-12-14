@@ -6,9 +6,14 @@ pushd ~/hadoop
 mvn install --no-snapshot-updates  -Pdist,native -DskipTests -Dtar
 #mvn package --no-snapshot-updates  -Pdist,native -DskipTests -Dtar
 
+if [ ! -d ~/server/hadoop ]; then
+  mkdir -p ~/server/hadoop
+else
+  rm -f ~/server/hadoop/hadoop
+fi
+
 tar -xzf hadoop-dist/target/hadoop-3.4.0-SNAPSHOT.tar.gz --directory ~/server/hadoop
 
-rm ~/server/hadoop/hadoop
 ln -s ~/server/hadoop/hadoop-3.4.0-SNAPSHOT ~/server/hadoop/hadoop
 
 # export JAVA_HOME=

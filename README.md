@@ -3,19 +3,22 @@ setup
 
 ```bash
 git clone https://github.com/peterpuhov-github/dikeHDFS.git
+cd dikeHDFS
 git submodule init
 git submodule update --recursive
 # docker network create dike-net
 
-cd dikeHDFS/docker
+cd docker
 ./build-docker.sh
 cd ..
 
-./build_server.sh
+./build_server.sh ./build.sh
 ./start_server.sh
 
 # In separate window
-./run_init_tpch.sh
+# Make sure that your path is correct
+DATA=../dike/minio/data/
+./run_init_tpch.sh ${DATA}
 
 # Usage example can be found in
 # client/dikeclient/src/main/java/org/dike/hdfs/DikeClient.java
