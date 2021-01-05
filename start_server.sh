@@ -29,10 +29,14 @@ USER_ID=$(id -u "${USER_NAME}")
 # Set the home directory in the Docker container.
 DOCKER_HOME_DIR=${DOCKER_HOME_DIR:-/home/${USER_NAME}}
 
-#If this env variable is empty, docker will be started
+# If this env variable is empty, docker will be started
 # in non interactive mode
 DOCKER_INTERACTIVE_RUN=${DOCKER_INTERACTIVE_RUN-"-i -t"}
 CMD="sbin/start-dfs.sh && tail -f logs/hadoop-peter-namenode-dikehdfs.log"
+
+# Update configuration files
+cp ${ROOT_DIR}/config/core-site.xml ${ROOT_DIR}/server/hadoop/hadoop-3.4.0-SNAPSHOT/etc/hadoop/
+cp ${ROOT_DIR}/config/hdfs-site.xml ${ROOT_DIR}/server/hadoop/hadoop-3.4.0-SNAPSHOT/etc/hadoop/
 
 if [ $1 = "-d" ]; then
   echo "Entering debug mode"

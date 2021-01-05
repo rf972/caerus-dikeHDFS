@@ -84,6 +84,7 @@ RUN apt-get -q update \
         ssh \
         pdsh \
         openssh-server \
+        net-tools \
     && apt-get clean \
     && rm -rf /var/lib/apt/lists/*
 

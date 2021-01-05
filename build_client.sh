@@ -48,11 +48,12 @@ mkdir -p ${ROOT_DIR}/build/.gnupg
 #
 # Test
 # //java -classpath target/dikeclient-1.0.jar org.dike.hdfs.DikeClient
-# java -classpath target/dikeclient-1.0-jar-with-dependencies.jar org.dike.hdfs.DikeClient
+# java -classpath target/dikeclient-1.0-jar-with-dependencies.jar org.dike.hdfs.DikeClient /test.txt
 #
 # //java -Xdebug -Xrunjdwp:transport=dt_socket,address=8000,server=y,suspend=y -Xmx1g -classpath target/dikeclient-1.0-jar-with-dependencies.jar org.dike.hdfs.DikeClient /test.txt
 # java -Xdebug -agentlib:jdwp=transport=dt_socket,server=y,suspend=y,address=*:8000 -Xmx1g -classpath target/dikeclient-1.0-jar-with-dependencies.jar org.dike.hdfs.DikeClient /test.txt
 
+# export HADOOP_OPTS="$HADOOP_OPTS -Djava.library.path=$HADOOP_HOME/lib/native"
 
 docker run --rm=true $DOCKER_INTERACTIVE_RUN \
   -v "${ROOT_DIR}/client:${DOCKER_HOME_DIR}/client" \
