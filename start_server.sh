@@ -38,7 +38,7 @@ CMD="sbin/start-dfs.sh && tail -f logs/hadoop-peter-namenode-dikehdfs.log"
 cp ${ROOT_DIR}/config/core-site.xml ${ROOT_DIR}/server/hadoop/hadoop-3.4.0-SNAPSHOT/etc/hadoop/
 cp ${ROOT_DIR}/config/hdfs-site.xml ${ROOT_DIR}/server/hadoop/hadoop-3.4.0-SNAPSHOT/etc/hadoop/
 
-if [ $1 = "-d" ]; then
+if [ "$#" -ge 1 ] && [ $1 = "-d" ]; then
   echo "Entering debug mode"
   echo "sbin/start-dfs.sh"
   CMD="/bin/bash"

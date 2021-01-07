@@ -14,12 +14,15 @@ import java.net.URL;
 import java.security.NoSuchAlgorithmException;
 import java.util.Properties;
 import java.util.Iterator;
+import java.util.List;
+import java.util.Map;
 
 import javax.security.auth.login.LoginException;
 
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.fs.Path;
 import org.apache.hadoop.fs.FileSystem;
+import org.apache.hadoop.fs.FileSystem.Statistics;
 import org.apache.hadoop.fs.StorageStatistics;
 
 import org.apache.hadoop.hdfs.HdfsConfiguration;
@@ -51,13 +54,14 @@ public class DikeClient
         conf.addResource(hdfsCoreSitePath);
         conf.addResource(hdfsHDFSSitePath);
 
-        Path webhdfsPath = new Path("webhdfs://dikehdfs:9870/");
+        //Path webhdfsPath = new Path("webhdfs://dikehdfs:9870/");
+        Path webhdfsPath = new Path("webhdfs://dikehdfs:9860/");
         Path hdfsPath = new Path("hdfs://dikehdfs:9000/");
 
-        perfTest(hdfsPath, fname, conf);
-        perfTest(hdfsPath, fname, conf);
+        //perfTest(hdfsPath, fname, conf);
+        //perfTest(hdfsPath, fname, conf);
 
-        perfTest(webhdfsPath, fname, conf);
+        //perfTest(webhdfsPath, fname, conf);
         perfTest(webhdfsPath, fname, conf);
 
     }
@@ -98,9 +102,13 @@ public class DikeClient
 
         long end_time = System.currentTimeMillis();
 
+        Map<String,Statistics> stats = fs.getStatistics();
+        System.out.format("BytesRead %d\n", stats.get("webhdfs").getBytesRead());
+
         System.out.format("Received %d records (%d bytes) in %.3f sec\n", totalRecords, totalDataSize, (end_time - start_time) / 1000.0);
     }
 }
 
+// mvn package -o
 // java -classpath target/dikeclient-1.0-jar-with-dependencies.jar org.dike.hdfs.DikeClient /test.txt
 // java -Xdebug -agentlib:jdwp=transport=dt_socket,server=y,suspend=y,address=*:8000 -Xmx1g -classpath target/dikeclient-1.0-jar-with-dependencies.jar org.dike.hdfs.DikeClient /test.txt
