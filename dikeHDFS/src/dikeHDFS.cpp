@@ -30,6 +30,7 @@ public:
    virtual void handleRequest(Poco::Net::HTTPServerRequest &req, Poco::Net::HTTPServerResponse &resp)
    {
     cout << DikeUtil().Yellow() << DikeUtil().Now() << " NN Start " << DikeUtil().Reset() << endl;
+    std::istream& fromClient = req.stream();
     HTTPRequest hdfs_req((HTTPRequest)req);
     
     string host = req.getHost();    
@@ -40,22 +41,28 @@ public:
     hdfs_req.write(cout);
 
     HTTPClientSession session(host, 9870);
-    session.sendRequest(hdfs_req);
+    std::ostream& toHDFS =session.sendRequest(hdfs_req);
+
+    Poco::StreamCopier::copyStream(fromClient, toHDFS, 8192);  
+
     HTTPResponse hdfs_resp;
 
-    std::istream& rs = session.receiveResponse(hdfs_resp);
+    std::istream& fromHDFS = session.receiveResponse(hdfs_resp);
     
     (HTTPResponse &)resp = hdfs_resp;    
 
-    cout << DikeUtil().Blue() << resp.get("Location") << DikeUtil().Reset() << endl;
-    string location = resp.get("Location");
-    location.replace(location.find(":9864"), 5, ":9859");
-    resp.set("Location", location);
-    cout << DikeUtil().Blue() << resp.get("Location") << DikeUtil().Reset() << endl;
+    if(resp.has("Location")) {
+      cout << DikeUtil().Blue() << resp.get("Location") << DikeUtil().Reset() << endl;
+      string location = resp.get("Location");
+      location.replace(location.find(":9864"), 5, ":9859");
+      resp.set("Location", location);
+      cout << DikeUtil().Blue() << resp.get("Location") << DikeUtil().Reset() << endl;
+    }
 
     resp.write(cout);
-    ostream& ostr = resp.send();
-    ostr.flush();
+    ostream& toClient = resp.send();
+    Poco::StreamCopier::copyStream(fromHDFS, toClient, 8192);
+    toClient.flush();
   
     cout << DikeUtil().Yellow() << DikeUtil().Now() << " NN End " << DikeUtil().Reset() << endl;
    }   
@@ -83,10 +90,17 @@ public:
     
     (HTTPResponse &)resp = hdfs_resp;    
 
-    resp.write(cout);
-    ostream& toClient = resp.send();
+    string greetings = "\nGreetings from dikeHDFS\n";
+    //resp.setContentLength(resp.getContentLength() + greetings.length());
+    resp.setContentLength(Poco::Net::HTTPMessage::UNKNOWN_CONTENT_LENGTH);
+    resp.setChunkedTransferEncoding(true);    
+    resp.setKeepAlive(true);
 
-    Poco::StreamCopier::copyStream(fromHDFS, toClient, 8192);
+    resp.write(cout);
+
+    ostream& toClient = resp.send();
+    Poco::StreamCopier::copyStream(fromHDFS, toClient, 8192);    
+    toClient << greetings;
     toClient.flush();
 
     cout << DikeUtil().Yellow() << DikeUtil().Now() << " DN End " << DikeUtil().Reset() << endl;
