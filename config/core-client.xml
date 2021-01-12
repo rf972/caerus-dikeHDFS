@@ -40,6 +40,11 @@
         <description>The FileSystem for webhdfs: uris.</description>
     </property>
 
+    <property>
+        <name>fs.dikehdfs.impl</name>
+        <value>org.apache.hadoop.hdfs.web.DikeHdfsFileSystem</value>
+        <description>The FileSystem for dikehdfs: uris.</description>
+    </property>
 
 </configuration>
 

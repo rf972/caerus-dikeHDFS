@@ -52,11 +52,11 @@ public:
     (HTTPResponse &)resp = hdfs_resp;    
 
     if(resp.has("Location")) {
-      cout << DikeUtil().Blue() << resp.get("Location") << DikeUtil().Reset() << endl;
+      //cout << DikeUtil().Blue() << resp.get("Location") << DikeUtil().Reset() << endl;
       string location = resp.get("Location");
       location.replace(location.find(":9864"), 5, ":9859");
       resp.set("Location", location);
-      cout << DikeUtil().Blue() << resp.get("Location") << DikeUtil().Reset() << endl;
+      //cout << DikeUtil().Blue() << resp.get("Location") << DikeUtil().Reset() << endl;
     }
 
     resp.write(cout);
@@ -73,14 +73,24 @@ public:
    virtual void handleRequest(Poco::Net::HTTPServerRequest &req, Poco::Net::HTTPServerResponse &resp)
    {
     cout << DikeUtil().Yellow() << DikeUtil().Now() << " DN Start " << DikeUtil().Reset() << endl;
-    HTTPRequest hdfs_req((HTTPRequest)req);
-    
+    HTTPRequest hdfs_req((HTTPRequest)req);    
+
     string host = req.getHost();    
     host = host.substr(0, host.find(':'));
     hdfs_req.setHost(host, 9864);
 
     cout << hdfs_req.getURI() << endl;     
     hdfs_req.write(cout);
+
+    std::istream& fromClient = req.stream();
+    cout << DikeUtil().Blue();
+    Poco::StreamCopier::copyStream(fromClient, cout, 8192);
+    cout << DikeUtil().Reset() << endl;
+
+    /* Remode read payload from hdfs_req */
+    hdfs_req.setMethod("GET");
+    hdfs_req.setContentType(Poco::Net::HTTPMessage::UNKNOWN_CONTENT_TYPE);
+    hdfs_req.setTransferEncoding(Poco::Net::HTTPMessage::IDENTITY_TRANSFER_ENCODING);
 
     HTTPClientSession session(host, 9864);
     session.sendRequest(hdfs_req);

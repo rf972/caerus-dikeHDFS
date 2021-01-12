@@ -24,6 +24,7 @@ import org.apache.hadoop.fs.Path;
 import org.apache.hadoop.fs.FileSystem;
 import org.apache.hadoop.fs.FileSystem.Statistics;
 import org.apache.hadoop.fs.StorageStatistics;
+import org.apache.hadoop.fs.FSDataInputStream;
 
 import org.apache.hadoop.hdfs.HdfsConfiguration;
 import org.apache.hadoop.hdfs.DistributedFileSystem;
@@ -40,6 +41,9 @@ import org.apache.log4j.BasicConfigurator;
 import org.apache.log4j.PatternLayout;
 import org.apache.log4j.ConsoleAppender;
 
+
+import org.apache.hadoop.hdfs.web.DikeHdfsFileSystem;
+
 public class DikeClient
 {
     public static void main( String[] args )
@@ -54,15 +58,16 @@ public class DikeClient
         conf.addResource(hdfsCoreSitePath);
         conf.addResource(hdfsHDFSSitePath);
 
-        //Path webhdfsPath = new Path("webhdfs://dikehdfs:9870/");
-        Path webhdfsPath = new Path("webhdfs://dikehdfs:9860/");
+        Path webhdfsPath = new Path("webhdfs://dikehdfs:9870/");
+        Path dikehdfsPath = new Path("dikehdfs://dikehdfs:9860/");
         Path hdfsPath = new Path("hdfs://dikehdfs:9000/");
+
 
         //perfTest(hdfsPath, fname, conf);
         //perfTest(hdfsPath, fname, conf);
 
         //perfTest(webhdfsPath, fname, conf);
-        perfTest(webhdfsPath, fname, conf);
+        perfTest(dikehdfsPath, fname, conf);
 
     }
 
@@ -71,17 +76,22 @@ public class DikeClient
         InputStream input = null;
         Path fileToRead = new Path(fname);
         FileSystem fs = null;
+        DikeHdfsFileSystem dikeFS = null;
         ByteBuffer bb = ByteBuffer.allocate(1024);
         int totalDataSize = 0;
         int totalRecords = 0;
+        String readParam = "Read Param Test";
 
         long start_time;
 
         try {
             fs = FileSystem.get(fsPath.toUri(), conf);
+            dikeFS = (DikeHdfsFileSystem)fs;
             System.out.println("\nConnected to -- " + fsPath.toString());
             start_time = System.currentTimeMillis();
-            BufferedReader br = new BufferedReader(new InputStreamReader(fs.open(fileToRead)));
+
+            FSDataInputStream dataInputStream = dikeFS.open(fileToRead, 4096, readParam);
+            BufferedReader br = new BufferedReader(new InputStreamReader(dataInputStream));
             String record;
             record = br.readLine();
             while (record != null){
@@ -103,7 +113,7 @@ public class DikeClient
         long end_time = System.currentTimeMillis();
 
         Map<String,Statistics> stats = fs.getStatistics();
-        System.out.format("BytesRead %d\n", stats.get("webhdfs").getBytesRead());
+        System.out.format("BytesRead %d\n", stats.get("dikehdfs").getBytesRead());
 
         System.out.format("Received %d records (%d bytes) in %.3f sec\n", totalRecords, totalDataSize, (end_time - start_time) / 1000.0);
     }
