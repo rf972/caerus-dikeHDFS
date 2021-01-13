@@ -32,7 +32,7 @@ DOCKER_HOME_DIR=${DOCKER_HOME_DIR:-/home/${USER_NAME}}
 # If this env variable is empty, docker will be started
 # in non interactive mode
 DOCKER_INTERACTIVE_RUN=${DOCKER_INTERACTIVE_RUN-"-i -t"}
-CMD="sbin/start-dfs.sh && tail -f logs/hadoop-peter-namenode-dikehdfs.log"
+CMD="sbin/start-dfs.sh && ~/server/dikeHDFS"
 
 # Update configuration files
 cp ${ROOT_DIR}/config/core-site.xml ${ROOT_DIR}/server/hadoop/hadoop-3.4.0-SNAPSHOT/etc/hadoop/
@@ -41,6 +41,7 @@ cp ${ROOT_DIR}/config/hdfs-site.xml ${ROOT_DIR}/server/hadoop/hadoop-3.4.0-SNAPS
 if [ "$#" -ge 1 ] && [ $1 = "-d" ]; then
   echo "Entering debug mode"
   echo "sbin/start-dfs.sh"
+  echo "~/server/dikeHDFS"
   CMD="/bin/bash"
 fi
 

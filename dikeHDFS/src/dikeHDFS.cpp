@@ -108,8 +108,6 @@ public:
     
     (HTTPResponse &)resp = hdfs_resp;    
 
-    string greetings = "\nGreetings from dikeHDFS\n";
-    //resp.setContentLength(resp.getContentLength() + greetings.length());
     resp.setContentLength(Poco::Net::HTTPMessage::UNKNOWN_CONTENT_LENGTH);
     resp.setChunkedTransferEncoding(true);    
     resp.setKeepAlive(true);
@@ -118,9 +116,9 @@ public:
 
     ostream& toClient = resp.send();
     /* Read and discard file data */
-    while (fromHDFS.read(buffer, sizeof(buffer)));
-    //Poco::StreamCopier::copyStream(fromHDFS, toClient, 8192);    
-    toClient << readParam;
+    //while (fromHDFS.read(buffer, sizeof(buffer)));
+    Poco::StreamCopier::copyStream(fromHDFS, toClient, 8192);    
+    // toClient << readParam;
     toClient.flush();
 
     cout << DikeUtil().Yellow() << DikeUtil().Now() << " DN End " << DikeUtil().Reset() << endl;

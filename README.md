@@ -12,7 +12,8 @@ cd docker
 ./build-docker.sh
 cd ..
 
-./build_server.sh ./build.sh
+./build_hdfs_server.sh ./build.sh
+./build_dike_server.sh
 ./start_server.sh
 
 # In separate window
