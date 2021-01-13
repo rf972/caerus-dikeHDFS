@@ -80,7 +80,7 @@ public class DikeClient
         ByteBuffer bb = ByteBuffer.allocate(1024);
         int totalDataSize = 0;
         int totalRecords = 0;
-        String readParam = "Read Param Test";
+        String readParam = "Test";
 
         long start_time;
 

@@ -83,8 +83,16 @@ public:
     hdfs_req.write(cout);
 
     std::istream& fromClient = req.stream();
+    string readParam;
+    char buffer[4096];
+    while (fromClient.read(buffer, sizeof(buffer))) {
+        readParam.append(buffer, sizeof(buffer));
+    }
+    readParam.append(buffer, fromClient.gcount());
+
     cout << DikeUtil().Blue();
-    Poco::StreamCopier::copyStream(fromClient, cout, 8192);
+    //Poco::StreamCopier::copyStream(fromClient, cout, 8192);
+    cout << readParam;
     cout << DikeUtil().Reset() << endl;
 
     /* Remode read payload from hdfs_req */
@@ -109,8 +117,10 @@ public:
     resp.write(cout);
 
     ostream& toClient = resp.send();
-    Poco::StreamCopier::copyStream(fromHDFS, toClient, 8192);    
-    toClient << greetings;
+    /* Read and discard file data */
+    while (fromHDFS.read(buffer, sizeof(buffer)));
+    //Poco::StreamCopier::copyStream(fromHDFS, toClient, 8192);    
+    toClient << readParam;
     toClient.flush();
 
     cout << DikeUtil().Yellow() << DikeUtil().Now() << " DN End " << DikeUtil().Reset() << endl;

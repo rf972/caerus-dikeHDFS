@@ -2398,7 +2398,7 @@ public class DikeHdfsFileSystem extends FileSystem
       if (count >= 0) {
         statistics.incrementBytesRead(count);
         pos += count;
-      } else if (pos < fileLength) {
+      } else if (pos < fileLength && readParam == null) {
         throw new EOFException(
                   "Premature EOF: pos=" + pos + " < filelength=" + fileLength);
       }
@@ -2488,7 +2488,7 @@ public class DikeHdfsFileSystem extends FileSystem
         }
 
         int count = in.read(readBuffer, readOffset, readLength);
-        if (count < 0 && pos < fileLength) {
+        if (count < 0 && pos < fileLength && readParam == null) {
           throw new EOFException(
                   "Premature EOF: pos=" + pos + " < filelength=" + fileLength);
         }
@@ -2526,6 +2526,8 @@ public class DikeHdfsFileSystem extends FileSystem
         // Java has a bug with >2GB request streams.  It won't bounds check
         // the reads so the transfer blocks until the server times out
         inStream = new BoundedInputStream(inStream, streamLength);
+      } else if (readParam != null){
+        fileLength = Long.MAX_VALUE;
       } else {
         fileLength = getHdfsFileStatus(path).getLen();
       }
