@@ -5,5 +5,6 @@ build/*
 client/dikeclient/dependency-reduced-pom.xml
 client/dikeclient/target/*
 server/dikeHDFS
+dikeHDFS/build/*
 
 

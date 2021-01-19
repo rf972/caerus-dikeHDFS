@@ -2,7 +2,7 @@ cmake_minimum_required(VERSION 3.10)
 
 set(BUILD_SHARED_LIBS OFF CACHE BOOL "Build shared libraries")
 add_subdirectory(external/poco)
-#add_subdirectory(dikeSQL)
+add_subdirectory(dikeSQL)
 
 #include_directories(dikeSQL)
 
