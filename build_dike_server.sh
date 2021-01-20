@@ -32,6 +32,10 @@ mkdir -p ${ROOT_DIR}/opt/volume
 
 BUILD_TYPE=Release
 
+if [ "$#" -ge 1 ] && [ $1 = "Debug" ]; then
+BUILD_TYPE=Debug
+fi
+
 CMD="                                              \
 mkdir -p build/${BUILD_TYPE}                    && \
 cd build/${BUILD_TYPE}                          && \

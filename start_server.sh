@@ -48,6 +48,7 @@ fi
 docker run --rm=true $DOCKER_INTERACTIVE_RUN \
   -v "${ROOT_DIR}/external/hadoop:${DOCKER_HOME_DIR}/hadoop" \
   -v "${ROOT_DIR}/server:${DOCKER_HOME_DIR}/server" \
+  -v "${ROOT_DIR}/dikeHDFS:${DOCKER_HOME_DIR}/dikeHDFS" \
   -v "${ROOT_DIR}/config:${DOCKER_HOME_DIR}/config" \
   -v "${ROOT_DIR}/opt/volume:/opt/volume" \
   -w "${DOCKER_HOME_DIR}/server/hadoop/hadoop" \

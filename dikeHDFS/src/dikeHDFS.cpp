@@ -82,23 +82,36 @@ public:
     cout << hdfs_req.getURI() << endl;     
     hdfs_req.write(cout);
 
-    std::istream& fromClient = req.stream();
     string readParam;
+    /* ReadParam as content  
+    std::istream& fromClient = req.stream();    
     char buffer[4096];
     while (fromClient.read(buffer, sizeof(buffer))) {
         readParam.append(buffer, sizeof(buffer));
     }
     readParam.append(buffer, fromClient.gcount());
+    */
+   
+    if(req.has("ReadParam")) {
+      readParam = req.get("ReadParam");
+      cout << DikeUtil().Blue();
+      //cout << "ReadParam: " << readParam << endl;
 
-    cout << DikeUtil().Blue();
-    //Poco::StreamCopier::copyStream(fromClient, cout, 8192);
-    cout << readParam;
-    cout << DikeUtil().Reset() << endl;
+      std::istringstream readParamStream(readParam.c_str());      
+      std::istream& xmlStream(readParamStream);
+      AbstractConfiguration *cfg = new XMLConfiguration(xmlStream);            
+      cout << "Name: " << cfg->getString("Name") << endl;
+      cout << "Schema: " << cfg->getString("Configuration.Schema") << endl;
+      cout << "Query: " << cfg->getString("Configuration.Query") << endl;
+      cout << DikeUtil().Reset() << endl;      
+    }
 
-    /* Remode read payload from hdfs_req */
+    /* Remode read payload from hdfs_req 
+     * This needed if ReadParam sent as content
     hdfs_req.setMethod("GET");
     hdfs_req.setContentType(Poco::Net::HTTPMessage::UNKNOWN_CONTENT_TYPE);
     hdfs_req.setTransferEncoding(Poco::Net::HTTPMessage::IDENTITY_TRANSFER_ENCODING);
+    */
 
     HTTPClientSession session(host, 9864);
     session.sendRequest(hdfs_req);

@@ -768,9 +768,11 @@ public class DikeHdfsFileSystem extends FileSystem
           (HttpURLConnection)connectionFactory.openConnection(url);
       boolean doOutput = op.getDoOutput();
 
+      /* If we want to stream readParam as content
       if (redirected == true && readParam != null) {
         doOutput = true;
       }
+       */
 
       conn.setRequestMethod(op.getType().toString());
       conn.setInstanceFollowRedirects(false);
@@ -799,6 +801,11 @@ public class DikeHdfsFileSystem extends FileSystem
       }
       case GET: {
         conn.setDoOutput(doOutput);
+        if (readParam != null) {
+          conn.setRequestProperty("ReadParam", readParam);
+        }
+
+        /* If we want to stream readParam as content
         if (doOutput) {
           conn.setRequestProperty("Content-Type",
                   MediaType.APPLICATION_OCTET_STREAM);
@@ -808,6 +815,7 @@ public class DikeHdfsFileSystem extends FileSystem
           os.close();
           return conn;
         }
+        */
         break;
       }
       default:

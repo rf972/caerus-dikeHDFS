@@ -22,7 +22,7 @@ target_link_libraries(dikeHDFS PUBLIC
     Poco::Foundation
     Poco::Util
     Poco::Net
-#    libsqlite
+    libsqlite
     "-lpthread -lm"
 #    "-L${CMAKE_SOURCE_DIR}/external/build-aws/lib -laws-c-event-stream  -laws-checksums -laws-c-common"
     )

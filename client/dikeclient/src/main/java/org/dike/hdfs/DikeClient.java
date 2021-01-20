@@ -41,6 +41,13 @@ import org.apache.log4j.BasicConfigurator;
 import org.apache.log4j.PatternLayout;
 import org.apache.log4j.ConsoleAppender;
 
+// StaX XML imports
+//import java.io.FileOutputStream;
+import java.io.StringWriter;
+import java.util.Iterator;
+import javax.xml.stream.*;
+import javax.xml.namespace.QName;
+
 
 import org.apache.hadoop.hdfs.web.DikeHdfsFileSystem;
 
@@ -90,6 +97,32 @@ public class DikeClient
             System.out.println("\nConnected to -- " + fsPath.toString());
             start_time = System.currentTimeMillis();
 
+            XMLOutputFactory xmlof = XMLOutputFactory.newInstance();
+            StringWriter strw = new StringWriter();
+            XMLStreamWriter xmlw = xmlof.createXMLStreamWriter(strw);
+            xmlw.writeStartDocument();
+            xmlw.writeStartElement("Processor");
+            //xmlw.writeAttribute("Name","dikeSQL");
+            xmlw.writeStartElement("Name");
+            xmlw.writeCharacters("dikeSQL");
+            xmlw.writeEndElement(); // Name
+            //xmlw.writeAttribute("Version","0.1");
+
+            xmlw.writeStartElement("Configuration");
+            xmlw.writeStartElement("Schema");
+            xmlw.writeCharacters("l_orderkey INTEGER,l_partkey INTEGER,l_suppkey INTEGER,l_linenumber INTEGER,l_quantity NUMERIC,l_extendedprice NUMERIC,l_discount NUMERIC,l_tax NUMERIC,l_returnflag,l_linestatus,l_shipdate,l_commitdate,l_receiptdate,l_shipinstruct,l_shipmode,l_comment");
+            xmlw.writeEndElement(); // Schema
+
+            xmlw.writeStartElement("Query");
+            xmlw.writeCData("SELECT * FROM S3Object");
+            xmlw.writeEndElement(); // Query
+
+            xmlw.writeEndElement(); // Configuration
+            xmlw.writeEndElement(); // Processor
+            xmlw.writeEndDocument();
+            xmlw.close();
+
+            readParam = strw.toString();
             FSDataInputStream dataInputStream = dikeFS.open(fileToRead, 4096, readParam);
             BufferedReader br = new BufferedReader(new InputStreamReader(dataInputStream));
             String record;
