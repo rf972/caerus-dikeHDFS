@@ -87,15 +87,16 @@ public class DikeClient
         ByteBuffer bb = ByteBuffer.allocate(1024);
         int totalDataSize = 0;
         int totalRecords = 0;
-        String readParam = "Test";
+        String readParam = null;
 
         long start_time;
 
         try {
             fs = FileSystem.get(fsPath.toUri(), conf);
-            dikeFS = (DikeHdfsFileSystem)fs;
             System.out.println("\nConnected to -- " + fsPath.toString());
             start_time = System.currentTimeMillis();
+            
+            dikeFS = (DikeHdfsFileSystem)fs;
 
             XMLOutputFactory xmlof = XMLOutputFactory.newInstance();
             StringWriter strw = new StringWriter();
@@ -123,7 +124,11 @@ public class DikeClient
             xmlw.close();
 
             readParam = strw.toString();
-            FSDataInputStream dataInputStream = dikeFS.open(fileToRead, 4096, readParam);
+            //FSDataInputStream dataInputStream = dikeFS.open(fileToRead, 4096, readParam);
+            FSDataInputStream dataInputStream = dikeFS.open(fileToRead, 4096);
+            
+            //FSDataInputStream dataInputStream = fs.open(fileToRead);
+
             BufferedReader br = new BufferedReader(new InputStreamReader(dataInputStream));
             String record;
             record = br.readLine();
@@ -146,7 +151,8 @@ public class DikeClient
         long end_time = System.currentTimeMillis();
 
         Map<String,Statistics> stats = fs.getStatistics();
-        System.out.format("BytesRead %d\n", stats.get("dikehdfs").getBytesRead());
+        System.out.println(fs.getScheme());
+        //System.out.format("BytesRead %d\n", stats.get(fs.getScheme()).getBytesRead());
 
         System.out.format("Received %d records (%d bytes) in %.3f sec\n", totalRecords, totalDataSize, (end_time - start_time) / 1000.0);
     }

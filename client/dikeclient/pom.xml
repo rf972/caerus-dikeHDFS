@@ -8,8 +8,8 @@
   <name>dikeclient</name>
   <url>http://maven.apache.org</url>
   <properties>
-    <!-- <hadoop.version>3.3.0</hadoop.version> -->
-    <hadoop.version>3.4.0-SNAPSHOT</hadoop.version>
+    <hadoop.version>3.2.0</hadoop.version>
+    <!-- <hadoop.version>3.4.0-SNAPSHOT</hadoop.version> -->
   </properties>
 
   <dependencies>
