@@ -657,6 +657,7 @@ public class DikeHdfsFileSystem extends FileSystem
     private boolean checkRetry;
     private String redirectHost;
     private boolean followRedirect = true;
+    private String readParam = null;
 
     protected AbstractRunner(final HttpOpParam.Op op, boolean redirected) {
       this.op = op;
@@ -668,6 +669,13 @@ public class DikeHdfsFileSystem extends FileSystem
       this(op, redirected);
       this.followRedirect = followRedirect;
     }
+
+    protected AbstractRunner(final HttpOpParam.Op op, boolean redirected,
+        boolean followRedirect, String readParam) {
+      this(op, redirected);
+      this.followRedirect = followRedirect;
+      this.readParam = readParam;
+    }    
 
     T run() throws IOException {
       UserGroupInformation connectUgi = ugi.getRealUser();
@@ -789,6 +797,13 @@ public class DikeHdfsFileSystem extends FileSystem
         }
         break;
       }
+      case GET: {
+        conn.setDoOutput(doOutput);
+        if (readParam != null) {
+          conn.setRequestProperty("ReadParam", readParam);
+        }
+        break;
+      }      
       default:
         conn.setDoOutput(doOutput);
         break;
@@ -1054,6 +1069,12 @@ public class DikeHdfsFileSystem extends FileSystem
     protected URLRunner(final HttpOpParam.Op op, final URL url,
         boolean redirected, boolean followRedirect) {
       super(op, redirected, followRedirect);
+      this.url = url;
+    }
+
+    protected URLRunner(final HttpOpParam.Op op, final URL url,
+        boolean redirected, boolean followRedirect, String readParam) {
+      super(op, redirected, followRedirect, readParam);
       this.url = url;
     }
 
@@ -1493,14 +1514,19 @@ public class DikeHdfsFileSystem extends FileSystem
     ).run();
   }
 
-  @SuppressWarnings("resource")
   @Override
   public FSDataInputStream open(final Path f, final int bufferSize
   ) throws IOException {
+    return open(f, bufferSize, null);
+  }
+
+  @SuppressWarnings("resource")  
+  public FSDataInputStream open(final Path f, final int bufferSize,
+    final String readParam ) throws IOException {
     statistics.incrementReadOps(1);
     storageStatistics.incrementOpCounter(OpType.OPEN);
     WebHdfsInputStream webfsInputStream =
-        new WebHdfsInputStream(f, bufferSize);
+        new WebHdfsInputStream(f, bufferSize, readParam);
     if (webfsInputStream.getFileEncryptionInfo() == null) {
       return new FSDataInputStream(webfsInputStream);
     } else {
@@ -1975,10 +2001,10 @@ public class DikeHdfsFileSystem extends FileSystem
   public class WebHdfsInputStream extends FSInputStream {
     private ReadRunner readRunner = null;
 
-    WebHdfsInputStream(Path path, int buffersize) throws IOException {
+    WebHdfsInputStream(Path path, int buffersize, String readParam) throws IOException {
       // Only create the ReadRunner once. Each read's byte array and position
       // will be updated within the ReadRunner object before every read.
-      readRunner = new ReadRunner(path, buffersize);
+      readRunner = new ReadRunner(path, buffersize, readParam);
     }
 
     @Override
@@ -2091,19 +2117,21 @@ public class DikeHdfsFileSystem extends FileSystem
     private long pos = 0;
     private long fileLength = 0;
     private FileEncryptionInfo feInfo = null;
+    private String readParam = null;
 
     /* The following methods are WebHdfsInputStream helpers. */
 
-    ReadRunner(Path p, int bs) throws IOException {
+    ReadRunner(Path p, int bs, String readParam) throws IOException {
       super(GetOpParam.Op.OPEN, p, new BufferSizeParam(bs));
       this.path = p;
       this.bufferSize = bs;
+      this.readParam = readParam;
       getRedirectedUrl();
     }
 
     private void getRedirectedUrl() throws IOException {
       URLRunner urlRunner = new URLRunner(GetOpParam.Op.OPEN, null, false,
-          false) {
+          false, readParam) {
         @Override
         protected URL getUrl() throws IOException {
           return toUrl(op, path, new BufferSizeParam(bufferSize));
@@ -2161,7 +2189,7 @@ public class DikeHdfsFileSystem extends FileSystem
         try {
           final URL rurl = new URL(resolvedUrl + "&" + new OffsetParam(pos));
           cachedConnection = new URLRunner(GetOpParam.Op.OPEN, rurl, true,
-              false).run();
+              false, readParam).run();
         } catch (IOException ioe) {
           closeInputStream(RunnerState.DISCONNECTED);
         }
@@ -2176,7 +2204,7 @@ public class DikeHdfsFileSystem extends FileSystem
       if (count >= 0) {
         statistics.incrementBytesRead(count);
         pos += count;
-      } else if (pos < fileLength) {
+      } else if (pos < fileLength && readParam == null) {
         throw new EOFException(
                   "Premature EOF: pos=" + pos + " < filelength=" + fileLength);
       }
@@ -2256,7 +2284,7 @@ public class DikeHdfsFileSystem extends FileSystem
         }
 
         int count = in.read(readBuffer, readOffset, readLength);
-        if (count < 0 && pos < fileLength) {
+        if (count < 0 && pos < fileLength && readParam == null) {
           throw new EOFException(
                   "Premature EOF: pos=" + pos + " < filelength=" + fileLength);
         }
@@ -2294,6 +2322,8 @@ public class DikeHdfsFileSystem extends FileSystem
         // Java has a bug with >2GB request streams.  It won't bounds check
         // the reads so the transfer blocks until the server times out
         inStream = new BoundedInputStream(inStream, streamLength);
+      } else if (readParam != null){
+        fileLength = Long.MAX_VALUE;
       } else {
         fileLength = getHdfsFileStatus(path).getLen();
       }

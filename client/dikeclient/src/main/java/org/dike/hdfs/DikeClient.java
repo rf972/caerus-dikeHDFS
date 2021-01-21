@@ -94,9 +94,7 @@ public class DikeClient
         try {
             fs = FileSystem.get(fsPath.toUri(), conf);
             System.out.println("\nConnected to -- " + fsPath.toString());
-            start_time = System.currentTimeMillis();
-            
-            dikeFS = (DikeHdfsFileSystem)fs;
+            start_time = System.currentTimeMillis();                        
 
             XMLOutputFactory xmlof = XMLOutputFactory.newInstance();
             StringWriter strw = new StringWriter();
@@ -124,10 +122,14 @@ public class DikeClient
             xmlw.close();
 
             readParam = strw.toString();
-            //FSDataInputStream dataInputStream = dikeFS.open(fileToRead, 4096, readParam);
-            FSDataInputStream dataInputStream = dikeFS.open(fileToRead, 4096);
-            
-            //FSDataInputStream dataInputStream = fs.open(fileToRead);
+            FSDataInputStream dataInputStream = null;
+            if(fs.getScheme() == "dikehdfs"){
+                dikeFS = (DikeHdfsFileSystem)fs;
+                dataInputStream = dikeFS.open(fileToRead, 4096, readParam);
+                //dataInputStream = dikeFS.open(fileToRead, 4096);
+            } else {            
+                dataInputStream = fs.open(fileToRead);
+            }
 
             BufferedReader br = new BufferedReader(new InputStreamReader(dataInputStream));
             String record;
@@ -151,13 +153,12 @@ public class DikeClient
         long end_time = System.currentTimeMillis();
 
         Map<String,Statistics> stats = fs.getStatistics();
-        System.out.println(fs.getScheme());
-        //System.out.format("BytesRead %d\n", stats.get(fs.getScheme()).getBytesRead());
-
+        //System.out.println(fs.getScheme());
+        System.out.format("BytesRead %d\n", stats.get(fs.getScheme()).getBytesRead());
         System.out.format("Received %d records (%d bytes) in %.3f sec\n", totalRecords, totalDataSize, (end_time - start_time) / 1000.0);
     }
 }
 
 // mvn package -o
-// java -classpath target/dikeclient-1.0-jar-with-dependencies.jar org.dike.hdfs.DikeClient /test.txt
-// java -Xdebug -agentlib:jdwp=transport=dt_socket,server=y,suspend=y,address=*:8000 -Xmx1g -classpath target/dikeclient-1.0-jar-with-dependencies.jar org.dike.hdfs.DikeClient /test.txt
+// java -classpath target/dikeclient-1.0-jar-with-dependencies.jar org.dike.hdfs.DikeClient /lineitem.tbl
+// java -Xdebug -agentlib:jdwp=transport=dt_socket,server=y,suspend=y,address=*:8000 -Xmx1g -classpath target/dikeclient-1.0-jar-with-dependencies.jar org.dike.hdfs.DikeClient /lineitem.tbl
