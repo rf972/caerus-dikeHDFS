@@ -2,7 +2,10 @@ cmake_minimum_required(VERSION 3.0.0)
 project(dikeSQL VERSION 0.1.0)
 
 
-add_library(libsqlite STATIC sqlite3.c tbl.c StreamReader.cpp sqlite3ext.h sqlite3.h)
+add_library(libsqlite STATIC sqlite3.c sqlite3ext.h sqlite3.h
+            StreamReader.cpp StreamReader.hpp
+            DikeSQL.cpp DikeSQL.hpp
+            )
 
 include_directories(.)
 

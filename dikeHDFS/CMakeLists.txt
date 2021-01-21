@@ -4,7 +4,7 @@ set(BUILD_SHARED_LIBS OFF CACHE BOOL "Build shared libraries")
 add_subdirectory(external/poco)
 add_subdirectory(dikeSQL)
 
-#include_directories(dikeSQL)
+include_directories(dikeSQL)
 
 project(dikeHDFS)
 add_executable(dikeHDFS src/dikeHDFS.cpp)
