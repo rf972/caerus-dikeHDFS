@@ -134,7 +134,7 @@ import com.google.common.collect.Lists;
 /** A FileSystem for HDFS over the web. */
 public class DikeHdfsFileSystem extends FileSystem
     implements DelegationTokenRenewer.Renewable,
-    TokenAspect.TokenManagementDelegator, KeyProviderTokenIssuer {
+    /* TokenAspect.TokenManagementDelegator,*/ KeyProviderTokenIssuer {
   public static final Logger LOG = LoggerFactory
       .getLogger(DikeHdfsFileSystem.class);
   /** WebHdfs version. */
@@ -417,7 +417,7 @@ public class DikeHdfsFileSystem extends FileSystem
             new UserParam(ugi)) {
           @Override
           String decodeResponse(Map<?, ?> json) throws IOException {
-            return JsonUtilClient.getPath(json);
+            return DikeJsonUtilClient.getPath(json);
           }
         }   .run();
 
@@ -507,7 +507,7 @@ public class DikeHdfsFileSystem extends FileSystem
         return m;
       }
 
-      IOException re = JsonUtilClient.toRemoteException(m);
+      IOException re = DikeJsonUtilClient.toRemoteException(m);
 
       //check if exception is due to communication with a Standby name node
       if (re.getMessage() != null && re.getMessage().endsWith(
@@ -1097,7 +1097,7 @@ public class DikeHdfsFileSystem extends FileSystem
     HdfsFileStatus status = new FsPathResponseRunner<HdfsFileStatus>(op, f) {
       @Override
       HdfsFileStatus decodeResponse(Map<?,?> json) {
-        return JsonUtilClient.toFileStatus(json, true);
+        return DikeJsonUtilClient.toFileStatus(json, true);
       }
     }.run();
     if (status == null) {
@@ -1119,7 +1119,7 @@ public class DikeHdfsFileSystem extends FileSystem
     AclStatus status = new FsPathResponseRunner<AclStatus>(op, f) {
       @Override
       AclStatus decodeResponse(Map<?,?> json) {
-        return JsonUtilClient.toAclStatus(json);
+        return DikeJsonUtilClient.toAclStatus(json);
       }
     }.run();
     if (status == null) {
@@ -1202,7 +1202,7 @@ public class DikeHdfsFileSystem extends FileSystem
         new XAttrEncodingParam(XAttrCodec.HEX)) {
       @Override
       byte[] decodeResponse(Map<?, ?> json) throws IOException {
-        return JsonUtilClient.getXAttr(json);
+        return DikeJsonUtilClient.getXAttr(json);
       }
     }.run();
   }
@@ -1214,7 +1214,7 @@ public class DikeHdfsFileSystem extends FileSystem
         new XAttrEncodingParam(XAttrCodec.HEX)) {
       @Override
       Map<String, byte[]> decodeResponse(Map<?, ?> json) throws IOException {
-        return JsonUtilClient.toXAttrs(json);
+        return DikeJsonUtilClient.toXAttrs(json);
       }
     }.run();
   }
@@ -1234,7 +1234,7 @@ public class DikeHdfsFileSystem extends FileSystem
     return new FsPathResponseRunner<Map<String, byte[]>>(op, parameters, p) {
       @Override
       Map<String, byte[]> decodeResponse(Map<?, ?> json) throws IOException {
-        return JsonUtilClient.toXAttrs(json);
+        return DikeJsonUtilClient.toXAttrs(json);
       }
     }.run();
   }
@@ -1245,7 +1245,7 @@ public class DikeHdfsFileSystem extends FileSystem
     return new FsPathResponseRunner<List<String>>(op, p) {
       @Override
       List<String> decodeResponse(Map<?, ?> json) throws IOException {
-        return JsonUtilClient.toXAttrNames(json);
+        return DikeJsonUtilClient.toXAttrNames(json);
       }
     }.run();
   }
@@ -1382,7 +1382,7 @@ public class DikeHdfsFileSystem extends FileSystem
         new SnapshotNameParam(toSnapshot)) {
       @Override
       SnapshotDiffReport decodeResponse(Map<?, ?> json) {
-        return JsonUtilClient.toSnapshotDiffReport(json);
+        return DikeJsonUtilClient.toSnapshotDiffReport(json);
       }
     }.run();
   }
@@ -1395,7 +1395,7 @@ public class DikeHdfsFileSystem extends FileSystem
     return new FsPathResponseRunner<SnapshottableDirectoryStatus[]>(op, null) {
       @Override
       SnapshottableDirectoryStatus[] decodeResponse(Map<?, ?> json) {
-        return JsonUtilClient.toSnapshottableDirectoryList(json);
+        return DikeJsonUtilClient.toSnapshottableDirectoryList(json);
       }
     }.run();
   }
@@ -1537,15 +1537,15 @@ public class DikeHdfsFileSystem extends FileSystem
 
   @Override
   public synchronized void close() throws IOException {
-    try {
+    /*try {
       if (canRefreshDelegationToken && delegationToken != null) {
         cancelDelegationToken(delegationToken);
       }
     } catch (IOException ioe) {
       LOG.debug("Token cancel failed: ", ioe);
-    } finally {
+    } finally {*/
       super.close();
-    }
+   // }
   }
 
   // use FsPathConnectionRunner to ensure retries for InvalidTokens
@@ -1649,7 +1649,7 @@ public class DikeHdfsFileSystem extends FileSystem
       @Override
       FileStatus[] decodeResponse(Map<?,?> json) {
         HdfsFileStatus[] hdfsStatuses =
-            JsonUtilClient.toHdfsFileStatusArray(json);
+            DikeJsonUtilClient.toHdfsFileStatusArray(json);
         final FileStatus[] statuses = new FileStatus[hdfsStatuses.length];
         for (int i = 0; i < hdfsStatuses.length; i++) {
           statuses[i] = hdfsStatuses[i].makeQualified(fsUri, f);
@@ -1681,7 +1681,7 @@ public class DikeHdfsFileSystem extends FileSystem
         f, new StartAfterParam(new String(prevKey, Charsets.UTF_8))) {
       @Override
       DirectoryListing decodeResponse(Map<?, ?> json) throws IOException {
-        return JsonUtilClient.toDirectoryListing(json);
+        return DikeJsonUtilClient.toDirectoryListing(json);
       }
     }.run();
     // Qualify the returned FileStatus array
@@ -1705,7 +1705,7 @@ public class DikeHdfsFileSystem extends FileSystem
           @Override
           Token<DelegationTokenIdentifier> decodeResponse(Map<?,?> json)
               throws IOException {
-            return JsonUtilClient.toDelegationToken(json);
+            return DikeJsonUtilClient.toDelegationToken(json);
           }
         }.run();
     if (token != null) {
@@ -1740,7 +1740,7 @@ public class DikeHdfsFileSystem extends FileSystem
       delegationToken = token;
     }
   }
-
+/*
   @Override
   public synchronized long renewDelegationToken(final Token<?> token
   ) throws IOException {
@@ -1762,7 +1762,7 @@ public class DikeHdfsFileSystem extends FileSystem
         new TokenArgumentParam(token.encodeToUrlString())
     ).run();
   }
-
+*/
   public BlockLocation[] getFileBlockLocations(final FileStatus status,
       final long offset, final long length) throws IOException {
     if (status == null) {
@@ -1783,7 +1783,7 @@ public class DikeHdfsFileSystem extends FileSystem
       @Override
       BlockLocation[] decodeResponse(Map<?,?> json) throws IOException {
         return DFSUtilClient.locatedBlocks2Locations(
-            JsonUtilClient.toLocatedBlocks(json));
+            DikeJsonUtilClient.toLocatedBlocks(json));
       }
     }.run();
   }
@@ -1798,7 +1798,7 @@ public class DikeHdfsFileSystem extends FileSystem
       String strTrashPath = new FsPathResponseRunner<String>(op, path) {
         @Override
         String decodeResponse(Map<?, ?> json) throws IOException {
-          return JsonUtilClient.getPath(json);
+          return DikeJsonUtilClient.getPath(json);
         }
       }.run();
       return new Path(strTrashPath).makeQualified(getUri(), null);
@@ -1824,7 +1824,7 @@ public class DikeHdfsFileSystem extends FileSystem
     return new FsPathResponseRunner<ContentSummary>(op, p) {
       @Override
       ContentSummary decodeResponse(Map<?,?> json) {
-        return JsonUtilClient.toContentSummary(json);
+        return DikeJsonUtilClient.toContentSummary(json);
       }
     }.run();
   }
@@ -1839,7 +1839,7 @@ public class DikeHdfsFileSystem extends FileSystem
     return new FsPathResponseRunner<MD5MD5CRC32FileChecksum>(op, p) {
       @Override
       MD5MD5CRC32FileChecksum decodeResponse(Map<?,?> json) throws IOException {
-        return JsonUtilClient.toMD5MD5CRC32FileChecksum(json);
+        return DikeJsonUtilClient.toMD5MD5CRC32FileChecksum(json);
       }
     }.run();
   }
@@ -1901,7 +1901,7 @@ public class DikeHdfsFileSystem extends FileSystem
       @Override
       Collection<BlockStoragePolicy> decodeResponse(Map<?, ?> json)
           throws IOException {
-        return JsonUtilClient.getStoragePolicies(json);
+        return DikeJsonUtilClient.getStoragePolicies(json);
       }
     }.run();
   }
@@ -1912,7 +1912,7 @@ public class DikeHdfsFileSystem extends FileSystem
     return new FsPathResponseRunner<BlockStoragePolicy>(op, src) {
       @Override
       BlockStoragePolicy decodeResponse(Map<?, ?> json) throws IOException {
-        return JsonUtilClient.toBlockStoragePolicy((Map<?, ?>) json
+        return DikeJsonUtilClient.toBlockStoragePolicy((Map<?, ?>) json
             .get(BlockStoragePolicy.class.getSimpleName()));
       }
     }.run();
@@ -1937,7 +1937,7 @@ public class DikeHdfsFileSystem extends FileSystem
     return new FsPathResponseRunner<FsServerDefaults>(op, null) {
       @Override
       FsServerDefaults decodeResponse(Map<?, ?> json) throws IOException {
-        return JsonUtilClient.toFsServerDefaults(json);
+        return DikeJsonUtilClient.toFsServerDefaults(json);
       }
     }.run();
   }
