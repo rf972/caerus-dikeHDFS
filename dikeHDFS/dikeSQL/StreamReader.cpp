@@ -32,7 +32,7 @@ SQLITE_EXTENSION_INIT1
 #  define CSV_NOINLINE  __attribute__((noinline))
 #  define CSV_ALWAYS_INLINE  __attribute__((always_inline)) inline
 #  define CSV_LIKELY(x)      __builtin_expect(!!(x), 1)
-#  define CSV_UNLIKELY(x)    __builtin_expect(!!(x), 0)
+#  define SRD_UNLIKELY(x)    __builtin_expect(!!(x), 0)
 #elif defined(_MSC_VER) && _MSC_VER>=1310
 #  define CSV_NOINLINE  __declspec(noinline)
 #else
@@ -44,21 +44,18 @@ SQLITE_EXTENSION_INIT1
 #define SRD_MXERR 200
 
 /* Size of the StreamReader input buffer */
-#define SRD_INBUFSZ (1<<20)
+#define SRD_INBUFSZ (128<<10)
 
 static char FDELIM = '|';
 static char RDELIM = '\n';
 
-/* A context object used when read a CSV file. */
-typedef struct StreamReader StreamReader;
-struct StreamReader {
-  //FILE *in;              /* Read the CSV text from this input stream */
+/* A context object used when read a file. */
+struct StreamReader {  
   std::istream * in;
   char *z;               /* Accumulated text for a field */
   int n;                 /* Number of bytes in z */
   int nAlloc;            /* Space allocated for z[] */
-  int nLine;             /* Current line number */
-  //int bNotFirst;       /* True if prior text has been seen */
+  int nLine;             /* Current line number */  
   int cTerm;             /* Character that terminated the most recent field */
   size_t iIn;            /* Next unread character in the input buffer */
   size_t nIn;            /* Number of characters in the input buffer */
@@ -69,55 +66,36 @@ struct StreamReader {
   pthread_t thread;      /* Input stream thread id */
   sem_t sem;             /* Input stream syncronization semaphore */
   pthread_mutex_t lock; 
+  uint64_t nBytesRead;   /* Number of processed bytes */
+  uint64_t blockSize;    /* File System block size */ 
 
   char zErr[SRD_MXERR];  /* Error message */
 };
 
 /* Report an error on a StreamReader */
-static void csv_errmsg(StreamReader *p, const char *zFormat, ...){
+static void srd_errmsg(StreamReader *p, const char *zFormat, ...){
   va_list ap;
   va_start(ap, zFormat);
   sqlite3_vsnprintf(SRD_MXERR, p->zErr, zFormat, ap);
   va_end(ap);
 }
 
-/* Initialize a StreamReader object */
-static void srd_reader_init(StreamReader *p){ 
-  p->in = 0;
-  p->z = 0;
-  p->n = 0;
-  p->nAlloc = 0;
-  p->nLine = 0;
-  //p->bNotFirst = 0;
-  p->nIn = 0;
-  p->zIn = 0;
-  p->zErr[0] = 0;
-  p->zStreamBuf[0] = 0;
-  p->zStreamBuf[1] = 0;
-  p->nStream = -1;
-}
 
-/* Close and reset a StreamReader object */
-static void csv_reader_reset(StreamReader *p){
-  if( p->in ) {
-    pthread_join(p->thread, NULL);
-    free(p->zStreamBuf[0]);
-    free(p->zStreamBuf[1]);
-  }
-  sqlite3_free(p->z);
-  //srd_reader_init(p);
-}
 
 static std::size_t readFromStream( std::istream& in, char* buf, std::size_t len ) {
 	std::size_t n = 0;
 	
-	while( len > 0 && in.good() ) {
-		in.read( &buf[n], len );
-		int i = in.gcount();
-		n += i;
-		len -= i;
-	}
-	
+  try {
+    while( len > 0 && in.good() ) {
+      in.read( &buf[n], len );
+      int i = in.gcount();
+      n += i;
+      len -= i;
+    }
+  } catch (...) {
+    std::cout << "readFromStream: Caught exception " << std::endl;
+  }
+
 	return n;
 }
 
@@ -128,15 +106,18 @@ static void *srd_stream_thread(void *arg)
   while(1) {
     sem_wait(&p->sem);
     pthread_mutex_lock(&p->lock);
-    
-    //p->nStream = fread(p->zStream, 1, SRD_INBUFSZ, p->in);
+
+    if(p->zStream == NULL){
+      pthread_mutex_unlock(&p->lock);      
+      return 0;
+    }    
+        
     p->nStream = readFromStream(*p->in, p->zStream, SRD_INBUFSZ);
     if(p->nStream < SRD_INBUFSZ){
       p->zStream[p->nStream] = EOF;
     }
     if( p->nStream == 0 ){
-      pthread_mutex_unlock(&p->lock);
-      //p->zStream[0] = EOF;
+      pthread_mutex_unlock(&p->lock);      
       return 0;
     }
     pthread_mutex_unlock(&p->lock);
@@ -145,32 +126,25 @@ static void *srd_stream_thread(void *arg)
   return 0;
 }
 
-/* Open the file associated with a StreamReader
-** Return the number of errors.
-*/
-static int srd_reader_open(StreamReader *p, std::istream * in)
-{ 
-  p->in = in; 
-  p->zStreamBuf[0] = (char *)malloc(SRD_INBUFSZ);
-  p->zStreamBuf[1] = (char *)malloc(SRD_INBUFSZ);
-  if(p->zStreamBuf[0]==0 || p->zStreamBuf[1]==0){
-    csv_errmsg(p, "out of memory");
-    return 1;
-  }
-
-  p->zStream = p->zStreamBuf[0];
-  p->nStream = -1;
-  sem_init(&p->sem,0,1);
-  pthread_mutex_init(&p->lock, NULL);
-  pthread_create(&p->thread,NULL,srd_stream_thread,p);
+/* Close StreamReader object */
+static void srd_reader_close(StreamReader *p){
   
-  return 0;
+  pthread_mutex_lock(&p->lock);
+  p->zStream = NULL;  
+  pthread_mutex_unlock(&p->lock);
+  sem_post(&p->sem);
+
+  pthread_join(p->thread, NULL);
+  free(p->zStreamBuf[0]);
+  free(p->zStreamBuf[1]);
+  
+  sqlite3_free(p->z);  
 }
 
 /* The input buffer has overflowed.  Refill the input buffer, then
 ** return the next character
 */
-static CSV_NOINLINE int csv_getc_refill(StreamReader *p){
+static CSV_NOINLINE int srd_getc_refill(StreamReader *p){
   size_t got;
 
   while(1){
@@ -203,16 +177,54 @@ static CSV_NOINLINE int csv_getc_refill(StreamReader *p){
 
   p->nIn = got;
   p->iIn = 1;
+  p->nBytesRead++;
   return p->zIn[0];  
 }
 
 /* Return the next character of input.  Return EOF at end of input. */
-static CSV_ALWAYS_INLINE int csv_getc(StreamReader *p){
-  if(CSV_UNLIKELY( p->iIn >= p->nIn )){
-    if( p->in!=0 ) return csv_getc_refill(p);
+static CSV_ALWAYS_INLINE int srd_getc(StreamReader *p){
+  if(SRD_UNLIKELY( p->iIn >= p->nIn )){
+    if( p->in!=0 ) {
+      return srd_getc_refill(p);
+    }
     return EOF;
   }
+  
+  p->nBytesRead++;
   return ((unsigned char*)p->zIn)[p->iIn++];
+}
+
+/* Open the file associated with a StreamReader
+** Return the number of errors.
+*/
+static int srd_reader_open(StreamReader *p, std::istream * in,
+                            uint64_t blockOffset, uint64_t blockSize)
+{ 
+  p->in = in;
+  p->blockSize = blockSize;
+  p->zStreamBuf[0] = (char *)malloc(SRD_INBUFSZ);
+  p->zStreamBuf[1] = (char *)malloc(SRD_INBUFSZ);
+  if(p->zStreamBuf[0]==0 || p->zStreamBuf[1]==0){
+    srd_errmsg(p, "out of memory");
+    return 1;
+  }
+
+  p->zStream = p->zStreamBuf[0];
+  p->nStream = -1;
+  sem_init(&p->sem,0,1);
+  pthread_mutex_init(&p->lock, NULL);
+  pthread_create(&p->thread,NULL,srd_stream_thread,p);
+  
+  // Check if we need to scan for record start
+  if(blockOffset > 0){
+    int c;
+    do {
+      c = srd_getc(p);
+    } while( c != '\n' && c != EOF);
+    std::cout << "Starting at  " << blockOffset + p->nBytesRead << std::endl;
+  }
+  
+  return 0;
 }
 
 /* Increase the size of p->z and append character c to the end. 
@@ -227,7 +239,7 @@ static CSV_NOINLINE int csv_resize_and_append(StreamReader *p, char c){
     p->z[p->n++] = c;
     return 0;
   }else{
-    csv_errmsg(p, "out of memory");
+    srd_errmsg(p, "out of memory");
     return 1;
   }
 }
@@ -235,7 +247,7 @@ static CSV_NOINLINE int csv_resize_and_append(StreamReader *p, char c){
 /* Append a single character to the StreamReader.z[] array.
 ** Return 0 on success and non-zero if there is an OOM error */
 static CSV_ALWAYS_INLINE int csv_append(StreamReader *p, char c){
-  if( CSV_UNLIKELY(p->n>=p->nAlloc-1)) return csv_resize_and_append(p, c);
+  if( SRD_UNLIKELY(p->n>=p->nAlloc-1)) return csv_resize_and_append(p, c);
   p->z[p->n++] = c;
   return 0;
 }
@@ -253,20 +265,21 @@ static CSV_ALWAYS_INLINE int csv_append(StreamReader *p, char c){
 ** Return 0 at EOF or on OOM.  On EOF, the p->cTerm character will have
 ** been set to EOF.
 */
-static char *tbl_read_one_field(StreamReader *p, int delim){
+static char *srd_read_one_field(StreamReader *p, int delim){
   int c;
   p->n = 0;
-  c = csv_getc(p);
-  if( CSV_UNLIKELY(c==EOF) ){
+  c = srd_getc(p);
+  if( SRD_UNLIKELY(c==EOF) ){
     p->cTerm = EOF;
     return 0;
   }
-  if( CSV_UNLIKELY(c=='"') ){
+
+  if( SRD_UNLIKELY(c=='"') ){
     int pc, ppc;
     int startLine = p->nLine;
     pc = ppc = 0;
     while( 1 ){
-      c = csv_getc(p);
+      c = srd_getc(p);
       if( c<='"' || pc=='"' ){
         if( c=='\n' ) p->nLine++;
         if( c=='"' ){
@@ -285,11 +298,11 @@ static char *tbl_read_one_field(StreamReader *p, int delim){
           break;
         }
         if( pc=='"' && c!='\r' ){
-          csv_errmsg(p, "line %d: unescaped %c character", p->nLine, '"');
+          srd_errmsg(p, "line %d: unescaped %c character", p->nLine, '"');
           break;
         }
         if( c==EOF ){
-          csv_errmsg(p, "line %d: unterminated %c-quoted field\n",
+          srd_errmsg(p, "line %d: unterminated %c-quoted field\n",
                      startLine, '"');
           p->cTerm = (char)c;
           break;
@@ -302,7 +315,7 @@ static char *tbl_read_one_field(StreamReader *p, int delim){
   } else {
     while(c!=0 && c!=delim && c!='\n' && c!=EOF){
       if( csv_append(p, (char)c) ) return 0;
-      c = csv_getc(p);
+      c = srd_getc(p);
     }
     if( c=='\n' ){
       p->nLine++;
@@ -337,10 +350,12 @@ static int srd_Rowid(sqlite3_vtab_cursor*,sqlite3_int64*);
 typedef struct srdTable {
   sqlite3_vtab base;              /* Base class.  Must be first */
   
-  std::istream * in;
+  std::istream * in;              /* Input stream */
+  uint64_t blockSize;             /* File System block size */
+  uint64_t blockOffset;             /* File System block size */
   
   long iStart;                    /* Offset to start of data in zFilename */
-  int nCol;                       /* Number of columns in the CSV file */
+  int nCol;                       /* Number of columns */
   unsigned int tstFlags;          /* Bit values used for testing */
   unsigned char cTypes[64];       /* Column affinity */
 } srdTable;
@@ -356,7 +371,7 @@ typedef struct srdCursor {
 } srdCursor;
 
 /* Transfer error message text from a reader into a srdTable */
-static void csv_xfer_error(srdTable *pTab, StreamReader *pRdr){
+static void srd_xfer_error(srdTable *pTab, StreamReader *pRdr){
   sqlite3_free(pTab->base.zErrMsg);
   pTab->base.zErrMsg = sqlite3_mprintf("%s", pRdr->zErr);
 }
@@ -398,99 +413,6 @@ static void csv_dequote(char *z){
     z[j++] = z[i];
   }
   z[j] = 0;
-}
-
-/* Check to see if the string is of the form:  "TAG = VALUE" with optional
-** whitespace before and around tokens.  If it is, return a pointer to the
-** first character of VALUE.  If it is not, return NULL.
-*/
-static const char *csv_parameter(const char *zTag, int nTag, const char *z){
-  z = csv_skip_whitespace(z);
-  if( strncmp(zTag, z, nTag)!=0 ) return 0;
-  z = csv_skip_whitespace(z+nTag);
-  if( z[0]!='=' ) return 0;
-  return csv_skip_whitespace(z+1);
-}
-
-/* Decode a parameter that requires a dequoted string.
-**
-** Return 1 if the parameter is seen, or 0 if not.  1 is returned
-** even if there is an error.  If an error occurs, then an error message
-** is left in p->zErr.  If there are no errors, p->zErr[0]==0.
-*/
-static int csv_string_parameter(
-  StreamReader *p,            /* Leave the error message here, if there is one */
-  const char *zParam,      /* Parameter we are checking for */
-  const char *zArg,        /* Raw text of the virtual table argment */
-  char **pzVal             /* Write the dequoted string value here */
-){
-  const char *zValue;
-  zValue = csv_parameter(zParam,(int)strlen(zParam),zArg);
-  if( zValue==0 ) return 0;
-  p->zErr[0] = 0;
-  if( *pzVal ){
-    csv_errmsg(p, "more than one '%s' parameter", zParam);
-    return 1;
-  }
-  *pzVal = sqlite3_mprintf("%s", zValue);
-  if( *pzVal==0 ){
-    csv_errmsg(p, "out of memory");
-    return 1;
-  }
-  csv_trim_whitespace(*pzVal);
-  csv_dequote(*pzVal);
-  return 1;
-}
-
-
-/* Return 0 if the argument is false and 1 if it is true.  Return -1 if
-** we cannot really tell.
-*/
-static int csv_boolean(const char *z){
-  if( sqlite3_stricmp("yes",z)==0
-   || sqlite3_stricmp("on",z)==0
-   || sqlite3_stricmp("true",z)==0
-   || (z[0]=='1' && z[1]==0)
-  ){
-    return 1;
-  }
-  if( sqlite3_stricmp("no",z)==0
-   || sqlite3_stricmp("off",z)==0
-   || sqlite3_stricmp("false",z)==0
-   || (z[0]=='0' && z[1]==0)
-  ){
-    return 0;
-  }
-  return -1;
-}
-
-/* Check to see if the string is of the form:  "TAG = BOOLEAN" or just "TAG".
-** If it is, set *pValue to be the value of the boolean ("true" if there is
-** not "= BOOLEAN" component) and return non-zero.  If the input string
-** does not begin with TAG, return zero.
-*/
-static int csv_boolean_parameter(
-  const char *zTag,       /* Tag we are looking for */
-  int nTag,               /* Size of the tag in bytes */
-  const char *z,          /* Input parameter */
-  int *pValue             /* Write boolean value here */
-){
-  int b;
-  z = csv_skip_whitespace(z);
-  if( strncmp(zTag, z, nTag)!=0 ) return 0;
-  z = csv_skip_whitespace(z + nTag);
-  if( z[0]==0 ){
-    *pValue = 1;
-    return 1;
-  }
-  if( z[0]!='=' ) return 0;
-  z = csv_skip_whitespace(z+1);
-  b = csv_boolean(z);
-  if( b>=0 ){
-    *pValue = b;
-    return 1;
-  }
-  return 0;
 }
 
 static int srd_parse_until(const char * str, const char *expr, int * pos)
@@ -629,14 +551,14 @@ static int srd_Connect(
   }
 
   memset(pTable, 0, sizeof(srdTable));
-  
+  /*
   for(i = 0; i < argc; i++) {
       std::cout << i << " " << argv[i] << std::endl;
   }
-
+  */
   schema = std::string("CREATE TABLE S3Object (") +  param->schema + ")";
 
-  std::cout << "schema" << " " << schema << std::endl;
+  //std::cout << "schema" << " " << schema << std::endl;
   
   rc = srd_parse_schema(schema.c_str(), pTable);
   if( rc ) {
@@ -645,6 +567,8 @@ static int srd_Connect(
   }  
 
   pTable->in = param->in;
+  pTable->blockOffset = param->blockOffset;
+  pTable->blockSize = param->blockSize;
   
   rc = sqlite3_declare_vtab(db, schema.c_str());
   if( rc ){
@@ -710,7 +634,7 @@ static int srd_Create(
 static int srd_Close(sqlite3_vtab_cursor *cur){
   srdCursor *pCur = (srdCursor*)cur;
   srd_CursorRowReset(pCur);
-  //csv_reader_reset(&pCur->rdr);
+  srd_reader_close(&pCur->rdr);
   sqlite3_free(cur);
   return SQLITE_OK;
 }
@@ -730,14 +654,17 @@ static int srd_Open(sqlite3_vtab *p, sqlite3_vtab_cursor **ppCursor){
   pCur->aLen = (int*)&pCur->azVal[pTab->nCol];
   pCur->azPtr = (char**)&pCur->aLen[pTab->nCol];
   *ppCursor = &pCur->base;
-  if( srd_reader_open(&pCur->rdr, pTab->in) ){
-    csv_xfer_error(pTab, &pCur->rdr);
+  if( srd_reader_open(&pCur->rdr, pTab->in, pTab->blockOffset, pTab->blockSize) ){
+    srd_xfer_error(pTab, &pCur->rdr);
     return SQLITE_ERROR;
+  } else {
+    sqlite3_free(pTab->base.zErrMsg);
+    pTab->base.zErrMsg = NULL;
   }
   return SQLITE_OK;
 }
 
-static int tbl_get_field_indecies(srdCursor *pCur, int nCol, int delim)
+static int srd_get_field_indecies(srdCursor *pCur, int nCol, int delim)
 {
   int c;
   int i = 0;
@@ -747,8 +674,8 @@ static int tbl_get_field_indecies(srdCursor *pCur, int nCol, int delim)
   char * end;
   int iIn = 0;
 
-  if(CSV_UNLIKELY(p->nIn == 0)) {
-    csv_getc_refill(p);
+  if(SRD_UNLIKELY(p->nIn == 0)) {
+    srd_getc_refill(p);
     buf = &p->zIn[0];
   } else {
     buf = &p->zIn[p->iIn];
@@ -756,26 +683,26 @@ static int tbl_get_field_indecies(srdCursor *pCur, int nCol, int delim)
   }
     
   end = &p->zIn[p->nIn-1];
-  do {
-    //c = csv_getc(p);
+  do {    
     azPtr = buf;
     c = *buf;
     buf++;
-    iIn++;
-    if(buf >= end){ return SQLITE_IOERR; }
+    iIn++;    
+    if(buf >= end){ 
+      return SQLITE_IOERR; 
+    }
 
-    if( CSV_UNLIKELY(c==EOF || c=='"') ){
+    if( SRD_UNLIKELY(c==EOF || c=='"') ){
         return SQLITE_IOERR;
     }
 
     while(c!=delim && c!='\n' && c!='"' && c!=EOF){      
-      //c = csv_getc(p);
-      //c = ((unsigned char*)p->zIn)[iIn-1];
       c = *buf;
       buf++;
-      iIn++;
-      //if(iIn >= nIn){ return SQLITE_IOERR; }
-      if(buf >= end){ return SQLITE_IOERR; }
+      iIn++;      
+      if(buf >= end){ 
+        return SQLITE_IOERR; 
+      }
     }
     if( c==delim ){
       *(buf - 1) = 0;
@@ -785,10 +712,12 @@ static int tbl_get_field_indecies(srdCursor *pCur, int nCol, int delim)
     } else {
         return SQLITE_IOERR;
     }
-  } while(i<nCol);
+  } while(i < nCol);
 
   if(*buf=='\n'){
     p->iIn += iIn;
+    // We just read one record
+    p->nBytesRead += iIn;
   }
 
   return SQLITE_OK;
@@ -804,11 +733,17 @@ static int srd_Next(sqlite3_vtab_cursor *cur){
   int i = 0;
   char *z;
 
+  if(pCur->rdr.blockSize > 0 && pCur->rdr.nBytesRead > pCur->rdr.blockSize){
+    std::cout << "EOB nBytesRead " << pCur->rdr.nBytesRead << std::endl;    
+    pCur->iRowid = -1;
+    return SQLITE_OK;
+  }
+
   #if 1
   int rc;
 
   /* Evaluate if we can use inplace pointers */ 
-  rc = tbl_get_field_indecies(pCur, pTab->nCol, FDELIM);
+  rc = srd_get_field_indecies(pCur, pTab->nCol, FDELIM);
   if(rc == SQLITE_OK){
     pCur->iRowid++;
     return SQLITE_OK;
@@ -822,16 +757,18 @@ static int srd_Next(sqlite3_vtab_cursor *cur){
   i = 0;
 
   do{
-    z = tbl_read_one_field(&pCur->rdr,FDELIM);
+    z = srd_read_one_field(&pCur->rdr, FDELIM);
     //if( z==0 ){ break; }
-    if(pCur->rdr.cTerm==EOF) { break; }
+    if(pCur->rdr.cTerm==EOF) { 
+      break; 
+    }
 
     if( i<pTab->nCol ){
-      if( CSV_UNLIKELY(pCur->aLen[i] < pCur->rdr.n+1 )){
+      if( SRD_UNLIKELY(pCur->aLen[i] < pCur->rdr.n+1 )){
         char *zNew = (char *)sqlite3_realloc64(pCur->azVal[i], pCur->rdr.n+1);
         if( zNew==0 ){
-          csv_errmsg(&pCur->rdr, "out of memory");
-          csv_xfer_error(pTab, &pCur->rdr);
+          srd_errmsg(&pCur->rdr, "out of memory");
+          srd_xfer_error(pTab, &pCur->rdr);
           break;
         }
         pCur->azVal[i] = zNew;
@@ -916,7 +853,11 @@ static int srd_Rowid(sqlite3_vtab_cursor *cur, sqlite_int64 *pRowid){
 */
 static int srd_Eof(sqlite3_vtab_cursor *cur){
   srdCursor *pCur = (srdCursor*)cur;
-  return pCur->iRowid<0;
+  if(pCur->iRowid < 0) {
+    return true;
+  }
+  
+  return false;
 }
 
 /*

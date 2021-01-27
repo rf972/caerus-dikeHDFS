@@ -73,53 +73,71 @@ class DataNodeHandler : public Poco::Net::HTTPRequestHandler {
 public:  
    virtual void handleRequest(Poco::Net::HTTPServerRequest &req, Poco::Net::HTTPServerResponse &resp)
    {
-    cout << DikeUtil().Yellow() << DikeUtil().Now() << " DN Start " << DikeUtil().Reset() << endl;
-    HTTPRequest hdfs_req((HTTPRequest)req);
-
-    string host = req.getHost();    
-    host = host.substr(0, host.find(':'));
-    hdfs_req.setHost(host, 9864);
-
-    cout << hdfs_req.getURI() << endl;     
-    hdfs_req.write(cout);    
-
-    HTTPClientSession session(host, 9864);
-    session.sendRequest(hdfs_req);
-    HTTPResponse hdfs_resp;
-
-    std::istream& fromHDFS = session.receiveResponse(hdfs_resp);    
-    (HTTPResponse &)resp = hdfs_resp;    
-
-    resp.setContentLength(Poco::Net::HTTPMessage::UNKNOWN_CONTENT_LENGTH);
-    resp.setChunkedTransferEncoding(true);    
-    resp.setKeepAlive(true);
-
-    resp.write(cout);
-
-    ostream& toClient = resp.send();
-
-    if(req.has("ReadParam")) {
-      string readParam = req.get("ReadParam");
-      cout << DikeUtil().Blue();      
-
-      std::istringstream readParamStream(readParam.c_str());      
-      std::istream& xmlStream(readParamStream);
-      AbstractConfiguration *cfg = new XMLConfiguration(xmlStream);            
-      cout << "Name: " << cfg->getString("Name") << endl;
-      cout << "Schema: " << cfg->getString("Configuration.Schema") << endl;
-      cout << "Query: " << cfg->getString("Configuration.Query") << endl;
-      cout << DikeUtil().Reset() << endl;
       DikeSQLParam dikeSQLParam;
-      dikeSQLParam.schema = cfg->getString("Configuration.Schema");
-      dikeSQLParam.query = cfg->getString("Configuration.Query");
-      DikeSQL::Run(fromHDFS, toClient, &dikeSQLParam);
-    } else {
-      Poco::StreamCopier::copyStream(fromHDFS, toClient, 8192);
-    }
-    
-    toClient.flush();
 
-    cout << DikeUtil().Yellow() << DikeUtil().Now() << " DN End " << DikeUtil().Reset() << endl;
+      cout << DikeUtil().Yellow() << DikeUtil().Now() << " DN Start " << DikeUtil().Reset() << endl;
+      HTTPRequest hdfs_req((HTTPRequest)req);
+
+      string host = req.getHost();    
+      host = host.substr(0, host.find(':'));
+      hdfs_req.setHost(host, 9864);
+
+      cout << hdfs_req.getURI() << endl;
+      Poco::URI uri(hdfs_req.getURI());
+      Poco::URI::QueryParameters uriParams = uri.getQueryParameters();
+      dikeSQLParam.blockOffset = 0;
+      for(int i = 0; i < uriParams.size(); i++){        
+        if(uriParams[i].first == "offset"){
+          cout << uriParams[i].first << ": " << uriParams[i].second << endl;
+          dikeSQLParam.blockOffset = std::stoull(uriParams[i].second);
+        }
+      }
+
+      hdfs_req.write(cout);    
+
+      HTTPClientSession session(host, 9864);
+      session.sendRequest(hdfs_req);
+      HTTPResponse hdfs_resp;
+
+      std::istream& fromHDFS = session.receiveResponse(hdfs_resp);    
+      (HTTPResponse &)resp = hdfs_resp;              
+
+      if(req.has("ReadParam")) {
+        resp.setContentLength(Poco::Net::HTTPMessage::UNKNOWN_CONTENT_LENGTH);
+        resp.setChunkedTransferEncoding(true);    
+        resp.setKeepAlive(true);
+
+        string readParam = req.get("ReadParam");
+        cout << DikeUtil().Blue();      
+
+        try{
+          std::istringstream readParamStream(readParam.c_str());      
+          std::istream& xmlStream(readParamStream);
+          AbstractConfiguration *cfg = new XMLConfiguration(xmlStream);            
+          cout << "Name: " << cfg->getString("Name") << endl;
+          cout << "Schema: " << cfg->getString("Configuration.Schema") << endl;
+          cout << "Query: " << cfg->getString("Configuration.Query") << endl;
+          cout << "BlockSize: " << cfg->getString("Configuration.BlockSize") << endl;
+          cout << DikeUtil().Reset() << endl;
+          
+          dikeSQLParam.schema = cfg->getString("Configuration.Schema");
+          dikeSQLParam.query = cfg->getString("Configuration.Query");
+          dikeSQLParam.blockSize = cfg->getUInt64("Configuration.BlockSize");
+
+          ostream& toClient = resp.send();
+          DikeSQL::Run(fromHDFS, toClient, &dikeSQLParam);
+        } catch (Poco::NotFoundException&)
+        {
+          cout << DikeUtil().Red() << "Exeption while parsing readParam" << endl;
+          cout << DikeUtil().Reset() << endl;
+        }      
+      } else {
+        ostream& toClient = resp.send();
+        Poco::StreamCopier::copyStream(fromHDFS, toClient, 8192);
+      }              
+      
+      resp.write(cout);
+      cout << DikeUtil().Yellow() << DikeUtil().Now() << " DN End " << DikeUtil().Reset() << endl;
    }   
 };
 

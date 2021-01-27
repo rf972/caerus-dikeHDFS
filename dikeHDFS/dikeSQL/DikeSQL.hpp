@@ -8,7 +8,9 @@
 
 struct DikeSQLParam {    
     std::string query;
-    std::string schema;    
+    std::string schema;
+    uint64_t    blockOffset;
+    uint64_t    blockSize;
 };
 
 class DikeSQL {

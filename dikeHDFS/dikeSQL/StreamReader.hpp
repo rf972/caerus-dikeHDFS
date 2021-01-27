@@ -9,7 +9,9 @@
 struct StreamReaderParam {
     std::istream * in;
     std::string name;
-    std::string schema;    
+    std::string schema;
+    uint64_t blockSize;
+    uint64_t blockOffset;
 };
 
 int StreamReaderInit(sqlite3 *db, StreamReaderParam * param);

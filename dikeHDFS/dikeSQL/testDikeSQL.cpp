@@ -45,6 +45,9 @@ int main (int argc, char *argv[])
     param.in = dynamic_cast<std::istream *>(&infstr);
     param.name = "S3Object";
     param.schema = "l_orderkey INTEGER,l_partkey INTEGER,l_suppkey INTEGER,l_linenumber INTEGER,l_quantity NUMERIC,l_extendedprice NUMERIC,l_discount NUMERIC,l_tax NUMERIC,l_returnflag,l_linestatus,l_shipdate,l_commitdate,l_receiptdate,l_shipinstruct,l_shipmode,l_comment";
+    param.blockOffset = 0;
+    param.blockSize = 0;
+
     rc = StreamReaderInit(db, &param);
     if(rc != SQLITE_OK) {
         std::cerr << "Can't load SRD extention: " << errmsg << std::endl;
@@ -114,6 +117,6 @@ int main (int argc, char *argv[])
     return(0);
 }
 
-
+// cmake -DCMAKE_BUILD_TYPE=Debug -S . -B build/Debug
 // cmake --build ./build/Debug
 // ./build/Debug/dikeSQL/testDikeSQL ../../dike/spark/build/tpch-data/lineitem.tbl

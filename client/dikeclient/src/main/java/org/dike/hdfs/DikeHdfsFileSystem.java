@@ -2208,6 +2208,8 @@ public class DikeHdfsFileSystem extends FileSystem
         throw new EOFException(
                   "Premature EOF: pos=" + pos + " < filelength=" + fileLength);
       }
+
+      //System.out.format("read off %d len %d fileLength %d pos %d count %d\n",off, len, fileLength, pos, count);
       return count;
     }
 
@@ -2283,7 +2285,7 @@ public class DikeHdfsFileSystem extends FileSystem
           in = initializeInputStream(conn);
         }
 
-        int count = in.read(readBuffer, readOffset, readLength);
+        int count = in.read(readBuffer, readOffset, readLength);        
         if (count < 0 && pos < fileLength && readParam == null) {
           throw new EOFException(
                   "Premature EOF: pos=" + pos + " < filelength=" + fileLength);
@@ -2316,13 +2318,14 @@ public class DikeHdfsFileSystem extends FileSystem
       if (LOG.isDebugEnabled()) {
         LOG.debug("open file: " + conn.getURL());
       }
+
       if (cl != null) {
         long streamLength = Long.parseLong(cl);
         fileLength = pos + streamLength;
         // Java has a bug with >2GB request streams.  It won't bounds check
         // the reads so the transfer blocks until the server times out
         inStream = new BoundedInputStream(inStream, streamLength);
-      } else if (readParam != null){
+      } else if (readParam != null) {
         fileLength = Long.MAX_VALUE;
       } else {
         fileLength = getHdfsFileStatus(path).getLen();

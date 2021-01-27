@@ -34,6 +34,8 @@ int DikeSQL::Run(std::istream& inStream, std::ostream& outStream, DikeSQLParam *
     streamReaderParam.in = dynamic_cast<std::istream *>(&inStream);
     streamReaderParam.name = "S3Object";
     streamReaderParam.schema = dikeSQLParam->schema;
+    streamReaderParam.blockSize = dikeSQLParam->blockSize;
+    streamReaderParam.blockOffset = dikeSQLParam->blockOffset;
     rc = StreamReaderInit(db, &streamReaderParam);
     if(rc != SQLITE_OK) {
         std::cerr << "Can't load SRD extention: " << errmsg << std::endl;
@@ -63,22 +65,29 @@ int DikeSQL::Run(std::istream& inStream, std::ostream& outStream, DikeSQLParam *
         return 1;
     }            
 
-    while ( (rc = sqlite3_step(sqlRes)) == SQLITE_ROW) {
-        record_counter++;
-
-        int data_count = sqlite3_data_count(sqlRes);
-
-        for(int i = 0; i < data_count; i++) {
-            const unsigned char* text = sqlite3_column_text(sqlRes, i);
-            if(text){
-                if(!strchr((const char*)text, ',')){
-                    outStream << text << ",";
-                } else {
-                    outStream << "\"" << text << "\"" << ",";
+    outStream.exceptions ( std::ostream::failbit | std::ostream::badbit );
+    try {
+        while ( (rc = sqlite3_step(sqlRes)) == SQLITE_ROW) {
+            record_counter++;
+            int data_count = sqlite3_data_count(sqlRes);
+            for(int i = 0; i < data_count; i++) {
+                const unsigned char* text = sqlite3_column_text(sqlRes, i);
+                if(text){
+                    if(!strchr((const char*)text, ',')){
+                        outStream << text << ",";
+                    } else {
+                        outStream << "\"" << text << "\"" << ",";
+                    }
                 }
             }
+            outStream << '\n';
         }
         outStream << '\n';
+        outStream.flush();
+    } catch(const std::exception& e) {
+        std::cout << "Caught exception: \"" << e.what() << "\"\n";
+    } catch (...) {
+        std::cout << "Caught exception " << std::endl;
     }
     
     std::chrono::high_resolution_clock::time_point t3 =  std::chrono::high_resolution_clock::now();
