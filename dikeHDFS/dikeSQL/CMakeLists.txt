@@ -7,7 +7,7 @@ add_library(libsqlite STATIC sqlite3.c sqlite3ext.h sqlite3.h
             DikeSQL.cpp DikeSQL.hpp
             )
 
-include_directories(.)
+include_directories(. ../src)
 
 target_compile_options(libsqlite PRIVATE 
 #        -DSQLITE_THREADSAFE=1 

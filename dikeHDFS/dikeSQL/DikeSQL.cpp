@@ -12,6 +12,7 @@
 
 #include "StreamReader.hpp"
 #include "DikeSQL.hpp"
+#include "DikeUtil.hpp"
 
 
 int DikeSQL::Run(std::istream& inStream, std::ostream& outStream, DikeSQLParam * dikeSQLParam)
@@ -66,24 +67,24 @@ int DikeSQL::Run(std::istream& inStream, std::ostream& outStream, DikeSQLParam *
     }            
 
     outStream.exceptions ( std::ostream::failbit | std::ostream::badbit );
+    DikeAyncWriter dikeWriter(&outStream);
     try {
         while ( (rc = sqlite3_step(sqlRes)) == SQLITE_ROW) {
             record_counter++;
             int data_count = sqlite3_data_count(sqlRes);
             for(int i = 0; i < data_count; i++) {
-                const unsigned char* text = sqlite3_column_text(sqlRes, i);
+                const char* text = (const char*)sqlite3_column_text(sqlRes, i);
                 if(text){
-                    if(!strchr((const char*)text, ',')){
-                        outStream << text << ",";
-                    } else {
-                        outStream << "\"" << text << "\"" << ",";
+                    if(i < data_count - 1){ 
+                        dikeWriter.write(text, ',');
+                    } else { // Last field
+                        dikeWriter.write(text, ',', '\n');
                     }
                 }
             }
-            outStream << '\n';
         }
-        outStream << '\n';
-        outStream.flush();
+        dikeWriter.write('\n');
+        dikeWriter.flush();
     } catch(const std::exception& e) {
         std::cout << "Caught exception: \"" << e.what() << "\"\n";
     } catch (...) {

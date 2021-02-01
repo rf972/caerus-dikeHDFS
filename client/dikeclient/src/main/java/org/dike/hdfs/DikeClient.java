@@ -78,7 +78,7 @@ public class DikeClient
 
         perfTest(dikehdfsPath, fname, conf, true /*pushdown*/, true/*partitionned*/);
         perfTest(dikehdfsPath, fname, conf, true/*pushdown*/, false/*partitionned*/);
-        //Validate(dikehdfsPath, fname, conf);
+        Validate(dikehdfsPath, fname, conf);
     }
 
     public static String getReadParam(long blockSize) throws XMLStreamException 
@@ -134,7 +134,7 @@ public class DikeClient
         String readParam = null;
         Map<String,Statistics> stats;
 
-        long start_time;
+        long start_time = System.currentTimeMillis();
 
         try {
             fs = FileSystem.get(fsPath.toUri(), conf);
@@ -197,8 +197,10 @@ public class DikeClient
                 br.close();            
             }                        
         } catch (Exception ex) {
-            System.out.println("Error occurred while Configuring Filesystem ");
+            System.out.println("Error occurred: ");
             ex.printStackTrace();
+            long end_time = System.currentTimeMillis();            
+            System.out.format("Received %d records (%d bytes) in %.3f sec\n", totalRecords, totalDataSize, (end_time - start_time) / 1000.0);             
             return;
         }
 
