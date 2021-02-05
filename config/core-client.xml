@@ -41,9 +41,9 @@
     </property>
 
     <property>
-        <name>fs.dikehdfs.impl</name>
-        <value>org.apache.hadoop.hdfs.web.DikeHdfsFileSystem</value>
-        <description>The FileSystem for dikehdfs: uris.</description>
+        <name>fs.ndphdfs.impl</name>
+        <value>org.apache.hadoop.hdfs.web.NdpHdfsFileSystem</value>
+        <description>The FileSystem for ndphdfs: uris.</description>
     </property>
 
 </configuration>

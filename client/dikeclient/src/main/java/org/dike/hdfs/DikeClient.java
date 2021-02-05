@@ -50,7 +50,7 @@ import javax.xml.stream.*;
 import javax.xml.namespace.QName;
 
 
-import org.apache.hadoop.hdfs.web.DikeHdfsFileSystem;
+import org.apache.hadoop.hdfs.web.NdpHdfsFileSystem;
 
 public class DikeClient
 {
@@ -67,7 +67,7 @@ public class DikeClient
         conf.addResource(hdfsHDFSSitePath);
 
         Path webhdfsPath = new Path("webhdfs://dikehdfs:9870/");
-        Path dikehdfsPath = new Path("dikehdfs://dikehdfs:9860/");
+        Path dikehdfsPath = new Path("ndphdfs://dikehdfs:9860/");
         Path hdfsPath = new Path("hdfs://dikehdfs:9000/");
 
 
@@ -127,7 +127,7 @@ public class DikeClient
         InputStream input = null;
         Path fileToRead = new Path(fname);
         FileSystem fs = null;
-        DikeHdfsFileSystem dikeFS = null;
+        NdpHdfsFileSystem dikeFS = null;
         ByteBuffer bb = ByteBuffer.allocate(1024);
         long totalDataSize = 0;
         int totalRecords = 0;
@@ -153,8 +153,8 @@ public class DikeClient
 
                     readParam = getReadParam(locs[i].getLength());
 
-                    if(fs.getScheme() == "dikehdfs"){
-                        dikeFS = (DikeHdfsFileSystem)fs;
+                    if(fs.getScheme() == "ndphdfs"){
+                        dikeFS = (NdpHdfsFileSystem)fs;
                         dataInputStream = dikeFS.open(fileToRead, 16 << 10, readParam);                    
                     }
 
@@ -176,7 +176,7 @@ public class DikeClient
                 }
             } else { // regular read
                 if(pushdown){
-                    dikeFS = (DikeHdfsFileSystem)fs;
+                    dikeFS = (NdpHdfsFileSystem)fs;
                     readParam = getReadParam(0 /* ignore stream size */);
                     dataInputStream = dikeFS.open(fileToRead, 16 << 10, readParam);                    
                 } else {
@@ -216,7 +216,7 @@ public class DikeClient
         InputStream input = null;
         Path fileToRead = new Path(fname);
         FileSystem fs = null;
-        DikeHdfsFileSystem dikeFS = null;
+        NdpHdfsFileSystem dikeFS = null;
         ByteBuffer bb = ByteBuffer.allocate(1024);
         long totalDataSize = 0;
         int totalRecords = 0;
@@ -226,7 +226,7 @@ public class DikeClient
 
         try {
             fs = FileSystem.get(fsPath.toUri(), conf);
-            dikeFS = (DikeHdfsFileSystem)fs;
+            dikeFS = (NdpHdfsFileSystem)fs;
             System.out.println("\nConnected to -- " + fsPath.toString());
             start_time = System.currentTimeMillis();                        
             
