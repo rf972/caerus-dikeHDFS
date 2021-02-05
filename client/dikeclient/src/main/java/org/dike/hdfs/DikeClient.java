@@ -61,8 +61,9 @@ public class DikeClient
         BasicConfigurator.configure();
         Logger.getRootLogger().setLevel(Level.INFO);
         Configuration conf = new Configuration();
-        Path hdfsCoreSitePath = new Path("/home/peter/config/core-client.xml");
-        Path hdfsHDFSSitePath = new Path("/home/peter/config/hdfs-site.xml");
+        String userName = System.getProperty("user.name");
+        Path hdfsCoreSitePath = new Path("/home/" + userName + "/config/core-client.xml");
+        Path hdfsHDFSSitePath = new Path("/home/" + userName + "/config/hdfs-site.xml");
         conf.addResource(hdfsCoreSitePath);
         conf.addResource(hdfsHDFSSitePath);
 
@@ -81,7 +82,8 @@ public class DikeClient
         Validate(dikehdfsPath, fname, conf);
     }
 
-    public static String getReadParam(long blockSize) throws XMLStreamException 
+    public static String getReadParam(String name,
+                                      long blockSize) throws XMLStreamException 
     {
         XMLOutputFactory xmlof = XMLOutputFactory.newInstance();
         StringWriter strw = new StringWriter();
@@ -96,7 +98,24 @@ public class DikeClient
 
         xmlw.writeStartElement("Configuration");
         xmlw.writeStartElement("Schema");
-        xmlw.writeCharacters("l_orderkey INTEGER,l_partkey INTEGER,l_suppkey INTEGER,l_linenumber INTEGER,l_quantity NUMERIC,l_extendedprice NUMERIC,l_discount NUMERIC,l_tax NUMERIC,l_returnflag,l_linestatus,l_shipdate,l_commitdate,l_receiptdate,l_shipinstruct,l_shipmode,l_comment");
+
+        if (name.contains("customer")) {
+            xmlw.writeCharacters("c_custkey LONG, c_name STRING, c_address STRING, c_nationkey LONG, c_phone STRING, c_acctbal NUMERIC, c_mktsegment STRING, c_comment STRING");
+        } else if (name.contains("lineitem")) {
+            xmlw.writeCharacters("l_orderkey INTEGER,l_partkey INTEGER,l_suppkey INTEGER,l_linenumber INTEGER,l_quantity NUMERIC,l_extendedprice NUMERIC,l_discount NUMERIC,l_tax NUMERIC,l_returnflag,l_linestatus,l_shipdate,l_commitdate,l_receiptdate,l_shipinstruct,l_shipmode,l_comment");
+        } else if (name.contains("nation")) {
+            xmlw.writeCharacters("n_nationkey LONG, n_name STRING, n_regionkey LONG, n_comment STRING");
+        } else if (name.contains("order")) {
+            xmlw.writeCharacters("o_orderkey LONG, o_custkey LONG, o_orderstatus STRING, o_totalprice NUMERIC, o_orderdate STRING, o_orderpriority STRING, o_clerk STRING, o_shippriority LONG, o_comment STRING");
+        } else if (name.contains("partsupp")) {
+            xmlw.writeCharacters("ps_partkey LONG, ps_suppkey LONG, ps_availqty LONG, ps_supplycost NUMERIC, ps_comment STRING");
+        } else if (name.contains("part")) {
+            xmlw.writeCharacters("p_partkey INTEGER,p_name, p_mfgr, p_brand, p_type, p_size INTEGER, p_container, p_retailprice NUMERIC, p_comment");
+        } else if (name.contains("region")) {
+            xmlw.writeCharacters("r_regionkey LONG, r_name STRING, r_comment STRING");
+        } else if (name.contains("suplier")) {
+            xmlw.writeCharacters("s_suppkey LONG, s_name STRING, s_address STRING, s_nationkey LONG, s_phone STRING, s_acctbal NUMERIC, s_comment STRING");
+        }
         xmlw.writeEndElement(); // Schema
 
         xmlw.writeStartElement("Query");
@@ -151,7 +170,7 @@ public class DikeClient
                 for (int i  = 0; i < locs.length; i++) {
                     System.out.format("%d off=%d size=%d\n", i, locs[i].getOffset(), locs[i].getLength());
 
-                    readParam = getReadParam(locs[i].getLength());
+                    readParam = getReadParam(fname, locs[i].getLength());
 
                     if(fs.getScheme() == "ndphdfs"){
                         dikeFS = (NdpHdfsFileSystem)fs;
@@ -177,7 +196,7 @@ public class DikeClient
             } else { // regular read
                 if(pushdown){
                     dikeFS = (NdpHdfsFileSystem)fs;
-                    readParam = getReadParam(0 /* ignore stream size */);
+                    readParam = getReadParam(fname, 0 /* ignore stream size */);
                     dataInputStream = dikeFS.open(fileToRead, 16 << 10, readParam);                    
                 } else {
                     dataInputStream = fs.open(fileToRead);
@@ -234,14 +253,14 @@ public class DikeClient
             FSDataInputStream d2 = null;
 
             BlockLocation[] locs = fs.getFileBlockLocations(fileToRead, 0, Long.MAX_VALUE);            
-            readParam = getReadParam(0);
+            readParam = getReadParam(fname, 0);
             d2 = dikeFS.open(fileToRead, 16 << 10, readParam);
             BufferedReader br2 = new BufferedReader(new InputStreamReader(d2), 16 << 10);
 
             for (int i  = 0; i < locs.length; i++) {
                 System.out.format("%d off=%d size=%d\n", i, locs[i].getOffset(), locs[i].getLength());
 
-                readParam = getReadParam(locs[i].getLength());                                    
+                readParam = getReadParam(fname, locs[i].getLength());                                    
                 d1 = dikeFS.open(fileToRead, 16 << 10, readParam);
 
                 d1.seek(locs[i].getOffset());
