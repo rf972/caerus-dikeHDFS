@@ -5,6 +5,9 @@
 #include <iostream>
 #include <string.h>
 
+#include "Poco/Net/StreamSocket.h"
+
+#include "DikeAsyncWriter.hpp"
 
 struct DikeSQLParam {    
     std::string query;
@@ -13,9 +16,33 @@ struct DikeSQLParam {
     uint64_t    blockSize;
 };
 
-class DikeSQL {
+class DikeSQL {    
     public:
-    static int Run(std::istream& inStream, std::ostream& outStream, DikeSQLParam * dikeSQLParam);
+    DikeSQL(){};
+
+    ~DikeSQL() {
+        if(workerThread.joinable()){
+            workerThread.join();
+        }
+    }
+
+    DikeAyncWriter * dikeWriter = NULL;
+    std::thread workerThread;
+    sqlite3_stmt *sqlRes = NULL;
+    uint64_t record_counter = 0;
+    bool isRunning;
+
+    std::thread startWorker() {
+        return std::thread([=] { Worker(); });
+    }
+
+    void Worker();
+
+    int Run(DikeSQLParam * dikeSQLParam,
+        Poco::Net::HTTPSession  * inSession,
+        std::istream            * inStream,
+        Poco::Net::StreamSocket * outSocket
+    );
 };
 
 #endif /* DIKE_SQL_HPP */

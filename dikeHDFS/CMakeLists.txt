@@ -9,7 +9,8 @@ include_directories(dikeSQL)
 project(dikeHDFS)
 add_executable(dikeHDFS src/dikeHDFS.cpp)
 
-target_include_directories(dikeHDFS PUBLIC 
+target_include_directories(dikeHDFS PUBLIC
+    ${CMAKE_SOURCE_DIR}/src
     ${CMAKE_SOURCE_DIR}/external/poco/Foundation/include 
     ${CMAKE_SOURCE_DIR}/external/poco/Util/include
     ${CMAKE_SOURCE_DIR}/external/poco/Net/include 

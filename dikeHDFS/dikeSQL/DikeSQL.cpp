@@ -7,6 +7,7 @@
 #include <streambuf>
 #include <chrono>
 #include <stdio.h>
+#include <pthread.h>
 
 #include <sqlite3.h>
 
@@ -15,12 +16,15 @@
 #include "DikeUtil.hpp"
 
 
-int DikeSQL::Run(std::istream& inStream, std::ostream& outStream, DikeSQLParam * dikeSQLParam)
+int DikeSQL::Run( DikeSQLParam * dikeSQLParam, 
+    Poco::Net::HTTPSession  * inSession,
+    std::istream            * inStream,
+    Poco::Net::StreamSocket * outSocket
+    )
 {
     sqlite3 *db;    
     int rc;
-    char  * errmsg;
-    uint64_t record_counter = 0;
+    char  * errmsg;    
     
     sqlite3_config(SQLITE_CONFIG_MEMSTATUS, 0); // Disable memory statistics
 
@@ -31,12 +35,13 @@ int DikeSQL::Run(std::istream& inStream, std::ostream& outStream, DikeSQLParam *
     }
 
     StreamReaderParam streamReaderParam;    
-
-    streamReaderParam.in = dynamic_cast<std::istream *>(&inStream);
+    //streamReaderParam.reader = new DikeAsyncReader(inSession);
+    streamReaderParam.reader = new DikeAsyncReader(inStream);
+    streamReaderParam.reader->blockSize = dikeSQLParam->blockSize;
+    streamReaderParam.reader->blockOffset = dikeSQLParam->blockOffset;
     streamReaderParam.name = "S3Object";
     streamReaderParam.schema = dikeSQLParam->schema;
-    streamReaderParam.blockSize = dikeSQLParam->blockSize;
-    streamReaderParam.blockOffset = dikeSQLParam->blockOffset;
+
     rc = StreamReaderInit(db, &streamReaderParam);
     if(rc != SQLITE_OK) {
         std::cerr << "Can't load SRD extention: " << errmsg << std::endl;
@@ -57,40 +62,25 @@ int DikeSQL::Run(std::istream& inStream, std::ostream& outStream, DikeSQLParam *
     }
 
     std::chrono::high_resolution_clock::time_point t2 =  std::chrono::high_resolution_clock::now();
-
-    sqlite3_stmt *sqlRes;
+    
     rc = sqlite3_prepare_v2(db, dikeSQLParam->query.c_str(), -1, &sqlRes, 0);        
     if (rc != SQLITE_OK) {
         std::cerr << "Can't execute query: " << sqlite3_errmsg(db) << std::endl;        
         sqlite3_close(db);
         return 1;
-    }            
-
-    outStream.exceptions ( std::ostream::failbit | std::ostream::badbit );
-    DikeAyncWriter dikeWriter(&outStream);
-    try {
-        while ( (rc = sqlite3_step(sqlRes)) == SQLITE_ROW) {
-            record_counter++;
-            int data_count = sqlite3_data_count(sqlRes);
-            for(int i = 0; i < data_count; i++) {
-                const char* text = (const char*)sqlite3_column_text(sqlRes, i);
-                if(text){
-                    if(i < data_count - 1){ 
-                        dikeWriter.write(text, ',');
-                    } else { // Last field
-                        dikeWriter.write(text, ',', '\n');
-                    }
-                }
-            }
-        }
-        dikeWriter.write('\n');
-        dikeWriter.flush();
-    } catch(const std::exception& e) {
-        std::cout << "Caught exception: \"" << e.what() << "\"\n";
-    } catch (...) {
-        std::cout << "Caught exception " << std::endl;
-    }
+    }                
+ 
     
+    dikeWriter = new DikeAyncWriter(outSocket);
+    
+    isRunning = true;
+    workerThread = startWorker();
+    dikeWriter->Worker();
+    isRunning = false;
+    if(workerThread.joinable()){
+        workerThread.join();
+    }
+
     std::chrono::high_resolution_clock::time_point t3 =  std::chrono::high_resolution_clock::now();
 
     std::chrono::duration<double, std::milli> create_time = t2 - t1;
@@ -100,12 +90,55 @@ int DikeSQL::Run(std::istream& inStream, std::ostream& outStream, DikeSQLParam *
     std::cout << " create_time " << create_time.count()/ 1000 << " sec" ;
     std::cout << " select_time " << select_time.count()/ 1000 << " sec" << std::endl;
 
+    delete streamReaderParam.reader;
+    delete dikeWriter;
+
     sqlite3_finalize(sqlRes);
     sqlite3_close(db);
 
     return(0);
 }
 
+void DikeSQL::Worker()
+{
+    int rc = 1;
+    const char * res[128];
+    int data_count;
+
+    //std::thread::id thread_id = std::this_thread::get_id();
+    pthread_t thread_id = pthread_self();
+    pthread_setname_np(thread_id, "DikeSQL::Worker");
+
+    //outStream.exceptions ( std::ostream::failbit | std::ostream::badbit );
+    try {
+        while (isRunning && SQLITE_ROW == sqlite3_step(sqlRes) && rc) {
+            record_counter++;            
+            data_count = sqlite3_get_data(sqlRes, res, 128);
+            
+            for(int i = 0; i < data_count && rc; i++) {
+                assert(res[i] != NULL);
+                if(res[i]){
+                    if(i < data_count - 1){ 
+                        rc = dikeWriter->write(res[i], ',');
+                    } else { // Last field
+                        rc = dikeWriter->write(res[i], ',', '\n');
+                    }
+                } else {
+                    std::cout << "Bad record " << record_counter << " at pos " << i << std::endl;
+                    rc = 0;
+                }
+            }
+        }
+        dikeWriter->write('\n');
+        //dikeWriter->flush();
+    } catch(const std::exception& e) {
+        std::cout << "Caught exception: \"" << e.what() << "\"\n";
+    } catch (...) {
+        std::cout << "Caught exception " << std::endl;
+    }
+    dikeWriter->close();
+    std::cout << "DikeSQL::Worker exiting " << std::endl;
+}
 
 // cmake --build ./build/Debug
 // ./build/Debug/dikeSQL/testDikeSQL ../../dike/spark/build/tpch-data/lineitem.tbl

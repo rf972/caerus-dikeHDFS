@@ -7,7 +7,13 @@ add_library(libsqlite STATIC sqlite3.c sqlite3ext.h sqlite3.h
             DikeSQL.cpp DikeSQL.hpp
             )
 
-include_directories(. ../src)
+include_directories(
+        . 
+        ../src
+        ${CMAKE_SOURCE_DIR}/external/poco/Foundation/include 
+        ${CMAKE_SOURCE_DIR}/external/poco/Util/include
+        ${CMAKE_SOURCE_DIR}/external/poco/Net/include
+        )
 
 target_compile_options(libsqlite PRIVATE 
 #        -DSQLITE_THREADSAFE=1 
@@ -20,6 +26,6 @@ target_compile_options(libsqlite PRIVATE
         -fmax-errors=1)
 
 
-add_executable(testDikeSQL testDikeSQL.cpp)
-target_link_libraries(testDikeSQL PUBLIC  libsqlite "-lpthread -lm" )
+#add_executable(testDikeSQL testDikeSQL.cpp)
+#target_link_libraries(testDikeSQL PUBLIC  libsqlite "-lpthread -lm" )
 

@@ -1,4 +1,3 @@
-
 #include <sqlite3ext.h>
 SQLITE_EXTENSION_INIT1
 #include <string.h>
@@ -12,7 +11,6 @@ SQLITE_EXTENSION_INIT1
 #include <unistd.h>
 
 #include "StreamReader.hpp"
-
 
 #ifndef SQLITE_OMIT_VIRTUALTABLE
 
@@ -30,7 +28,7 @@ SQLITE_EXTENSION_INIT1
 */
 #if defined(__GNUC__)
 #  define CSV_NOINLINE  __attribute__((noinline))
-#  define CSV_ALWAYS_INLINE  __attribute__((always_inline)) inline
+#  define SRD_ALWAYS_INLINE  __attribute__((always_inline)) inline
 #  define CSV_LIKELY(x)      __builtin_expect(!!(x), 1)
 #  define SRD_UNLIKELY(x)    __builtin_expect(!!(x), 0)
 #elif defined(_MSC_VER) && _MSC_VER>=1310
@@ -44,7 +42,7 @@ SQLITE_EXTENSION_INIT1
 #define SRD_MXERR 200
 
 /* Size of the StreamReader input buffer */
-#define SRD_INBUFSZ (128<<10)
+#define SRD_INBUFSZ (32 << 10)
 
 static char FDELIM = '|';
 static char RDELIM = '\n';
@@ -52,6 +50,8 @@ static char RDELIM = '\n';
 /* A context object used when read a file. */
 struct StreamReader {  
   std::istream * in;
+  Poco::Net::StreamSocket * inSocket;
+  Poco::Net::HTTPSession * inSession;
   char *z;               /* Accumulated text for a field */
   int n;                 /* Number of bytes in z */
   int nAlloc;            /* Space allocated for z[] */
@@ -67,7 +67,8 @@ struct StreamReader {
   sem_t sem;             /* Input stream syncronization semaphore */
   pthread_mutex_t lock; 
   uint64_t nBytesRead;   /* Number of processed bytes */
-  uint64_t blockSize;    /* File System block size */ 
+  uint64_t blockSize;    /* File System block size */
+  DikeAsyncReader * reader;     
 
   char zErr[SRD_MXERR];  /* Error message */
 };
@@ -99,6 +100,26 @@ static std::size_t readFromStream( std::istream& in, char* buf, std::size_t len 
 	return n;
 }
 
+static std::size_t readFromSocket( Poco::Net::StreamSocket * socket, char* buf, std::size_t len ) {
+	std::size_t n = 0;
+	
+  try {
+    while( len > 0 ) {
+      int i = socket->receiveBytes( &buf[n], len, 0 );      
+      n += i;
+      len -= i;
+      if(i == 0){
+        // Graceful shutdown
+        break;
+      }
+    }
+  } catch (...) {
+    std::cout << "readFromSocket: Caught exception " << std::endl;
+  }
+
+	return n;
+}
+
 static void *srd_stream_thread(void *arg)
 {
   StreamReader *p = (StreamReader *)arg;
@@ -108,18 +129,28 @@ static void *srd_stream_thread(void *arg)
     pthread_mutex_lock(&p->lock);
 
     if(p->zStream == NULL){
-      pthread_mutex_unlock(&p->lock);      
+      pthread_mutex_unlock(&p->lock);
+      std::cout << "srd_stream_thread exiting@149 ... " << std::endl;
       return 0;
     }    
         
-    p->nStream = readFromStream(*p->in, p->zStream, SRD_INBUFSZ);
-    if(p->nStream < SRD_INBUFSZ){
-      p->zStream[p->nStream] = EOF;
-    }
+    if(p->in){
+      p->nStream = readFromStream(*p->in, p->zStream, SRD_INBUFSZ);
+    } else if(p->inSocket){
+      p->nStream = readFromSocket(p->inSocket, p->zStream, SRD_INBUFSZ);
+    } 
+    
     if( p->nStream == 0 ){
-      pthread_mutex_unlock(&p->lock);      
+      pthread_mutex_unlock(&p->lock);
+      std::cout << "srd_stream_thread disconnected ... " << std::endl;
       return 0;
     }
+
+    if(p->nStream < SRD_INBUFSZ){
+      std::cout << "srd_stream_thread EOF at " << p->nStream << std::endl;
+      p->zStream[p->nStream] = EOF;      
+    }
+
     pthread_mutex_unlock(&p->lock);
   }
 
@@ -127,8 +158,9 @@ static void *srd_stream_thread(void *arg)
 }
 
 /* Close StreamReader object */
-static void srd_reader_close(StreamReader *p){
-  
+static void srd_reader_close(StreamReader *p)
+{
+  std::cout << "srd_reader_close ... " << std::endl;  
   pthread_mutex_lock(&p->lock);
   p->zStream = NULL;  
   pthread_mutex_unlock(&p->lock);
@@ -144,7 +176,7 @@ static void srd_reader_close(StreamReader *p){
 /* The input buffer has overflowed.  Refill the input buffer, then
 ** return the next character
 */
-static CSV_NOINLINE int srd_getc_refill(StreamReader *p){
+static int srd_getc_refill(StreamReader *p){
   size_t got;
 
   while(1){
@@ -152,6 +184,7 @@ static CSV_NOINLINE int srd_getc_refill(StreamReader *p){
     if(p->nStream == -1){ /* Unlikely timing race */
       pthread_mutex_unlock(&p->lock);
       usleep(100);
+      std::cout << "readFromStream: delay " << std::endl;
     } else{
       break;
     }
@@ -178,16 +211,17 @@ static CSV_NOINLINE int srd_getc_refill(StreamReader *p){
   p->nIn = got;
   p->iIn = 1;
   p->nBytesRead++;
+
+  //std::string out(p->zIn, SRD_INBUFSZ);
+  //std::cout << out << std::endl;
+
   return p->zIn[0];  
 }
 
 /* Return the next character of input.  Return EOF at end of input. */
-static CSV_ALWAYS_INLINE int srd_getc(StreamReader *p){
-  if(SRD_UNLIKELY( p->iIn >= p->nIn )){
-    if( p->in!=0 ) {
-      return srd_getc_refill(p);
-    }
-    return EOF;
+static SRD_ALWAYS_INLINE int srd_getc(StreamReader *p){  
+  if(SRD_UNLIKELY( p->iIn >= p->nIn )){    
+    return srd_getc_refill(p);        
   }
   
   p->nBytesRead++;
@@ -197,10 +231,22 @@ static CSV_ALWAYS_INLINE int srd_getc(StreamReader *p){
 /* Open the file associated with a StreamReader
 ** Return the number of errors.
 */
-static int srd_reader_open(StreamReader *p, std::istream * in,
-                            uint64_t blockOffset, uint64_t blockSize)
+static int srd_reader_open(StreamReader *p)
+{
+  // Do not forget to seek
+  return 0;
+}
+#if 0
+static int srd_reader_open(StreamReader *p, 
+                            std::istream * in,
+                            Poco::Net::StreamSocket * inSocket,
+                            Poco::Net::HTTPSession * inSession,
+                            uint64_t blockOffset, 
+                            uint64_t blockSize)
 { 
   p->in = in;
+  p->inSocket = inSocket;
+  p->inSession = inSession;
   p->blockSize = blockSize;
   p->zStreamBuf[0] = (char *)malloc(SRD_INBUFSZ);
   p->zStreamBuf[1] = (char *)malloc(SRD_INBUFSZ);
@@ -226,6 +272,7 @@ static int srd_reader_open(StreamReader *p, std::istream * in,
   
   return 0;
 }
+#endif
 
 /* Increase the size of p->z and append character c to the end. 
 ** Return 0 on success and non-zero if there is an OOM error */
@@ -246,7 +293,7 @@ static CSV_NOINLINE int csv_resize_and_append(StreamReader *p, char c){
 
 /* Append a single character to the StreamReader.z[] array.
 ** Return 0 on success and non-zero if there is an OOM error */
-static CSV_ALWAYS_INLINE int csv_append(StreamReader *p, char c){
+static SRD_ALWAYS_INLINE int csv_append(StreamReader *p, char c){
   if( SRD_UNLIKELY(p->n>=p->nAlloc-1)) return csv_resize_and_append(p, c);
   p->z[p->n++] = c;
   return 0;
@@ -350,9 +397,7 @@ static int srd_Rowid(sqlite3_vtab_cursor*,sqlite3_int64*);
 typedef struct srdTable {
   sqlite3_vtab base;              /* Base class.  Must be first */
   
-  std::istream * in;              /* Input stream */
-  uint64_t blockSize;             /* File System block size */
-  uint64_t blockOffset;             /* File System block size */
+  DikeAsyncReader * reader;
   
   long iStart;                    /* Offset to start of data in zFilename */
   int nCol;                       /* Number of columns */
@@ -566,9 +611,8 @@ static int srd_Connect(
     goto tbltab_connect_error;
   }  
 
-  pTable->in = param->in;
-  pTable->blockOffset = param->blockOffset;
-  pTable->blockSize = param->blockSize;
+  param->reader->initRecord(pTable->nCol);
+  pTable->reader = param->reader;
   
   rc = sqlite3_declare_vtab(db, schema.c_str());
   if( rc ){
@@ -654,7 +698,10 @@ static int srd_Open(sqlite3_vtab *p, sqlite3_vtab_cursor **ppCursor){
   pCur->aLen = (int*)&pCur->azVal[pTab->nCol];
   pCur->azPtr = (char**)&pCur->aLen[pTab->nCol];
   *ppCursor = &pCur->base;
-  if( srd_reader_open(&pCur->rdr, pTab->in, pTab->blockOffset, pTab->blockSize) ){
+
+  pCur->rdr.reader = pTab->reader;
+
+  if( srd_reader_open(&pCur->rdr) ){
     srd_xfer_error(pTab, &pCur->rdr);
     return SQLITE_ERROR;
   } else {
@@ -729,10 +776,24 @@ static int srd_get_field_indecies(srdCursor *pCur, int nCol, int delim)
 */
 static int srd_Next(sqlite3_vtab_cursor *cur){
   srdCursor *pCur = (srdCursor*)cur;
+
+  if(pCur->rdr.reader->readRecord()) {
+    pCur->iRowid = -1;
+  } else {
+    pCur->iRowid++;
+  }
+
+  return SQLITE_OK;
+}
+
+#if 0
+static int srd_Next(sqlite3_vtab_cursor *cur){
+  srdCursor *pCur = (srdCursor*)cur;
   srdTable *pTab = (srdTable*)cur->pVtab;
   int i = 0;
   char *z;
 
+  // pCur->rdr.reader->isEOF()
   if(pCur->rdr.blockSize > 0 && pCur->rdr.nBytesRead > pCur->rdr.blockSize){
     std::cout << "EOB nBytesRead " << pCur->rdr.nBytesRead << std::endl;    
     pCur->iRowid = -1;
@@ -781,6 +842,8 @@ static int srd_Next(sqlite3_vtab_cursor *cur){
 
   if( /* z==0 || */ (pCur->rdr.cTerm==EOF && i<pTab->nCol) ){
     pCur->iRowid = -1;
+    //std::cout << "Unexpected termination "<< std::endl;
+    //std::cout << pCur->rdr.zIn << std::endl;
   }else{
     pCur->iRowid++;
     while( i<pTab->nCol ){
@@ -793,6 +856,7 @@ static int srd_Next(sqlite3_vtab_cursor *cur){
   }
   return SQLITE_OK;
 }
+#endif
 
 /*
 ** Return values of columns for the row at which the srdCursor
@@ -805,7 +869,19 @@ static int srd_Column(
 ){
   srdCursor *pCur = (srdCursor*)cur;
   srdTable *pTab = (srdTable*)cur->pVtab;
+ 
   if( i>=0 && i<pTab->nCol){
+#if _DEBUG    
+    std::size_t found = std::string((const char*)pCur->rdr.reader->record->fields[i]).find('|');
+    assert(std::string::npos == found);
+#endif
+    if(pTab->cTypes[i] == SQLITE_AFF_INTEGER){
+      sqlite3_result_int(ctx, sqlite3_atoi((const char*)pCur->rdr.reader->record->fields[i]));
+    } else {
+      sqlite3_result_text(ctx, (const char*)pCur->rdr.reader->record->fields[i], -1 , SQLITE_TRANSIENT);
+    }
+
+#if 0     
     if(pCur->azPtr[i]!=0){
       if(pTab->cTypes[i] == SQLITE_AFF_INTEGER){        
         sqlite3_result_int(ctx, sqlite3_atoi(pCur->azPtr[i]));
@@ -823,6 +899,7 @@ static int srd_Column(
         sqlite3_result_text(ctx, pCur->azVal[i], -1 /* pCur->aLen[i] */, SQLITE_STATIC);        
       }
     }
+#endif    
   }
 
   /*

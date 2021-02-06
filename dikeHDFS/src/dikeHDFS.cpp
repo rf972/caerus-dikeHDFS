@@ -5,9 +5,15 @@
 #include <Poco/Net/HTTPResponse.h>
 #include <Poco/Net/HTTPRequest.h>
 #include <Poco/Net/HTTPServerRequest.h>
+#include <Poco/Net/HTTPServerRequestImpl.h>
+
 #include <Poco/Net/HTTPServerResponse.h>
+#include <Poco/Net/HTTPServerResponseImpl.h>
 
 #include <Poco/Net/HTTPClientSession.h>
+#include <Poco/Net/HTTPServerSession.h>
+
+#include "Poco/Net/StreamSocket.h"
 
 #include <Poco/Util/ServerApplication.h>
 #include <Poco/Util/AbstractConfiguration.h>
@@ -95,20 +101,24 @@ public:
 
       hdfs_req.write(cout);    
 
-      HTTPClientSession session(host, 9864);
-      session.sendRequest(hdfs_req);
+      HTTPClientSession hdfs_session(host, 9864);
+      hdfs_session.sendRequest(hdfs_req);
       HTTPResponse hdfs_resp;
 
-      std::istream& fromHDFS = session.receiveResponse(hdfs_resp);    
-      (HTTPResponse &)resp = hdfs_resp;              
+      std::istream& fromHDFS = hdfs_session.receiveResponse(hdfs_resp);
+      //std::istream * fromHDFS = NULL;
+      //hdfs_session.readResponse(hdfs_resp);
+      (HTTPResponse &)resp = hdfs_resp;
+      cout << "From HDFS we got \"" << hdfs_resp.getTransferEncoding() << "\" TransferEncoding" << endl;
 
       if(req.has("ReadParam")) {
         resp.setContentLength(Poco::Net::HTTPMessage::UNKNOWN_CONTENT_LENGTH);
-        resp.setChunkedTransferEncoding(true);    
-        resp.setKeepAlive(true);
+        resp.setChunkedTransferEncoding(false);    
+        resp.setKeepAlive(false);
 
         string readParam = req.get("ReadParam");
         cout << DikeUtil().Blue();      
+        DikeSQL dikeSQL;
 
         try{
           std::istringstream readParamStream(readParam.c_str());      
@@ -125,7 +135,13 @@ public:
           dikeSQLParam.blockSize = cfg->getUInt64("Configuration.BlockSize");
 
           ostream& toClient = resp.send();
-          DikeSQL::Run(fromHDFS, toClient, &dikeSQLParam);
+          toClient.flush();
+
+          Poco::Net::HTTPServerRequestImpl & req_impl = (Poco::Net::HTTPServerRequestImpl &)req;          
+          Poco::Net::StreamSocket toClientSocket = req_impl.detachSocket();
+          
+          dikeSQL.Run(&dikeSQLParam, (Poco::Net::HTTPSession*)&hdfs_session, &fromHDFS, &toClientSocket );       
+          
         } catch (Poco::NotFoundException&)
         {
           cout << DikeUtil().Red() << "Exeption while parsing readParam" << endl;
@@ -136,6 +152,7 @@ public:
         Poco::StreamCopier::copyStream(fromHDFS, toClient, 8192);
       }              
       
+      //hdfs_session.close();
       resp.write(cout);
       cout << DikeUtil().Yellow() << DikeUtil().Now() << " DN End " << DikeUtil().Reset() << endl;
    }   
@@ -160,13 +177,24 @@ class DikeServerApp : public ServerApplication
 protected:
   int main(const vector<string> &)
   {
-    HTTPServer nameNode(new NameNodeHandlerFactory, ServerSocket(9860), new HTTPServerParams);
-    HTTPServer dataNode(new DataNodeHandlerFactory, ServerSocket(9859), new HTTPServerParams);
+    HTTPServerParams* nameNodeParams = new HTTPServerParams;
+    HTTPServerParams* dataNodeParams = new HTTPServerParams;
+
+    dataNodeParams->setKeepAlive(false);
+    dataNodeParams->setMaxThreads(16);
+    dataNodeParams->setMaxQueued(128);
+
+    HTTPServer nameNode(new NameNodeHandlerFactory, ServerSocket(9860), nameNodeParams);
+    HTTPServer dataNode(new DataNodeHandlerFactory, ServerSocket(9859), dataNodeParams);
 
     nameNode.start();
     dataNode.start();
 
+#if _DEBUG
+    cout << endl << "Server started (Debug)" << endl;
+#else
     cout << endl << "Server started" << endl;
+#endif
 
     waitForTerminationRequest();  // wait for CTRL-C or kill
 

@@ -411,6 +411,7 @@ typedef int (*sqlite3_loadext_entry)(
 #define sqlite3_create_module          sqlite3_api->create_module
 #define sqlite3_create_module_v2       sqlite3_api->create_module_v2
 #define sqlite3_data_count             sqlite3_api->data_count
+#define sqlite3_get_data               sqlite3_api->sqlite3_get_data
 #define sqlite3_db_handle              sqlite3_api->db_handle
 #define sqlite3_declare_vtab           sqlite3_api->declare_vtab
 #define sqlite3_enable_shared_cache    sqlite3_api->enable_shared_cache

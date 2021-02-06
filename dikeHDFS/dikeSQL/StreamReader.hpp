@@ -5,13 +5,15 @@
 #include <iostream>
 #include <string.h>
 
+#include "Poco/Net/StreamSocket.h"
+#include "Poco/Net/HTTPSession.h"
+
+#include "DikeAsyncReader.hpp"
 
 struct StreamReaderParam {
-    std::istream * in;
+    DikeAsyncReader * reader;
     std::string name;
     std::string schema;
-    uint64_t blockSize;
-    uint64_t blockOffset;
 };
 
 int StreamReaderInit(sqlite3 *db, StreamReaderParam * param);
