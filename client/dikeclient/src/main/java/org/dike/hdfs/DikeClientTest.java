@@ -8,7 +8,6 @@ import java.io.BufferedReader;
 import java.io.InputStreamReader;
 
 import java.nio.ByteBuffer;
-import java.nio.charset.StandardCharsets;
 
 import java.net.URISyntaxException;
 import java.net.URL;
@@ -49,15 +48,59 @@ import java.io.StringWriter;
 import java.util.Iterator;
 import javax.xml.stream.*;
 import javax.xml.namespace.QName;
+import java.lang.Runnable;
 
 
 import org.apache.hadoop.hdfs.web.NdpHdfsFileSystem;
 
-public class DikeClient
+public class DikeClientTest implements Runnable 
 {
-    public static void main( String[] args )
-    {
-        String fname = args[0];
+    private String savedFname;
+    public int exitCode = 0;
+    public DikeClientTest(String fname) {
+        savedFname = fname;
+    }
+    public void run() {
+        try {
+            //System.out.format("%s: start\n", Thread.currentThread().getName());
+            test(savedFname);
+        } catch (Exception e) {
+            System.out.println("exception hit");
+            exitCode = 1;
+            throw e;
+        }
+    }
+    public static void threadTest(int minThreads, int maxThreads, int iterations, String fname)
+            throws java.lang.InterruptedException {
+        
+        /* Repeat the following test for i iterations
+         * with t threads.
+         */
+        for (int repeat = 0; repeat < iterations; repeat ++) {
+            System.out.format("%s: %s - start Iteration: %d\n",
+                              Thread.currentThread().getName(),
+                              fname, repeat);
+            Thread testThreads[] = new Thread[maxThreads];
+            DikeClientTest clientTest[] = new DikeClientTest[maxThreads];
+            /* Loop from the most stressful to least stressful test. */
+            for (int t = maxThreads; t >= minThreads; t--) {
+                System.out.format("%s: %s - start threads: %d\n",
+                                  Thread.currentThread().getName(), fname, t);
+                for (int i = 0; i < t; i++) {
+                    clientTest[i] = new DikeClientTest(fname);
+                    testThreads[i] = new Thread(clientTest[i]);
+                    testThreads[i].start();
+                }
+                for (int i = 0; i < t; i++) {
+                    testThreads[i].join();
+                    if (clientTest[i].exitCode != 0) {
+                        System.exit(1);
+                    }
+                }
+            }
+        }
+    }
+    public void test(String fname) {
         // Suppress log4j warnings
         BasicConfigurator.configure();
         Logger.getRootLogger().setLevel(Level.INFO);
@@ -71,15 +114,10 @@ public class DikeClient
         Path webhdfsPath = new Path("webhdfs://dikehdfs:9870/");
         Path dikehdfsPath = new Path("ndphdfs://dikehdfs:9860/");
         Path hdfsPath = new Path("hdfs://dikehdfs:9000/");
-
-
-        //perfTest(hdfsPath, fname, conf);
-        //perfTest(hdfsPath, fname, conf);
-
-        //perfTest(webhdfsPath, fname, conf);
-
-        perfTest(dikehdfsPath, fname, conf, true /*pushdown*/, true/*partitionned*/);
-        perfTest(dikehdfsPath, fname, conf, true/*pushdown*/, false/*partitionned*/);
+      
+        //perfTest(webhdfsPath, fname, conf, false /*pushdown*/, false/*partitioned*/);
+        //perfTest(dikehdfsPath, fname, conf, false /*pushdown*/, false/*partitioned*/);
+        //perfTest(dikehdfsPath, fname, conf, true /*pushdown*/, false/*partitioned*/);
         Validate(dikehdfsPath, fname, conf);
     }
 
@@ -99,7 +137,6 @@ public class DikeClient
 
         xmlw.writeStartElement("Configuration");
         xmlw.writeStartElement("Schema");
-
         if (name.contains("customer")) {
             xmlw.writeCharacters("c_custkey LONG, c_name STRING, c_address STRING, c_nationkey LONG, c_phone STRING, c_acctbal NUMERIC, c_mktsegment STRING, c_comment STRING");
         } else if (name.contains("lineitem")) {
@@ -121,7 +158,7 @@ public class DikeClient
 
         xmlw.writeStartElement("Query");
         xmlw.writeCData("SELECT * FROM S3Object");
-        //xmlw.writeCData("SELECT * FROM S3Object LIMIT 3 OFFSET 0");
+        //xmlw.writeCData("SELECT * FROM S3Object LIMIT 2 OFFSET 1");
         //xmlw.writeCData("SELECT COUNT(*) FROM S3Object");
         xmlw.writeEndElement(); // Query
 
@@ -137,23 +174,23 @@ public class DikeClient
         return strw.toString();
     }
 
-    public static void perfTest(Path fsPath, String fname, Configuration conf)
+    private void perfTest(Path fsPath, String fname, Configuration conf)
     {
         perfTest(fsPath, fname, conf, false, false);
     }
 
-    public static void perfTest(Path fsPath, String fname, Configuration conf, Boolean pushdown, Boolean partitionned)
+    private void perfTest(Path fsPath, String fname, Configuration conf, Boolean pushdown, Boolean partitioned)
     {
         InputStream input = null;
         Path fileToRead = new Path(fname);
-        FileSystem fs = null;        
+        FileSystem fs = null;
         NdpHdfsFileSystem dikeFS = null;
         ByteBuffer bb = ByteBuffer.allocate(1024);
         long totalDataSize = 0;
         int totalRecords = 0;
         String readParam = null;
         Map<String,Statistics> stats;
-
+        System.out.println(" starting pushdown:" + pushdown.toString() + " part: " + partitioned.toString());
         long start_time = System.currentTimeMillis();
 
         try {
@@ -166,7 +203,7 @@ public class DikeClient
             
             FSDataInputStream dataInputStream = null;
 
-            if (partitionned) { 
+            if (partitioned) { 
                 BlockLocation[] locs = fs.getFileBlockLocations(fileToRead, 0, Long.MAX_VALUE);                            
                 for (int i  = 0; i < locs.length; i++) {
                     System.out.format("%d off=%d size=%d\n", i, locs[i].getOffset(), locs[i].getLength());
@@ -175,25 +212,17 @@ public class DikeClient
 
                     if(fs.getScheme() == "ndphdfs"){
                         dikeFS = (NdpHdfsFileSystem)fs;
-                        dataInputStream = dikeFS.open(fileToRead, 128 << 10, readParam);                    
+                        dataInputStream = dikeFS.open(fileToRead, 16 << 10, readParam);                    
                     }
 
                     dataInputStream.seek(locs[i].getOffset());
-                    BufferedReader br = new BufferedReader(new InputStreamReader(dataInputStream,StandardCharsets.UTF_8), 128 << 10);
+                    BufferedReader br = new BufferedReader(new InputStreamReader(dataInputStream), 16 << 10);
                     String record = br.readLine();
                     int counter = 0;
                     while (record != null && record.length() > 1 ) {
                         if(counter < 5) {
                             System.out.println(record);
                         }
-/*                        
-                        String[] values = record.split(",");
-                        if(values.length < 15){
-                            System.out.println(counter);
-                            System.out.println(record);
-                            return;
-                        }
-*/                    
                         totalDataSize += record.length() + 1; // +1 to count end of line
                         totalRecords += 1;
                         counter += 1;
@@ -206,29 +235,17 @@ public class DikeClient
                 if(pushdown){
                     dikeFS = (NdpHdfsFileSystem)fs;
                     readParam = getReadParam(fname, 0 /* ignore stream size */);
-                    dataInputStream = dikeFS.open(fileToRead, 128 << 10, readParam);                    
+                    dataInputStream = dikeFS.open(fileToRead, 16 << 10, readParam);                    
                 } else {
                     dataInputStream = fs.open(fileToRead);
                 }
-                BufferedReader br = new BufferedReader(new InputStreamReader(dataInputStream,StandardCharsets.UTF_8));
+                BufferedReader br = new BufferedReader(new InputStreamReader(dataInputStream));
                 String record;
                 record = br.readLine();
                 while (record != null && record.length() > 1){
                     if(totalRecords < 5) {
                         System.out.println(record);
                     }
-/*                    
-                    String[] values = record.split(",");
-                    if(values.length < 15){
-                        System.out.println(totalRecords);
-                        System.out.println(record);
-                        return;
-                    }
-
-                    if(totalRecords > 6001215) {
-                        System.out.println(record);
-                    }
-*/
                     totalDataSize += record.length() + 1; // +1 to count end of line
                     totalRecords += 1;
 
@@ -240,7 +257,7 @@ public class DikeClient
             System.out.println("Error occurred: ");
             ex.printStackTrace();
             long end_time = System.currentTimeMillis();            
-            System.out.format("Received %d records (%d bytes) in %.3f sec\n", totalRecords, totalDataSize, (end_time - start_time) / 1000.0);             
+            System.out.format("Received %d records (%d bytes) in %.3f sec\n", totalRecords, totalDataSize, (end_time - start_time) / 1000.0);            
             return;
         }
 
@@ -251,15 +268,13 @@ public class DikeClient
         System.out.format("Received %d records (%d bytes) in %.3f sec\n", totalRecords, totalDataSize, (end_time - start_time) / 1000.0);
     }
 
-    public static void Validate(Path fsPath, String fname, Configuration conf)
+    private void Validate(Path fsPath, String fname, Configuration conf)
     {
         InputStream input = null;
         Path fileToRead = new Path(fname);
-        FileSystem fs1 = null;
-        FileSystem fs2 = null;
-        NdpHdfsFileSystem dikeFS1 = null;
-        NdpHdfsFileSystem dikeFS2 = null;
-        //ByteBuffer bb = ByteBuffer.allocate(1024);
+        FileSystem fs = null;
+        NdpHdfsFileSystem dikeFS = null;
+        ByteBuffer bb = ByteBuffer.allocate(1024);
         long totalDataSize = 0;
         int totalRecords = 0;
         String readParam = null;
@@ -267,29 +282,30 @@ public class DikeClient
         long start_time;
 
         try {
-            fs1 = FileSystem.get(fsPath.toUri(), conf);
-            fs2 = FileSystem.get(fsPath.toUri(), conf);
-            dikeFS1 = (NdpHdfsFileSystem)fs1;
-            dikeFS2 = (NdpHdfsFileSystem)fs2;
-            System.out.println("\nConnected to -- " + fsPath.toString());
+            fs = FileSystem.get(fsPath.toUri(), conf);
+            dikeFS = (NdpHdfsFileSystem)fs;
+            System.out.println(Thread.currentThread().getName() +
+                               " Connected to -- " + fsPath.toString());
             start_time = System.currentTimeMillis();                        
             
             FSDataInputStream d1 = null;
             FSDataInputStream d2 = null;
 
-            BlockLocation[] locs = fs1.getFileBlockLocations(fileToRead, 0, Long.MAX_VALUE);            
+            BlockLocation[] locs = fs.getFileBlockLocations(fileToRead, 0, Long.MAX_VALUE);            
             readParam = getReadParam(fname, 0);
-            d2 = dikeFS2.open(fileToRead, 128 << 10, readParam);
-            BufferedReader br2 = new BufferedReader(new InputStreamReader(d2,StandardCharsets.UTF_8), 128 << 10);
+            d2 = dikeFS.open(fileToRead, 16 << 10, readParam);
+            BufferedReader br2 = new BufferedReader(new InputStreamReader(d2), 16 << 10);
 
             for (int i  = 0; i < locs.length; i++) {
-                System.out.format("%d off=%d size=%d\n", i, locs[i].getOffset(), locs[i].getLength());
+                System.out.format("%s: %d off=%d size=%d\n", 
+                                  Thread.currentThread().getName(),
+                                  i, locs[i].getOffset(), locs[i].getLength());
 
                 readParam = getReadParam(fname, locs[i].getLength());                                    
-                d1 = dikeFS1.open(fileToRead, 128 << 10, readParam);
+                d1 = dikeFS.open(fileToRead, 16 << 10, readParam);
 
                 d1.seek(locs[i].getOffset());
-                BufferedReader br1 = new BufferedReader(new InputStreamReader(d1,StandardCharsets.UTF_8), 128 << 10);
+                BufferedReader br1 = new BufferedReader(new InputStreamReader(d1), 16 << 10);
                 String record1 = br1.readLine();
                 String record2 = br2.readLine();
                 int counter = 0;
@@ -297,13 +313,17 @@ public class DikeClient
                     totalDataSize += record1.length() + 1; // +1 to count end of line
                     totalRecords += 1;
                     counter += 1;
-  
+                    if (Thread.currentThread().getName().contains("Thread-26") && (i > 5)) {
+                        exitCode = 1;
+                        return;
+                    }
                     if(!record1.equals(record2)) {
-                        System.out.format("P %d: %s\n",totalRecords, record1);
-                        System.out.format("O %d: %s\n",totalRecords, record2);
+                        System.out.format("%s: P %d: %s\n",
+                                          Thread.currentThread().getName(), totalRecords, record1);
+                        System.out.format("%s: O %d: %s\n",
+                                          Thread.currentThread().getName(), totalRecords, record2);
                         //System.out.format("At line %d totalRecords %d\n", counter, totalRecords);
-                        br1.close(); 
-                        br2.close();
+                        exitCode = 1;
                         return;
                     }  
                     
@@ -311,31 +331,28 @@ public class DikeClient
                     if(record1.length() > 1 && record2 != null){
                         record2 = br2.readLine();
                     }
-                }                
-                br1.close();
-                d1.close();
+                }
+                br1.close();                    
             }
-            br2.close();
-            d2.close();
-            fs1.close();
-            fs2.close();
         } catch (Exception ex) {
-            System.out.println("Exception !!! ");
+            System.out.println("Error occurred while Configuring Filesystem ");
             ex.printStackTrace();
+            exitCode = 1;
             return;
         }
 
-        
         long end_time = System.currentTimeMillis();
 
-        Map<String,Statistics> stats = fs1.getStatistics();
+        Map<String,Statistics> stats = fs.getStatistics();
         //System.out.println(fs.getScheme());
-        System.out.format("BytesRead %d\n", stats.get(fs1.getScheme()).getBytesRead());
-        System.out.format("Received %d records (%d bytes) in %.3f sec\n", totalRecords, totalDataSize, (end_time - start_time) / 1000.0);
+        System.out.format("%s: BytesRead %d\n", Thread.currentThread().getName(), 
+                          stats.get(fs.getScheme()).getBytesRead());
+        System.out.format("%s: Received %d records (%d bytes) in %.3f sec\n",
+                          Thread.currentThread().getName(), 
+                          totalRecords, totalDataSize, (end_time - start_time) / 1000.0);
     }    
 }
 
 // mvn package -o
 // java -classpath target/dikeclient-1.0-jar-with-dependencies.jar org.dike.hdfs.DikeClient /lineitem.tbl
 // java -Xdebug -agentlib:jdwp=transport=dt_socket,server=y,suspend=y,address=*:8000 -Xmx1g -classpath target/dikeclient-1.0-jar-with-dependencies.jar org.dike.hdfs.DikeClient /lineitem.tbl
-// for i in $(seq 1 10); do echo $i && java -classpath target/dikeclient-1.0-jar-with-dependencies.jar org.dike.hdfs.DikeClient /lineitem.tbl; done
