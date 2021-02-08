@@ -16,11 +16,7 @@
 #include "DikeUtil.hpp"
 
 
-int DikeSQL::Run( DikeSQLParam * dikeSQLParam, 
-    Poco::Net::HTTPSession  * inSession,
-    std::istream            * inStream,
-    Poco::Net::StreamSocket * outSocket
-    )
+int DikeSQL::Run(DikeSQLParam * dikeSQLParam, DikeIO * input, DikeIO * output)
 {
     sqlite3 *db;    
     int rc;
@@ -34,9 +30,8 @@ int DikeSQL::Run( DikeSQLParam * dikeSQLParam,
         return(1);
     }
 
-    StreamReaderParam streamReaderParam;    
-    //streamReaderParam.reader = new DikeAsyncReader(inSession);
-    streamReaderParam.reader = new DikeAsyncReader(inStream);
+    StreamReaderParam streamReaderParam;        
+    streamReaderParam.reader = new DikeAsyncReader(input);
     streamReaderParam.reader->blockSize = dikeSQLParam->blockSize;
     streamReaderParam.reader->blockOffset = dikeSQLParam->blockOffset;
     streamReaderParam.name = "S3Object";
@@ -69,9 +64,8 @@ int DikeSQL::Run( DikeSQLParam * dikeSQLParam,
         sqlite3_close(db);
         return 1;
     }                
- 
-    
-    dikeWriter = new DikeAyncWriter(outSocket);
+     
+    dikeWriter = new DikeAyncWriter(output);
     
     isRunning = true;
     workerThread = startWorker();
@@ -137,7 +131,7 @@ void DikeSQL::Worker()
         std::cout << "Caught exception " << std::endl;
     }
     dikeWriter->close();
-    std::cout << "DikeSQL::Worker exiting " << std::endl;
+    //std::cout << "DikeSQL::Worker exiting " << std::endl;
 }
 
 // cmake --build ./build/Debug

@@ -14,10 +14,8 @@
 #include <semaphore.h>
 #include <unistd.h>
 
-#include "Poco/Net/StreamSocket.h"
-#include "Poco/Net/HTTPSession.h"
-
 #include "DikeUtil.hpp"
+#include "DikeIO.hpp"
 #include "DikeBuffer.hpp"
 
 class DikeAyncWriter{
@@ -26,9 +24,8 @@ class DikeAyncWriter{
         QUEUE_SIZE  = 4,
         BUFFER_SIZE = (256 << 10)
     };
-    std::ostream * outStream;
-    Poco::Net::StreamSocket * outSocket;
-    Poco::Net::HTTPSession * outSession;
+
+    DikeIO * output;
     std::queue<DikeBuffer * > work_q;
     std::queue<DikeBuffer * > free_q;
     std::mutex q_lock;
@@ -41,44 +38,11 @@ class DikeAyncWriter{
     int emptyCount = 0;
     int recordCount = 0;
 
-    DikeAyncWriter(std::ostream * outStream){
-        this->outStream = outStream;
-        this->outSocket = NULL;
-        this->outSession = NULL;
+    DikeAyncWriter(DikeIO * output){
+        this->output = output;
+
         sem_init(&work_sem, 0, 0);
         sem_init(&free_sem, 0, QUEUE_SIZE);        
-        for(int i = 0; i < QUEUE_SIZE; i++){
-            DikeBuffer * b = new DikeBuffer(BUFFER_SIZE);
-            free_q.push(b);
-        }
-        buffer = NULL;
-        buffer = getBuffer();
-        isRunning = true;
-        //workerThread = startWorker();
-    }
-
-    DikeAyncWriter(Poco::Net::HTTPSession * outSession){
-        this->outStream = NULL;
-        this->outSocket = NULL;
-        this->outSession = outSession;
-        sem_init(&work_sem, 0, 0);
-        sem_init(&free_sem, 0, QUEUE_SIZE - 2);        
-        for(int i = 0; i < QUEUE_SIZE; i++){
-            DikeBuffer * b = new DikeBuffer(BUFFER_SIZE);
-            free_q.push(b);
-        }
-        buffer = NULL;
-        buffer = getBuffer();
-        isRunning = true;
-        //workerThread = startWorker();
-    }
-
-    DikeAyncWriter(Poco::Net::StreamSocket * outSocket){
-        this->outStream = NULL;
-        this->outSocket = outSocket;
-        this->outSession = NULL;
-        sem_init(&work_sem, 0, 0);
-        sem_init(&free_sem, 0, QUEUE_SIZE - 2);        
         for(int i = 0; i < QUEUE_SIZE; i++){
             DikeBuffer * b = new DikeBuffer(BUFFER_SIZE);
             free_q.push(b);
@@ -196,9 +160,7 @@ class DikeAyncWriter{
                 usleep(100);
             }
         }
-        if(outStream){
-            outStream->flush();
-        }
+
         //std::cout << "Flush completed" << std::endl;        
     }
 
@@ -219,40 +181,18 @@ class DikeAyncWriter{
             DikeBuffer * b = work_q.front();             
             work_q.pop();
             q_lock.unlock();
-            if(outStream){
-                outStream->write((const char *)b->startPtr, b->getSize());
-                outStream->flush();
-            } else if(outSocket) {
+            if(output) {
                 int len = b->getSize();
                 int n = 0;
                 if(len > 0 && isRunning){                    
                     //std::cout << recordCount << " len " << len << std::endl; 
                     //std::cout << std::string((char*)&b->startPtr[n], len) << std::endl; 
                     recordCount++;
-#if _DEBUG
-                    std::size_t found = std::string((char*)&b->startPtr[n], len).find('|');
-                    assert(std::string::npos == found);
-                    //assert(len < 300);
-#endif                    
-                }
-
-                try {
-                    while( len > 0 && isRunning) {
-                     
-                        int i = outSocket->sendBytes( (char*)&b->startPtr[n], len, 0);
-
-                        n += i;
-                        len -= i;
-                        if(i <= 0){
-                            // Graceful shutdown needed
-                            std::cout << "DikeAyncWriter Client disconnected " << std::endl;                            
-                            isRunning = false;
-                            break;
-                        }
-                    } 
-                } catch (...) {
-                    std::cout << "DikeAyncWriter Client disconnected exception " << std::endl;                    
-                    isRunning = false;                   
+                    n = output->write((char*)b->startPtr, len);
+                    if(n < len) {
+                        std::cout << "DikeAyncWriter Client disconnected " << std::endl;                    
+                        isRunning = false;                   
+                    }
                 }
             }
             b->reset();

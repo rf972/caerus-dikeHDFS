@@ -160,7 +160,7 @@ static void *srd_stream_thread(void *arg)
 /* Close StreamReader object */
 static void srd_reader_close(StreamReader *p)
 {
-  std::cout << "srd_reader_close ... " << std::endl;  
+  //std::cout << "srd_reader_close ... " << std::endl;  
   pthread_mutex_lock(&p->lock);
   p->zStream = NULL;  
   pthread_mutex_unlock(&p->lock);

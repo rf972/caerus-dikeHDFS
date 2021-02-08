@@ -5,8 +5,6 @@
 #include <iostream>
 #include <string.h>
 
-#include "Poco/Net/StreamSocket.h"
-
 #include "DikeAsyncWriter.hpp"
 
 struct DikeSQLParam {    
@@ -38,11 +36,7 @@ class DikeSQL {
 
     void Worker();
 
-    int Run(DikeSQLParam * dikeSQLParam,
-        Poco::Net::HTTPSession  * inSession,
-        std::istream            * inStream,
-        Poco::Net::StreamSocket * outSocket
-    );
+    int Run(DikeSQLParam * dikeSQLParam, DikeIO * input, DikeIO * output);
 };
 
 #endif /* DIKE_SQL_HPP */

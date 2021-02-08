@@ -14,9 +14,6 @@
 #include <semaphore.h>
 #include <unistd.h>
 
-#include "Poco/Net/StreamSocket.h"
-#include "Poco/Net/HTTPSession.h"
-
 #include "DikeUtil.hpp"
 
 class DikeBuffer{
