@@ -14,15 +14,18 @@
 #include <Poco/Net/HTTPServerSession.h>
 
 #include "Poco/Net/StreamSocket.h"
+#include "Poco/Net/HTTPHeaderStream.h"
 
 #include <Poco/Util/ServerApplication.h>
 #include <Poco/Util/AbstractConfiguration.h>
 #include <Poco/Util/XMLConfiguration.h>
 
+
 #include <Poco/StreamCopier.h>
 #include <Poco/URI.h>
 
 #include <iostream>
+#include <algorithm>
 
 //#include "S3Handlers.hpp"
 #include "DikeUtil.hpp"
@@ -33,6 +36,33 @@ using namespace Poco::Net;
 using namespace Poco::Util;
 using namespace std;
 
+class DikeHDFSSession : public HTTPClientSession {
+  public:
+  DikeHDFSSession(const std::string& host, Poco::UInt16 port = HTTPSession::HTTP_PORT)
+  :HTTPClientSession(host,port) { }
+  
+  int readResponseHeader(HTTPResponse& response)
+  {
+    flushRequest();
+   
+    do {
+      response.clear();
+      HTTPHeaderInputStream his(*this);
+      try {
+        response.read(his);
+      } catch (...) {
+        close();
+        std::cout << "DikeHDFSSession::readResponseHeader Exception" << std::endl;
+      }
+    } while (response.getStatus() == HTTPResponse::HTTP_CONTINUE);
+        
+    return response.getStatus();
+  }
+
+  int read(char * buf, uint32_t size) {
+    return HTTPClientSession::read(buf, (std::streamsize)size);
+  }
+};
 
 class DikeIn : public DikeIO {
   public:
@@ -63,6 +93,45 @@ class DikeIn : public DikeIO {
       } catch (...) {
         std::cout << "DikeIn: Caught exception " << std::endl;
       }     
+      return n;
+    }
+    
+    return -1;
+  }
+};
+
+class DikeInSession : public DikeIO {
+  public:
+  DikeHDFSSession * inSession = NULL;
+
+  DikeInSession(DikeHDFSSession * inSession){
+    this->inSession = inSession;
+  }
+
+  ~DikeInSession(){ }
+  virtual int write(const char * buf, uint32_t size) {
+    return -1;
+  }
+
+  virtual int read(char * buf, uint32_t size) {
+    if(inSession) {
+      int n = 0;
+      int len = size;
+      try {
+        while( len > 0 ) {
+            int i = inSession->read((char*)&buf[n], len );            
+            n += i;
+            len -= i;
+            if(i <= 0){
+                readBytes += n;
+                return n;
+            }
+        }
+      } catch (...) {
+        std::cout << "DikeIn: Caught exception " << std::endl;
+      }
+
+      readBytes += n;
       return n;
     }
     
@@ -200,11 +269,19 @@ public:
       hdfs_req.write(cout);
     }
 
-    HTTPClientSession hdfs_session(host, 9864);
+    //HTTPClientSession hdfs_session(host, 9864);
+    DikeHDFSSession hdfs_session(host, 9864);
+
     hdfs_session.sendRequest(hdfs_req);
     HTTPResponse hdfs_resp;
 
-    std::istream& fromHDFS = hdfs_session.receiveResponse(hdfs_resp);
+    //std::istream& fromHDFS = hdfs_session.receiveResponse(hdfs_resp);
+
+    //hdfs_session.receiveResponse(hdfs_resp);
+    //hdfs_session.peekResponse(hdfs_resp);
+    hdfs_session.readResponseHeader(hdfs_resp);
+
+
     (HTTPResponse &)resp = hdfs_resp;
     //cout << "From HDFS we got \"" << hdfs_resp.getTransferEncoding() << "\" TransferEncoding" << endl;
 
@@ -240,7 +317,8 @@ public:
         Poco::Net::HTTPServerRequestImpl & req_impl = (Poco::Net::HTTPServerRequestImpl &)req;          
         Poco::Net::StreamSocket toClientSocket = req_impl.detachSocket();
         
-        DikeIn input(&fromHDFS);
+        //DikeIn input(&fromHDFS);
+        DikeInSession input(&hdfs_session);
         DikeOut output(&toClientSocket);
         dikeSQL.Run(&dikeSQLParam, &input, &output);       
         
@@ -250,6 +328,7 @@ public:
         cout << DikeUtil().Reset() << endl;
       }      
     } else {
+      std::istream& fromHDFS = hdfs_session.receiveResponse(hdfs_resp);
       ostream& toClient = resp.send();
       Poco::StreamCopier::copyStream(fromHDFS, toClient, 8192);
     }              
