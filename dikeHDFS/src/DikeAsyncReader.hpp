@@ -64,6 +64,7 @@ class DikeAsyncReader{
 
     std::queue<DikeBuffer * > work_q;
     std::queue<DikeBuffer * > free_q;
+    std::queue<DikeBuffer * > tmp_q;
     std::mutex q_lock;
     sem_t work_sem;
     sem_t free_sem;    
@@ -83,7 +84,7 @@ class DikeAsyncReader{
             DikeBuffer * b = new DikeBuffer(BUFFER_SIZE);
             free_q.push(b);
         }
-        buffer = NULL;        
+              
         isRunning = true;
         workerThread = startWorker(); // This will start reading immediatelly
         buffer = getBuffer();
@@ -109,6 +110,11 @@ class DikeAsyncReader{
             work_q.pop();
             delete b;
         }
+        while(!tmp_q.empty()){
+            b = tmp_q.front();
+            tmp_q.pop();
+            delete b;
+        }        
         if(record){
             delete record;
         }
@@ -156,6 +162,7 @@ class DikeAsyncReader{
             //std::cout << "DikeAsyncReader EOF at " << bytesRead << std::endl;
             return 1;
         }
+        releaseBuffers();
 
         recordCount++;
         for(int i = 0; i < record->nCol; i++) {
@@ -177,12 +184,14 @@ class DikeAsyncReader{
             }
             std::cout << std::endl;
         }
-
         
         return 0;
     }
+    
+#if 0 /* Fully functional version */    
     int readField(int pos) {       
-        if(buffer->posPtr >= buffer->endPtr) {
+        if(buffer->posPtr >= buffer->endPtr) {            
+            holdBuffer(buffer);
             buffer = getBuffer();
         }
 
@@ -190,6 +199,7 @@ class DikeAsyncReader{
             buffer->posPtr++;
             bytesRead += 1;
             if(buffer->posPtr >= buffer->endPtr) {
+                holdBuffer(buffer);
                 buffer = getBuffer();
             }
         }
@@ -207,6 +217,7 @@ class DikeAsyncReader{
             fieldPtr++;
             count++;
             if(posPtr >= buffer->endPtr) {
+                holdBuffer(buffer);
                 buffer = getBuffer();
                 posPtr = buffer->posPtr;
             }
@@ -223,10 +234,12 @@ class DikeAsyncReader{
         
         return 1;        
     }
+#endif    
 
-#if 0
+#if 1 /* Shallow copy. Under evaluation. Seems to work */
     int readField(int pos) {       
         if(buffer->posPtr >= buffer->endPtr) {
+            holdBuffer(buffer);
             buffer = getBuffer();
         }
 
@@ -234,6 +247,7 @@ class DikeAsyncReader{
             buffer->posPtr++;
             bytesRead += 1;
             if(buffer->posPtr >= buffer->endPtr) {
+                holdBuffer(buffer);
                 buffer = getBuffer();
             }
         }
@@ -270,6 +284,7 @@ class DikeAsyncReader{
                 count++;
             }
             // Get new buffer
+            holdBuffer(buffer);
             buffer = getBuffer();
             posPtr = buffer->posPtr;
             // Copy second part
@@ -295,19 +310,36 @@ class DikeAsyncReader{
         return 1;
     }
 #endif
-    DikeBuffer * getBuffer(){
-        if(buffer != NULL) {
-            q_lock.lock();
-            pushCount ++; // We processed this buffer
-            if(free_q.empty()){
-                emptyCount++; // We reading faster than processing
-            }
-            free_q.push(buffer);
-            buffer = NULL;
-            q_lock.unlock();
-            sem_post(&free_sem);
-        }
 
+    void holdBuffer(DikeBuffer * buf) {
+        //q_lock.lock();       
+        tmp_q.push(buf);        
+        //q_lock.unlock();        
+    }
+
+    void releaseBuffers(void) {
+        DikeBuffer * b;
+        //q_lock.lock();       
+        while(!tmp_q.empty()){
+            b = tmp_q.front();
+            tmp_q.pop();
+            pushBuffer(b);
+        }
+        //q_lock.unlock();        
+    }
+
+    void pushBuffer(DikeBuffer * buf) {
+        q_lock.lock();
+        pushCount ++; // We processed this buffer
+        if(free_q.empty()){
+            emptyCount++; // We reading faster than processing
+        }
+        free_q.push(buf);        
+        q_lock.unlock();
+        sem_post(&free_sem);
+    }
+
+    DikeBuffer * getBuffer(){
         sem_wait(&work_sem);
         q_lock.lock();
         DikeBuffer * b = work_q.front();

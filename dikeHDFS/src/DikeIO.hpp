@@ -10,8 +10,7 @@ class DikeIO {
     DikeIO(){ }
     ~DikeIO(){ }
     virtual int write(const char * buf, uint32_t size)  =  0;
-
-    virtual int read(char * buf, uint32_t size)  = 0;
+    virtual int read(char * buf, uint32_t size)  =  0;    
 };
 
 #endif /* DIKE_IO_HPP */
