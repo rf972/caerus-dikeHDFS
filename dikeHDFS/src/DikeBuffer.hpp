@@ -58,7 +58,7 @@ class DikeBuffer{
         uint8_t * d = (uint8_t *)data;
         uint8_t * p = posPtr;
         int rc;
-        while(*d != 0 && p < endPtr && *d != delim){
+        while(*d != 0 && p < endPtr/* && *d != delim*/){
             *p = *d;
             p++;
             d++;
@@ -84,7 +84,7 @@ class DikeBuffer{
             std::cout << "Something is very wrong there" << std::endl;
             return 0;
         }
-
+        std::cout << "Something is very wrong there" << std::endl;
         // We need to wrap delimiter in quotations
         d = (uint8_t *)data;
         p = posPtr;
@@ -116,7 +116,7 @@ class DikeBuffer{
         uint8_t * d = (uint8_t *)data;
         uint8_t * p = posPtr;
         int rc;
-        while(*d != 0 && p < endPtr && *d != delim){
+        while(*d != 0 && p < endPtr/* && *d != delim*/){
             *p = *d;
             p++;
             d++;
@@ -139,6 +139,7 @@ class DikeBuffer{
             return 0;
         }
 
+        std::cout << "Something is very wrong there" << std::endl;
         // We need to wrap delimiter in quotations
         d = (uint8_t *)data;
         p = posPtr;

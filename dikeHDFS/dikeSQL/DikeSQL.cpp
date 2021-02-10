@@ -113,9 +113,9 @@ void DikeSQL::Worker()
                 assert(res[i] != NULL);
                 if(res[i]){
                     if(i < data_count - 1){ 
-                        rc = dikeWriter->write(res[i], ',');
+                        rc = dikeWriter->write(res[i], '|');
                     } else { // Last field
-                        rc = dikeWriter->write(res[i], ',', '\n');
+                        rc = dikeWriter->write(res[i], '|', '\n');
                     }
                 } else {
                     std::cout << "Bad record " << record_counter << " at pos " << i << std::endl;
