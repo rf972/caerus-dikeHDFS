@@ -10,6 +10,7 @@
 #include <pthread.h>
 
 #include <sqlite3.h>
+#include "dikeSQLite3.h"
 
 #include "StreamReader.hpp"
 #include "DikeSQL.hpp"
@@ -98,6 +99,7 @@ void DikeSQL::Worker()
     int rc = 1;
     const char * res[128];
     int data_count;
+    int total_bytes;
 
     //std::thread::id thread_id = std::this_thread::get_id();
     pthread_t thread_id = pthread_self();
@@ -107,8 +109,10 @@ void DikeSQL::Worker()
     try {
         while (isRunning && SQLITE_ROW == sqlite3_step(sqlRes) && rc) {
             record_counter++;            
-            data_count = sqlite3_get_data(sqlRes, res, 128);
+            data_count = dike_sqlite3_get_data(sqlRes, res, 128, &total_bytes);
             
+            rc = dikeWriter->write(res, data_count, '|', '\n', total_bytes);
+#if 0            
             for(int i = 0; i < data_count && rc; i++) {
                 assert(res[i] != NULL);
                 if(res[i]){
@@ -122,6 +126,7 @@ void DikeSQL::Worker()
                     rc = 0;
                 }
             }
+#endif            
         }
         dikeWriter->write('\n');
         //dikeWriter->flush();

@@ -4719,9 +4719,6 @@ SQLITE_API int sqlite3_step(sqlite3_stmt*);
 */
 SQLITE_API int sqlite3_data_count(sqlite3_stmt *pStmt);
 
-
-SQLITE_API int sqlite3_get_data(sqlite3_stmt *pStmt, const char ** res, int res_size);
-
 /*
 ** CAPI3REF: Fundamental Datatypes
 ** KEYWORDS: SQLITE_TEXT

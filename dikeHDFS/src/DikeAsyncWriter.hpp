@@ -116,6 +116,21 @@ class DikeAyncWriter{
         return rc;
     }
 
+    int write(const char **res, int data_count, char delim, char term, int total_bytes)
+    {
+        if(!isRunning){
+            return 0;
+        }                
+
+        int rc = buffer->write(res, data_count, delim, term, total_bytes);        
+        if(rc){           
+            return rc;
+        }
+        buffer = getBuffer();
+        rc = buffer->write(res, data_count, delim, term, total_bytes);
+        return rc;
+    }
+
     int write(const char * data, char delim, char term){
         if(!isRunning){
             return 0;

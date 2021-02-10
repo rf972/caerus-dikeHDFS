@@ -4,7 +4,7 @@ int dike_sqlite3_result_text(
   sqlite3_context *pCtx,
   const char *z,
   int n,
-  void (*xDel)(void *) )
+  int affinity)
 {
     
     //setResultStrOrError(pCtx, z, n, SQLITE_UTF8, xDel);
@@ -25,14 +25,32 @@ int dike_sqlite3_result_text(
     /* The following block sets the new values of Mem.z and Mem.xDel. It
     ** also sets a flag in local variable "flags" to indicate the memory
     ** management (one of MEM_Dyn or MEM_Static).
+    */    
+   /*
+    if( sqlite3VdbeMemClearAndResize(pMem, (int)MAX(nByte,32)) ){
+        return SQLITE_NOMEM_BKPT;
+    }
     */
-    if( xDel==SQLITE_TRANSIENT ){
-        u32 nAlloc = nByte;
-        if( sqlite3VdbeMemClearAndResize(pMem, (int)MAX(nAlloc,32)) ){
+    int szNew = (int)MAX(nByte,32);
+    if( pMem->szMalloc < szNew ){
+        if( sqlite3VdbeMemGrow(pMem, szNew, 0) ){
             return SQLITE_NOMEM_BKPT;
         }
-        memcpy(pMem->z, z, nAlloc);
+    } else {
+        pMem->z = pMem->zMalloc;
     }
+  
+    memcpy(pMem->z, z, nByte);
+    
+#if 0 /* This looks to be expencive */    
+    if(affinity == SQLITE_AFF_INTEGER){
+        pMem->u.i = sqlite3Atoi(pMem->z);
+        flags |= MEM_Int;
+    } else if(affinity == SQLITE_AFF_NUMERIC){
+        sqlite3AtoF(pMem->z, &pMem->u.r, nByte - 1, SQLITE_UTF8);
+        flags |= MEM_Real; // MEM_IntReal
+    }
+#endif
 
     pMem->n = nByte;
     pMem->flags = flags;
@@ -40,4 +58,26 @@ int dike_sqlite3_result_text(
 
     return SQLITE_OK;
 }
+
+int dike_sqlite3_get_data(sqlite3_stmt *pStmt, const char ** res, int res_size, int * total_bytes)
+{
+  Vdbe *pVm = (Vdbe *)pStmt;
+  int i;
+  u16 flags = (MEM_Str|MEM_Term);
+  * total_bytes = 0;
+
+  if( pVm==0 || pVm->pResultSet==0 || res_size < pVm->nResColumn) return 0;
+
+  for(i =0; i < pVm->nResColumn; i++){
+    if(pVm->pResultSet[i].flags & flags == flags){
+        res[i] = pVm->pResultSet[i].z; 
+      } else {
+        res[i] = sqlite3ValueText(&pVm->pResultSet[i], SQLITE_UTF8);
+      }
+      *total_bytes += pVm->pResultSet[i].n;
+  }
+  return pVm->nResColumn;
+}
+
+
 

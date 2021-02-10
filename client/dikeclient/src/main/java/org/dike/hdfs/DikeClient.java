@@ -71,12 +71,10 @@ public class DikeClient
         Path webhdfsPath = new Path("webhdfs://dikehdfs:9870/");
         Path dikehdfsPath = new Path("ndphdfs://dikehdfs:9860/");
         Path hdfsPath = new Path("hdfs://dikehdfs:9000/");
-
-
-        //perfTest(hdfsPath, fname, conf);
+        
         //perfTest(hdfsPath, fname, conf);
 
-        //perfTest(webhdfsPath, fname, conf);
+        perfTest(webhdfsPath, fname, conf);
 
         perfTest(dikehdfsPath, fname, conf, true /*pushdown*/, true/*partitionned*/);
         perfTest(dikehdfsPath, fname, conf, true/*pushdown*/, false/*partitionned*/);
@@ -324,7 +322,6 @@ public class DikeClient
             ex.printStackTrace();
             return;
         }
-
         
         long end_time = System.currentTimeMillis();
 

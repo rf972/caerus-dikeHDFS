@@ -54,6 +54,37 @@ class DikeBuffer{
 #endif        
     }
 
+    int write(const char **res, int data_count, char delim, char term, int total_bytes) 
+    {
+        int col = data_count;
+        uint8_t * d = NULL;
+        uint8_t * p = posPtr;
+        int bytes = 0;
+
+        /* Check that data can fit */
+        if(endPtr - posPtr < total_bytes + 1){
+            return 0;
+        }
+
+        for(col = 0; col < data_count; col++){
+            d = (uint8_t *)res[col];
+            while(*d != 0) {
+                *p = *d;
+                p++;
+                d++;
+            }
+            if(col < data_count -1){
+                *p = delim;
+                p++;
+            }
+        }
+        *p = term;
+        p++;
+        bytes = p - posPtr;
+        posPtr = p;
+        return bytes;
+    }
+
     int write(const char * data, char delim){
         uint8_t * d = (uint8_t *)data;
         uint8_t * p = posPtr;

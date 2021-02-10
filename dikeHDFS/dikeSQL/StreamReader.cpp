@@ -872,36 +872,7 @@ static int srd_Column(
   srdTable *pTab = (srdTable*)cur->pVtab;
  
   if( i>=0 && i<pTab->nCol){
-#if _DEBUG    
-    std::size_t found = std::string((const char*)pCur->rdr.reader->record->fields[i]).find('|');
-    assert(std::string::npos == found);
-#endif
-    if(0 && pTab->cTypes[i] == SQLITE_AFF_INTEGER){
-      sqlite3_result_int(ctx, sqlite3_atoi((const char*)pCur->rdr.reader->record->fields[i]));
-    } else {
-      //sqlite3_result_text(ctx, (const char*)pCur->rdr.reader->record->fields[i], -1 , SQLITE_TRANSIENT);
-      dike_sqlite3_result_text(ctx, (const char*)pCur->rdr.reader->record->fields[i], pCur->rdr.reader->record->len[i], SQLITE_TRANSIENT);
-    }
-
-#if 0     
-    if(pCur->azPtr[i]!=0){
-      if(pTab->cTypes[i] == SQLITE_AFF_INTEGER){        
-        sqlite3_result_int(ctx, sqlite3_atoi(pCur->azPtr[i]));
-        //sqlite3_result_int(ctx, atoi(pCur->azPtr[i]));
-        //sqlite3_result_text(ctx, pCur->azPtr[i], -1 , SQLITE_STATIC);
-      } else {      
-        sqlite3_result_text(ctx, pCur->azPtr[i], -1 , SQLITE_TRANSIENT);
-      }      
-    } else if (pCur->azVal[i]!=0){
-      if(pTab->cTypes[i]== SQLITE_AFF_INTEGER){
-        sqlite3_result_int(ctx, sqlite3_atoi(pCur->azVal[i]));
-        //sqlite3_result_int(ctx, atoi(pCur->azVal[i]));
-        //sqlite3_result_text(ctx, pCur->azVal[i], -1 /* pCur->aLen[i] */, SQLITE_STATIC);
-      } else {      
-        sqlite3_result_text(ctx, pCur->azVal[i], -1 /* pCur->aLen[i] */, SQLITE_STATIC);        
-      }
-    }
-#endif    
+    dike_sqlite3_result_text(ctx, (const char*)pCur->rdr.reader->record->fields[i], pCur->rdr.reader->record->len[i], pTab->cTypes[i]);
   }
 
   /*
