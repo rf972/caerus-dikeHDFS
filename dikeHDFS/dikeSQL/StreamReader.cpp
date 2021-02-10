@@ -11,6 +11,7 @@ SQLITE_EXTENSION_INIT1
 #include <unistd.h>
 
 #include "StreamReader.hpp"
+#include "dikeSQLite3.h"
 
 #ifndef SQLITE_OMIT_VIRTUALTABLE
 
@@ -875,10 +876,11 @@ static int srd_Column(
     std::size_t found = std::string((const char*)pCur->rdr.reader->record->fields[i]).find('|');
     assert(std::string::npos == found);
 #endif
-    if(pTab->cTypes[i] == SQLITE_AFF_INTEGER){
+    if(0 && pTab->cTypes[i] == SQLITE_AFF_INTEGER){
       sqlite3_result_int(ctx, sqlite3_atoi((const char*)pCur->rdr.reader->record->fields[i]));
     } else {
-      sqlite3_result_text(ctx, (const char*)pCur->rdr.reader->record->fields[i], -1 , SQLITE_TRANSIENT);
+      //sqlite3_result_text(ctx, (const char*)pCur->rdr.reader->record->fields[i], -1 , SQLITE_TRANSIENT);
+      dike_sqlite3_result_text(ctx, (const char*)pCur->rdr.reader->record->fields[i], pCur->rdr.reader->record->len[i], SQLITE_TRANSIENT);
     }
 
 #if 0     
