@@ -79,7 +79,6 @@ class DikeAyncWriter{
 
     DikeBuffer * getBuffer(){
         if(buffer != NULL) {
-
             buffer->validate();
 
             q_lock.lock();
@@ -128,7 +127,14 @@ class DikeAyncWriter{
             return rc;
         }
         buffer = getBuffer();
-        rc = buffer->write(res, data_count, delim, term, total_bytes);
+        rc = buffer->write(res, data_count, delim, term, total_bytes + data_count);
+
+        if(!rc){           
+            std::cout << "DikeAyncWriter::write failed" << std::endl;
+            std::cout << "total_bytes " << total_bytes << std::endl;
+            std::cout << "buffer size " << buffer->getSize() << std::endl;
+        }
+
         return rc;
     }
 

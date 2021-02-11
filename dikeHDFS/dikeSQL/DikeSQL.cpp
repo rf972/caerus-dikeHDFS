@@ -32,7 +32,7 @@ int DikeSQL::Run(DikeSQLParam * dikeSQLParam, DikeIO * input, DikeIO * output)
     }
 
     StreamReaderParam streamReaderParam;        
-    streamReaderParam.reader = new DikeAsyncReader(input);
+    streamReaderParam.reader = new DikeAsyncReader(input, dikeSQLParam->blockSize);
     streamReaderParam.reader->blockSize = dikeSQLParam->blockSize;
     streamReaderParam.reader->blockOffset = dikeSQLParam->blockOffset;
     streamReaderParam.name = "S3Object";
@@ -84,9 +84,11 @@ int DikeSQL::Run(DikeSQLParam * dikeSQLParam, DikeIO * input, DikeIO * output)
     std::cout << "Records " << record_counter;
     std::cout << " create_time " << create_time.count()/ 1000 << " sec" ;
     std::cout << " select_time " << select_time.count()/ 1000 << " sec" << std::endl;
-
-    delete streamReaderParam.reader;
+    
     delete dikeWriter;
+    delete streamReaderParam.reader;
+
+    //std::cout << "Message : " << sqlite3_errmsg(db) << std::endl;
 
     sqlite3_finalize(sqlRes);
     sqlite3_close(db);
@@ -96,7 +98,8 @@ int DikeSQL::Run(DikeSQLParam * dikeSQLParam, DikeIO * input, DikeIO * output)
 
 void DikeSQL::Worker()
 {
-    int rc = 1;
+    int sqlite3_rc;
+    int writer_rc;
     const char * res[128];
     int data_count;
     int total_bytes;
@@ -107,37 +110,26 @@ void DikeSQL::Worker()
 
     //outStream.exceptions ( std::ostream::failbit | std::ostream::badbit );
     try {
-        while (isRunning && SQLITE_ROW == sqlite3_step(sqlRes) && rc) {
+        sqlite3_rc = sqlite3_step(sqlRes);
+        writer_rc = 1;
+        while (isRunning && SQLITE_ROW == sqlite3_rc && writer_rc) {
             record_counter++;            
             data_count = dike_sqlite3_get_data(sqlRes, res, 128, &total_bytes);
             if(total_bytes > 0){
-                rc = dikeWriter->write(res, data_count, '|', '\n', total_bytes);
+                writer_rc = dikeWriter->write(res, data_count, '|', '\n', total_bytes);
             }
-#if 0            
-            for(int i = 0; i < data_count && rc; i++) {
-                assert(res[i] != NULL);
-                if(res[i]){
-                    if(i < data_count - 1){ 
-                        rc = dikeWriter->write(res[i], '|');
-                    } else { // Last field
-                        rc = dikeWriter->write(res[i], '|', '\n');
-                    }
-                } else {
-                    std::cout << "Bad record " << record_counter << " at pos " << i << std::endl;
-                    rc = 0;
-                }
-            }
-#endif            
+            sqlite3_rc = sqlite3_step(sqlRes);
         }
-        dikeWriter->write('\n');
-        //dikeWriter->flush();
-    } catch(const std::exception& e) {
-        std::cout << "Caught exception: \"" << e.what() << "\"\n";
+        dikeWriter->write('\n');           
     } catch (...) {
         std::cout << "Caught exception " << std::endl;
     }
+
     dikeWriter->close();
     //std::cout << "DikeSQL::Worker exiting " << std::endl;
+    //std::cout << "DikeSQL::Worker sqlite3_rc " << sqlite3_rc << std::endl;
+    //std::cout << "DikeSQL::Worker writer_rc " << writer_rc << std::endl;
+    //std::cout << "DikeSQL::Worker isRunning " << isRunning << std::endl;
 }
 
 // cmake --build ./build/Debug

@@ -4,7 +4,7 @@ int dike_sqlite3_result_text(
   sqlite3_context *pCtx,
   const char *z,
   int n,
-  int affinity)
+  int isCopyRequiered)
 {
     
     //setResultStrOrError(pCtx, z, n, SQLITE_UTF8, xDel);
@@ -13,6 +13,7 @@ int dike_sqlite3_result_text(
     int nByte = n;      /* New value for pMem->n */
     int iLimit = SQLITE_MAX_LENGTH;         /* Maximum allowed string or blob size */
     u16 flags = 0;      /* New value for pMem->flags */
+    int szNew;
 
     /* If z is a NULL pointer, set pMem to contain an SQL NULL. */
     if( !z ){
@@ -22,26 +23,22 @@ int dike_sqlite3_result_text(
 
     flags = MEM_Str | MEM_Term;
 
-    /* The following block sets the new values of Mem.z and Mem.xDel. It
-    ** also sets a flag in local variable "flags" to indicate the memory
-    ** management (one of MEM_Dyn or MEM_Static).
-    */    
-   /*
-    if( sqlite3VdbeMemClearAndResize(pMem, (int)MAX(nByte,32)) ){
-        return SQLITE_NOMEM_BKPT;
-    }
-    */
-    int szNew = (int)MAX(nByte,32);
-    if( pMem->szMalloc < szNew ){
-        if( sqlite3VdbeMemGrow(pMem, szNew, 0) ){
-            return SQLITE_NOMEM_BKPT;
+    if(isCopyRequiered) {
+        szNew = (int)MAX(nByte,32);
+        if( pMem->szMalloc < szNew ){
+            if( sqlite3VdbeMemGrow(pMem, szNew, 0) ){
+                return SQLITE_NOMEM_BKPT;
+            }
+        } else {
+            pMem->z = pMem->zMalloc;
         }
+        memcpy(pMem->z, z, nByte);
     } else {
-        pMem->z = pMem->zMalloc;
-    }
-  
-    memcpy(pMem->z, z, nByte);
-    
+        sqlite3VdbeMemRelease(pMem);
+        pMem->z = (char *)z;
+        pMem->xDel = SQLITE_STATIC;
+        flags |= MEM_Static;
+    }    
 #if 0 /* This looks to be expencive */    
     if(affinity == SQLITE_AFF_INTEGER){
         pMem->u.i = sqlite3Atoi(pMem->z);

@@ -22,12 +22,16 @@ class DikeBuffer{
     uint8_t *posPtr;
     uint8_t *endPtr;
     uint32_t size;
+    uint32_t id;
+
+    bool memoryOwner = false;
     enum {
         DIKE_BUFFER_GUARD = 4
     };
     DikeBuffer(int size){
         this->size = size;
         startPtr = (uint8_t *)malloc(size + DIKE_BUFFER_GUARD);
+        memoryOwner = true;
         //std::cout << "Allocating "  << size << " bytes" << std::endl;
         posPtr = startPtr;
         endPtr = startPtr + size;
@@ -36,17 +40,30 @@ class DikeBuffer{
         }
     }
 
+    DikeBuffer(uint8_t * buffer, int size){
+        this->size = size;
+        startPtr = buffer;
+        //std::cout << "Allocating "  << size << " bytes" << std::endl;
+        posPtr = startPtr;
+        endPtr = startPtr + size;
+        memoryOwner = false;
+    }
+
     ~DikeBuffer(){
         //std::cout << "~DikeBuffer" << std::endl;
-        free(startPtr);
+        if(memoryOwner){
+            free(startPtr);
+        }
         startPtr = 0;
     }
 
     int validate(){
         assert(posPtr <= endPtr);
         assert(posPtr >= startPtr);
-        for(int i = 0; i < DIKE_BUFFER_GUARD; i++){
-            assert(endPtr[i] == 0);
+        if(memoryOwner){
+            for(int i = 0; i < DIKE_BUFFER_GUARD; i++){
+                assert(endPtr[i] == 0);
+            }
         }
 #if _DEBUG
         std::size_t found = std::string((char *)startPtr, posPtr - startPtr).find('|');
