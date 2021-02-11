@@ -120,9 +120,10 @@ class DikeAyncWriter{
     {
         if(!isRunning){
             return 0;
-        }                
+        }        
 
-        int rc = buffer->write(res, data_count, delim, term, total_bytes);        
+        // We need to terminate each field so we do (+ data_count)
+        int rc = buffer->write(res, data_count, delim, term, total_bytes + data_count);        
         if(rc){           
             return rc;
         }

@@ -74,7 +74,7 @@ public class DikeClient
         
         //perfTest(hdfsPath, fname, conf);
 
-        perfTest(webhdfsPath, fname, conf);
+        //perfTest(webhdfsPath, fname, conf);
 
         perfTest(dikehdfsPath, fname, conf, true /*pushdown*/, true/*partitionned*/);
         perfTest(dikehdfsPath, fname, conf, true/*pushdown*/, false/*partitionned*/);
@@ -112,8 +112,11 @@ public class DikeClient
             xmlw.writeCharacters("p_partkey INTEGER,p_name, p_mfgr, p_brand, p_type, p_size INTEGER, p_container, p_retailprice NUMERIC, p_comment");
         } else if (name.contains("region")) {
             xmlw.writeCharacters("r_regionkey LONG, r_name STRING, r_comment STRING");
-        } else if (name.contains("suplier")) {
+        } else if (name.contains("supplier")) {
             xmlw.writeCharacters("s_suppkey LONG, s_name STRING, s_address STRING, s_nationkey LONG, s_phone STRING, s_acctbal NUMERIC, s_comment STRING");
+        } else {
+            System.out.println("\nCan't find schema for -- " + name);
+            System.exit(1);
         }
         xmlw.writeEndElement(); // Schema
 
@@ -121,6 +124,13 @@ public class DikeClient
         xmlw.writeCData("SELECT * FROM S3Object");
         //xmlw.writeCData("SELECT * FROM S3Object LIMIT 3 OFFSET 0");
         //xmlw.writeCData("SELECT COUNT(*) FROM S3Object");
+
+        // TPCH query
+        //xmlw.writeCData("SELECT  SUM(\"l_extendedprice\" * \"l_discount\") FROM S3Object s WHERE l_shipdate IS NOT NULL AND s.\"l_shipdate\" >= '1994-01-01' AND s.\"l_shipdate\" < '1995-01-01' AND s.\"l_discount\" >= 0.05 AND s.\"l_discount\" <= 0.07 AND s.\"l_quantity\" < 24.0");
+
+        //xmlw.writeCData("SELECT  SUM(\"l_extendedprice\" * \"l_discount\") FROM S3Object s WHERE l_shipdate IS NOT NULL AND s.\"l_shipdate\" >= '1994-01-01' AND s.\"l_shipdate\" < '1995-01-01' AND s.\"l_discount\" >= 0.05  AND s.\"l_discount\" <= 0.07");
+        //xmlw.writeCData("SELECT  \"l_extendedprice\" , \"l_discount\" FROM S3Object s WHERE l_shipdate IS NOT NULL AND s.\"l_shipdate\" >= '1994-01-01' AND s.\"l_shipdate\" < '1995-01-01' AND s.\"l_discount\" >= 0.05  AND s.\"l_discount\" <= 0.07");
+
         xmlw.writeEndElement(); // Query
 
         xmlw.writeStartElement("BlockSize");

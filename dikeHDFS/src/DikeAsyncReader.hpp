@@ -300,7 +300,7 @@ class DikeAsyncReader{
             }
 
             if(*posPtr == fDelim || *posPtr == rDelim) {                
-                record->len[pos] = count;
+                record->len[pos] = count + 1;
                 bytesRead += count + 1;
                 *fieldPtr = 0;
                 buffer->posPtr = posPtr + 1; // Skiping delimiter                                

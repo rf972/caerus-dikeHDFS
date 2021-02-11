@@ -52,7 +52,7 @@ int dike_sqlite3_result_text(
     }
 #endif
 
-    pMem->n = nByte;
+    pMem->n = nByte - 1;
     pMem->flags = flags;
     pMem->enc = SQLITE_UTF8;
 

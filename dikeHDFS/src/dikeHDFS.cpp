@@ -337,19 +337,15 @@ public:
     if(verbose) {
       resp.write(cout);
       cout << DikeUtil().Yellow() << DikeUtil().Now() << " DN End " << DikeUtil().Reset() << endl;
-    }
+    } 
   }   
 };
 
 class NameNodeHandlerFactory : public HTTPRequestHandlerFactory {
 public:
   int verbose = 0;
-  NameNodeHandlerFactory(const vector<string> & argv):HTTPRequestHandlerFactory() {
-    for (auto arg : argv) {
-      if(arg == "-v"){
-        verbose = 1;
-      }
-    }
+  NameNodeHandlerFactory(int verbose):HTTPRequestHandlerFactory() {
+    this->verbose = verbose;    
   }
   virtual HTTPRequestHandler* createRequestHandler(const HTTPServerRequest & req) {
     return new NameNodeHandler(verbose);
@@ -359,13 +355,10 @@ public:
 class DataNodeHandlerFactory : public HTTPRequestHandlerFactory {
 public:
   int verbose = 0;
-  DataNodeHandlerFactory(const vector<string> & argv):HTTPRequestHandlerFactory() {
-    for (auto arg : argv) {
-      if(arg == "-v"){
-        verbose = 1;
-      }
-    }
+  DataNodeHandlerFactory(int verbose):HTTPRequestHandlerFactory() {
+    this->verbose = verbose;    
   }
+
   virtual HTTPRequestHandler* createRequestHandler(const HTTPServerRequest & req) {
     return new DataNodeHandler(verbose);
   }
@@ -373,7 +366,25 @@ public:
 
 class DikeServerApp : public ServerApplication
 {
-protected:
+  public:
+  int verbose = 0;
+  protected:
+  void defineOptions(OptionSet& options)
+ 	{
+ 		Application::defineOptions(options);
+ 
+ 		options.addOption(
+ 			Option("verbose", "v", "Verbose output")
+ 				.required(false)
+ 				.repeatable(false)
+ 				.callback(OptionCallback<DikeServerApp>(this, &DikeServerApp::handleVerbose)));
+ 	}
+
+	void handleVerbose(const std::string& name, const std::string& value)
+	{
+    verbose = 1;
+	}
+
   int main(const vector<string> & argv)
   {
     HTTPServerParams* nameNodeParams = new HTTPServerParams;
@@ -383,8 +394,8 @@ protected:
     dataNodeParams->setMaxThreads(16);
     dataNodeParams->setMaxQueued(128);
 
-    HTTPServer nameNode(new NameNodeHandlerFactory(argv), ServerSocket(9860), nameNodeParams);
-    HTTPServer dataNode(new DataNodeHandlerFactory(argv), ServerSocket(9859), dataNodeParams);
+    HTTPServer nameNode(new NameNodeHandlerFactory(verbose), ServerSocket(9860), nameNodeParams);
+    HTTPServer dataNode(new DataNodeHandlerFactory(verbose), ServerSocket(9859), dataNodeParams);
 
     nameNode.start();
     dataNode.start();

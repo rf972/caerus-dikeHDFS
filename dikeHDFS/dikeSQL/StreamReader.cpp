@@ -873,6 +873,7 @@ static int srd_Column(
  
   if( i>=0 && i<pTab->nCol){
     dike_sqlite3_result_text(ctx, (const char*)pCur->rdr.reader->record->fields[i], pCur->rdr.reader->record->len[i], pTab->cTypes[i]);
+    //sqlite3_result_text(ctx, (const char*)pCur->rdr.reader->record->fields[i], -1 , SQLITE_TRANSIENT);
   }
 
   /*

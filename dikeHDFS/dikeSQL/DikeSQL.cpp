@@ -110,8 +110,9 @@ void DikeSQL::Worker()
         while (isRunning && SQLITE_ROW == sqlite3_step(sqlRes) && rc) {
             record_counter++;            
             data_count = dike_sqlite3_get_data(sqlRes, res, 128, &total_bytes);
-            
-            rc = dikeWriter->write(res, data_count, '|', '\n', total_bytes);
+            if(total_bytes > 0){
+                rc = dikeWriter->write(res, data_count, '|', '\n', total_bytes);
+            }
 #if 0            
             for(int i = 0; i < data_count && rc; i++) {
                 assert(res[i] != NULL);
