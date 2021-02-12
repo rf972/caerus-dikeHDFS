@@ -207,8 +207,8 @@ public:
     HTTPResponse hdfs_resp;
     std::istream& fromHDFS = session.receiveResponse(hdfs_resp);
     (HTTPResponse &)resp = hdfs_resp;    
-
-    if(resp.has("Location")) {
+    
+    if(req.has("ReadParam") && resp.has("Location")) {
       //cout << DikeUtil().Blue() << resp.get("Location") << DikeUtil().Reset() << endl;
       string location = resp.get("Location");
       location.replace(location.find(":9864"), 5, ":9859");
