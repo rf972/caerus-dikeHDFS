@@ -78,7 +78,7 @@ public class DikeClient
 
         perfTest(dikehdfsPath, fname, conf, true /*pushdown*/, true/*partitionned*/);
         perfTest(dikehdfsPath, fname, conf, true/*pushdown*/, false/*partitionned*/);
-        Validate(dikehdfsPath, fname, conf);
+        //Validate(dikehdfsPath, fname, conf);
     }
 
     public static String getReadParam(String name,
@@ -122,6 +122,7 @@ public class DikeClient
 
         xmlw.writeStartElement("Query");
         xmlw.writeCData("SELECT * FROM S3Object");
+
         //xmlw.writeCData("SELECT * FROM S3Object LIMIT 3 OFFSET 0");
         //xmlw.writeCData("SELECT COUNT(*) FROM S3Object");
 

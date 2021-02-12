@@ -67,8 +67,8 @@ class DikeAyncWriter{
             free_q.pop();
             delete b;
         }
-        std::cout << "~DikeAyncWriter Push count: " << pushCount << " Empty count: " << emptyCount;
-        std::cout << " Record count: " << recordCount << std::endl;
+        //std::cout << "~DikeAyncWriter Push count: " << pushCount << " Empty count: " << emptyCount;
+        //std::cout << " Record count: " << recordCount << std::endl;
     }    
 
     void close(){

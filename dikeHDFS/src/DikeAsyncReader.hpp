@@ -139,7 +139,7 @@ class DikeAsyncReader{
         if(memPool){
             free(memPool);
         }
-        std::cout << "~DikeAsyncReader Push count: " << pushCount << " Empty count: " << emptyCount << " bytesRead " << bytesRead << std::endl;        
+        //std::cout << "~DikeAsyncReader Push count: " << pushCount << " Empty count: " << emptyCount << " bytesRead " << bytesRead << std::endl;        
     }    
 
     bool isCopyRequiered() {
@@ -184,7 +184,7 @@ class DikeAsyncReader{
     
     int readRecord() {
         if(isEOF()){
-            std::cout << "DikeAsyncReader EOF at " << bytesRead << std::endl;
+            //std::cout << "DikeAsyncReader EOF at " << bytesRead << std::endl;
             return 1;
         }
         releaseBuffers();

@@ -81,9 +81,9 @@ int DikeSQL::Run(DikeSQLParam * dikeSQLParam, DikeIO * input, DikeIO * output)
     std::chrono::duration<double, std::milli> create_time = t2 - t1;
     std::chrono::duration<double, std::milli> select_time = t3 - t2;
 
-    std::cout << "Records " << record_counter;
-    std::cout << " create_time " << create_time.count()/ 1000 << " sec" ;
-    std::cout << " select_time " << select_time.count()/ 1000 << " sec" << std::endl;
+    //std::cout << "Records " << record_counter;
+    //std::cout << " create_time " << create_time.count()/ 1000 << " sec" ;
+    //std::cout << " select_time " << select_time.count()/ 1000 << " sec" << std::endl;
     
     delete dikeWriter;
     delete streamReaderParam.reader;
