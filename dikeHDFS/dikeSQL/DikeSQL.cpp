@@ -76,15 +76,15 @@ int DikeSQL::Run(DikeSQLParam * dikeSQLParam, DikeIO * input, DikeIO * output)
         workerThread.join();
     }
 
+#if 0
     std::chrono::high_resolution_clock::time_point t3 =  std::chrono::high_resolution_clock::now();
-
     std::chrono::duration<double, std::milli> create_time = t2 - t1;
     std::chrono::duration<double, std::milli> select_time = t3 - t2;
+    std::cout << "Records " << record_counter;
+    std::cout << " create_time " << create_time.count()/ 1000 << " sec" ;
+    std::cout << " select_time " << select_time.count()/ 1000 << " sec" << std::endl;
+#endif
 
-    //std::cout << "Records " << record_counter;
-    //std::cout << " create_time " << create_time.count()/ 1000 << " sec" ;
-    //std::cout << " select_time " << select_time.count()/ 1000 << " sec" << std::endl;
-    
     delete dikeWriter;
     delete streamReaderParam.reader;
 
@@ -120,7 +120,7 @@ void DikeSQL::Worker()
             }
             sqlite3_rc = sqlite3_step(sqlRes);
         }
-        dikeWriter->write('\n');           
+        dikeWriter->write('\n');        
     } catch (...) {
         std::cout << "Caught exception " << std::endl;
     }

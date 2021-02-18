@@ -76,10 +76,17 @@ public class DikeClient
 
         //perfTest(webhdfsPath, fname, conf);
 
+        
         perfTest(dikehdfsPath, fname, conf, true /*pushdown*/, true/*partitionned*/);
-        perfTest(dikehdfsPath, fname, conf, true/*pushdown*/, false/*partitionned*/);
-        perfTest(dikehdfsPath, fname, conf, false/*pushdown*/, false/*partitionned*/);
+        //perfTest(dikehdfsPath, fname, conf, true/*pushdown*/, false/*partitionned*/);
+        //perfTest(dikehdfsPath, fname, conf, false/*pushdown*/, false/*partitionned*/);        
         //Validate(dikehdfsPath, fname, conf);
+
+        if(false){
+            for(int i = 0; i < 10 ; i++){
+                perfTest(dikehdfsPath, fname, conf, false/*pushdown*/, false/*partitionned*/); 
+            }
+        }
     }
 
     public static String getReadParam(String name,
@@ -115,6 +122,8 @@ public class DikeClient
             xmlw.writeCharacters("r_regionkey LONG, r_name STRING, r_comment STRING");
         } else if (name.contains("supplier")) {
             xmlw.writeCharacters("s_suppkey LONG, s_name STRING, s_address STRING, s_nationkey LONG, s_phone STRING, s_acctbal NUMERIC, s_comment STRING");
+        } else if (name.contains("ints")) {
+            xmlw.writeCharacters("i INTEGER, j INTEGER, k INTEGER");
         } else {
             System.out.println("\nCan't find schema for -- " + name);
             System.exit(1);
@@ -123,6 +132,12 @@ public class DikeClient
 
         xmlw.writeStartElement("Query");
         xmlw.writeCData("SELECT * FROM S3Object");
+
+        //System.out.println("This case should have results of: 15|5|10|7.5");
+        //xmlw.writeCData("SELECT  SUM(\"j\"), MIN(\"j\"), MAX(\"j\"), AVG(\"j\") FROM S3Object s WHERE i IS NOT NULL AND s.\"i\" > 4");        
+        //xmlw.writeCData("SELECT  MIN(j) FROM S3Object WHERE i IS NOT NULL AND i > 4");
+
+        //xmlw.writeCData("SELECT  * FROM S3Object WHERE i IS NOT NULL AND i > 4");        
 
         //xmlw.writeCData("SELECT * FROM S3Object LIMIT 3 OFFSET 0");
         //xmlw.writeCData("SELECT COUNT(*) FROM S3Object");
@@ -192,7 +207,7 @@ public class DikeClient
                     BufferedReader br = new BufferedReader(new InputStreamReader(dataInputStream,StandardCharsets.UTF_8), 128 << 10);
                     String record = br.readLine();
                     int counter = 0;
-                    while (record != null && record.length() > 1 ) {
+                    while (record != null && record.length() > 0 ) {
                         if(counter < 5) {
                             System.out.println(record);
                         }
@@ -223,7 +238,7 @@ public class DikeClient
                 BufferedReader br = new BufferedReader(new InputStreamReader(dataInputStream,StandardCharsets.UTF_8));
                 String record;
                 record = br.readLine();
-                while (record != null && record.length() > 1){
+                while (record != null && record.length() > 0){
                     if(totalRecords < 5) {
                         System.out.println(record);
                     }
@@ -303,7 +318,7 @@ public class DikeClient
                 String record1 = br1.readLine();
                 String record2 = br2.readLine();
                 int counter = 0;
-                while (record1 != null && record1.length() > 1 ) {
+                while (record1 != null && record1.length() > 0 ) {
                     totalDataSize += record1.length() + 1; // +1 to count end of line
                     totalRecords += 1;
                     counter += 1;
@@ -318,7 +333,7 @@ public class DikeClient
                     }  
                     
                     record1 = br1.readLine(); 
-                    if(record1.length() > 1 && record2 != null){
+                    if(record1.length() > 0 && record2 != null){
                         record2 = br2.readLine();
                     }
                 }                

@@ -875,7 +875,8 @@ static int srd_Column(
     dike_sqlite3_result_text(ctx, 
                               (const char*)pCur->rdr.reader->record->fields[i], 
                               pCur->rdr.reader->record->len[i], 
-                              pCur->rdr.reader->isCopyRequiered());
+                              pCur->rdr.reader->isCopyRequiered(),
+                              pTab->cTypes[i]);
 
     //dike_sqlite3_result_text(ctx, (const char*)pCur->rdr.reader->record->fields[i], pCur->rdr.reader->record->len[i], pTab->cTypes[i]);
     //sqlite3_result_text(ctx, (const char*)pCur->rdr.reader->record->fields[i], -1 , SQLITE_TRANSIENT);

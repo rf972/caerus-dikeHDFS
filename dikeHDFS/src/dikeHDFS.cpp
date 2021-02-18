@@ -195,8 +195,12 @@ public:
     host = host.substr(0, host.find(':'));
     hdfs_req.setHost(host, 9870);
 
-    if(verbose) {
-      cout << hdfs_req.getURI() << endl;     
+    string client = req.clientAddress().toString();
+    client = client.substr(0, client.find(':'));    
+    hdfs_req.set("X-Forwarded-For", client);
+
+    if(verbose) {      
+      cout << hdfs_req.getURI() << endl;
       hdfs_req.write(cout);
     }
 

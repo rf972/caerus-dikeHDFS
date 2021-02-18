@@ -4,7 +4,8 @@ int dike_sqlite3_result_text(
   sqlite3_context *pCtx,
   const char *z,
   int n,
-  int isCopyRequiered)
+  int isCopyRequiered,
+  int affinity)
 {
     
     //setResultStrOrError(pCtx, z, n, SQLITE_UTF8, xDel);
@@ -39,7 +40,7 @@ int dike_sqlite3_result_text(
         pMem->xDel = SQLITE_STATIC;
         flags |= MEM_Static;
     }    
-#if 0 /* This looks to be expencive */    
+#if 1 /* This looks to be expencive */    
     if(affinity == SQLITE_AFF_INTEGER){
         pMem->u.i = sqlite3Atoi(pMem->z);
         flags |= MEM_Int;
@@ -68,10 +69,10 @@ int dike_sqlite3_get_data(sqlite3_stmt *pStmt, const char ** res, int res_size, 
   for(i =0; i < pVm->nResColumn; i++){
     if(pVm->pResultSet[i].flags & flags == flags){
         res[i] = pVm->pResultSet[i].z; 
-      } else {
+    } else {
         res[i] = sqlite3ValueText(&pVm->pResultSet[i], SQLITE_UTF8);
-      }
-      *total_bytes += pVm->pResultSet[i].n;
+    }
+    *total_bytes += pVm->pResultSet[i].n;
   }
   return pVm->nResColumn;
 }

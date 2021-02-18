@@ -32,4 +32,18 @@
         <value>true</value>
     </property>
 
+    <property>
+      <name>dfs.replication</name>
+      <value>1</value>
+      <description>Block Replication factor</description>
+    </property>
+
+    <!--
+    <property>
+      <name>dfs.datanode.du.reserved</name>
+      <value>343597383680</value>
+      <description> (320 GB) Reserved space in bytes per volume. Always leave this much space free for non-dfs use.</description>
+    </property>
+    -->
+
 </configuration>
