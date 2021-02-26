@@ -77,8 +77,8 @@ public class DikeClient
         //perfTest(webhdfsPath, fname, conf);
 
         
-        perfTest(dikehdfsPath, fname, conf, true /*pushdown*/, true/*partitionned*/);
-        //perfTest(dikehdfsPath, fname, conf, true/*pushdown*/, false/*partitionned*/);
+        //perfTest(dikehdfsPath, fname, conf, true /*pushdown*/, true/*partitionned*/);
+        perfTest(dikehdfsPath, fname, conf, true/*pushdown*/, false/*partitionned*/);
         //perfTest(dikehdfsPath, fname, conf, false/*pushdown*/, false/*partitionned*/);        
         //Validate(dikehdfsPath, fname, conf);
 
@@ -184,6 +184,7 @@ public class DikeClient
         try {
             fs = FileSystem.get(fsPath.toUri(), conf);
             stats = fs.getStatistics();
+            System.out.println("Scheme " + fs.getScheme());
             stats.get(fs.getScheme()).reset();
 
             System.out.println("\nConnected to -- " + fsPath.toString());
