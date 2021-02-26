@@ -17,41 +17,29 @@
  */
 
 package org.apache.hadoop.hdfs.web;
-
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.BufferedInputStream;
-
 import java.net.URL;
 import java.net.HttpURLConnection;
 import java.net.InetSocketAddress;
-
 import java.util.Map;
-
 import java.lang.reflect.InvocationTargetException;
-
 import java.security.PrivilegedExceptionAction;
-
 import javax.ws.rs.core.HttpHeaders;
 import javax.ws.rs.core.MediaType;
-
 import org.apache.commons.io.input.BoundedInputStream;
 import org.apache.commons.io.IOUtils;
-
 import org.apache.hadoop.fs.FSInputStream;
 import org.apache.hadoop.fs.FSDataInputStream;
 import org.apache.hadoop.fs.Path;
-
 import org.apache.hadoop.io.retry.RetryPolicy;
 import org.apache.hadoop.io.retry.RetryUtils;
-
 import org.apache.hadoop.hdfs.DFSOpsCountStatistics;
 import org.apache.hadoop.hdfs.DFSOpsCountStatistics.OpType;
-
 import org.apache.hadoop.hdfs.web.WebHdfsFileSystem;
 import org.apache.hadoop.hdfs.web.resources.*;
 import org.apache.hadoop.hdfs.web.resources.HttpOpParam.Op;
-
 import org.apache.hadoop.security.UserGroupInformation;
 import org.apache.hadoop.security.AccessControlException;
 import org.apache.hadoop.security.token.SecretManager.InvalidToken;
@@ -66,9 +54,7 @@ public class DikeHdfsFileSystem extends WebHdfsFileSystem {
             return super.open(f, bufferSize);
         }
         ugi = UserGroupInformation.getCurrentUser();
-
         statistics.incrementReadOps(1);
-        //storageStatistics.incrementOpCounter(OpType.OPEN);
         DikeHdfsInputStream dikeHdfsfsInputStream =
                 new DikeHdfsInputStream(f, bufferSize, readParam);
 
@@ -219,11 +205,6 @@ public class DikeHdfsFileSystem extends WebHdfsFileSystem {
             }
         }
 
-        /* The following methods are overriding AbstractRunner methods,
-         * to be called within the retry policy context by runWithRetry.
-         */
-
-
         @Override
         protected URL getUrl() throws IOException {
             // This method is called every time either a read is executed.
@@ -239,12 +220,6 @@ public class DikeHdfsFileSystem extends WebHdfsFileSystem {
             return originalUrl;
         }
 
-
-        /* Only make the connection if it is not already open. Don't cache the
-         * connection here. After this method is called, runWithRetry will call
-         * validateResponse, and then call the below ReadRunner#getResponse. If
-         * the code path makes it that far, then we can cache the connection.
-         */
         @Override
         protected HttpURLConnection connect(URL url) throws IOException {
             HttpURLConnection conn = cachedConnection;
@@ -259,11 +234,6 @@ public class DikeHdfsFileSystem extends WebHdfsFileSystem {
             return conn;
         }
 
-        /*
-         * This method is used to perform reads within the retry policy context.
-         * This code is relying on runWithRetry to always call the above connect
-         * method and the verifyResponse method prior to calling getResponse.
-         */
         @Override
         Integer getResponse(final HttpURLConnection conn) throws IOException {
             try {
@@ -290,14 +260,9 @@ public class DikeHdfsFileSystem extends WebHdfsFileSystem {
 
         InputStream initializeInputStream(HttpURLConnection conn)
                 throws IOException {
-            // Cache the resolved URL so that it can be used in the event of
-            // a future seek operation.
             resolvedUrl = removeOffsetParam(conn.getURL());
             final String cl = conn.getHeaderField(HttpHeaders.CONTENT_LENGTH);
             InputStream inStream = conn.getInputStream();
-            if (LOG.isDebugEnabled()) {
-                LOG.debug("open file: " + conn.getURL());
-            }
             if (cl != null) {
                 long streamLength = Long.parseLong(cl);
                 fileLength = pos + streamLength;
@@ -356,18 +321,7 @@ public class DikeHdfsFileSystem extends WebHdfsFileSystem {
 
     URL toUrl(final HttpOpParam.Op op, final Path fspath,
               final Param<?,?>... parameters) throws IOException {
-        //initialize URI path and query
-        /*
-        final String path = PATH_PREFIX
-                + (fspath == null? "/": makeQualified(fspath).toUri().getRawPath());
-        final String query = op.toQueryString()
-                + Param.toSortedString("&", getAuthParameters(op))
-                + Param.toSortedString("&", parameters);
-
-         */
-        final URL url = super.toUrl(op, fspath, parameters);
-
-        return url;
+        return super.toUrl(op, fspath, parameters);
     }
 
     abstract class DikeAbstractRunner<T> {
@@ -426,8 +380,6 @@ public class DikeHdfsFileSystem extends WebHdfsFileSystem {
                 connectUgi.checkTGTAndReloginFromKeytab();
             }
             try {
-                // the entire lifecycle of the connection must be run inside the
-                // doAs to ensure authentication is performed correctly
                 return connectUgi.doAs(
                         new PrivilegedExceptionAction<T>() {
                             @Override
@@ -441,15 +393,12 @@ public class DikeHdfsFileSystem extends WebHdfsFileSystem {
         }
 
         protected HttpURLConnection connect(URL url) throws IOException {
-            //redirect hostname and port
             redirectHost = null;
 
-            // resolve redirects for a DN operation unless already resolved
             if (op.getRedirect() && !redirected) {
                 final HttpOpParam.Op redirectOp =
                         HttpOpParam.TemporaryRedirectOp.valueOf(op);
                 final HttpURLConnection conn = connect(redirectOp, url);
-                // application level proxy like httpfs might not issue a redirect
                 if (conn.getResponseCode() == op.getExpectedHttpResponseCode()) {
                     return conn;
                 }
@@ -458,8 +407,6 @@ public class DikeHdfsFileSystem extends WebHdfsFileSystem {
                     url = new URL(conn.getHeaderField("Location"));
                     redirectHost = url.getHost() + ":" + url.getPort();
                 } finally {
-                    // TODO: consider not calling conn.disconnect() to allow connection reuse
-                    // See http://tinyurl.com/java7-http-keepalive
                     conn.disconnect();
                 }
                 if (!followRedirect) {
@@ -468,7 +415,6 @@ public class DikeHdfsFileSystem extends WebHdfsFileSystem {
             }
             try {
                 final HttpURLConnection conn = connect(op, url);
-                // output streams will validate on close
                 if (!op.getDoOutput()) {
                     validateResponse(op, conn, false);
                 }
@@ -508,33 +454,13 @@ public class DikeHdfsFileSystem extends WebHdfsFileSystem {
                     final HttpURLConnection conn = connect(url);
                     return getResponse(conn);
                 } catch (AccessControlException ace) {
-                    // no retries for auth failures
                     throw ace;
                 } catch (InvalidToken it) {
-                    // try to replace the expired token with a new one.  the attempt
-                    // to acquire a new token must be outside this operation's retry
-                    // so if it fails after its own retries, this operation fails too.
                     if (op.getRequireAuth() || !replaceExpiredDelegationToken()) {
                         throw it;
                     }
                 } catch (IOException ioe) {
-                    // Attempt to include the redirected node in the exception. If the
-                    // attempt to recreate the exception fails, just use the original.
-                    String node = redirectHost;
-                    if (node == null) {
-                        node = url.getAuthority();
-                    }
-                    try {
-                        IOException newIoe = ioe.getClass().getConstructor(String.class)
-                                .newInstance(node + ": " + ioe.getMessage());
-                        newIoe.initCause(ioe.getCause());
-                        newIoe.setStackTrace(ioe.getStackTrace());
-                        ioe = newIoe;
-                    } catch (NoSuchMethodException | SecurityException
-                            | InstantiationException | IllegalAccessException
-                            | IllegalArgumentException | InvocationTargetException e) {
-                    }
-                    //shouldRetry(ioe, retry);
+                    throw ioe;
                 }
             }
         }
