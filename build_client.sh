@@ -63,7 +63,8 @@ docker run --rm=true $DOCKER_INTERACTIVE_RUN \
   -v "${ROOT_DIR}/build/.gnupg:${DOCKER_HOME_DIR}/.gnupg" \
   -u "${USER_ID}" \
   --network dike-net \
-  -p 8000:8000 \
   "dike-hdfs-build-${USER_NAME}" "/bin/bash"
 
 popd
+
+# -p 8000:8000 \
