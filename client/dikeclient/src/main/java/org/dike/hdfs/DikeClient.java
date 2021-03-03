@@ -51,7 +51,8 @@ import javax.xml.stream.*;
 import javax.xml.namespace.QName;
 
 
-import org.apache.hadoop.hdfs.web.NdpHdfsFileSystem;
+//import org.apache.hadoop.hdfs.web.NdpHdfsFileSystem;
+import org.dike.hdfs.NdpHdfsFileSystem;
 
 public class DikeClient
 {
@@ -196,6 +197,7 @@ public class DikeClient
                 BlockLocation[] locs = fs.getFileBlockLocations(fileToRead, 0, Long.MAX_VALUE);                            
                 for (int i  = 0; i < locs.length; i++) {
                     System.out.format("%d off=%d size=%d\n", i, locs[i].getOffset(), locs[i].getLength());
+                    //System.out.format("getNames %s\n",locs[i].getNames()[0]);
 
                     readParam = getReadParam(fname, locs[i].getLength());
 

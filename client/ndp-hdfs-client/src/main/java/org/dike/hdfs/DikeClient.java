@@ -50,8 +50,7 @@ import java.util.Iterator;
 import javax.xml.stream.*;
 import javax.xml.namespace.QName;
 
-
-import org.apache.hadoop.hdfs.web.NdpHdfsFileSystem;
+import org.dike.hdfs.NdpHdfsFileSystem;
 
 public class DikeClient
 {
@@ -71,12 +70,7 @@ public class DikeClient
         Path webhdfsPath = new Path("webhdfs://dikehdfs:9870/");
         Path dikehdfsPath = new Path("ndphdfs://dikehdfs:9860/");
         Path hdfsPath = new Path("hdfs://dikehdfs:9000/");
-        
-        //perfTest(hdfsPath, fname, conf);
 
-        //perfTest(webhdfsPath, fname, conf);
-
-        
         perfTest(dikehdfsPath, fname, conf, true /*pushdown*/, true/*partitionned*/);
         perfTest(dikehdfsPath, fname, conf, true/*pushdown*/, false/*partitionned*/);
         //perfTest(dikehdfsPath, fname, conf, false/*pushdown*/, false/*partitionned*/);        

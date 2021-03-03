@@ -51,7 +51,8 @@ import javax.xml.namespace.QName;
 import java.lang.Runnable;
 
 
-import org.apache.hadoop.hdfs.web.NdpHdfsFileSystem;
+//import org.apache.hadoop.hdfs.web.NdpHdfsFileSystem;
+import org.dike.hdfs.NdpHdfsFileSystem;
 
 public class DikeClientTests
 {

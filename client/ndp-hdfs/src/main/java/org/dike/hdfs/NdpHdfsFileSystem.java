@@ -16,21 +16,28 @@
  * limitations under the License.
  */
 
-package org.apache.hadoop.hdfs.web;
+//package org.apache.hadoop.hdfs.web;
+package org.dike.hdfs;
 
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.BufferedInputStream;
 import java.net.URL;
+import java.net.URI;
 import java.net.HttpURLConnection;
 import java.net.InetSocketAddress;
+import java.net.MalformedURLException;
 import java.util.Map;
+import java.util.List;
+import java.util.ArrayList;
+import java.util.StringTokenizer;
 import java.lang.reflect.InvocationTargetException;
 import java.security.PrivilegedExceptionAction;
 import javax.ws.rs.core.HttpHeaders;
 import javax.ws.rs.core.MediaType;
 import org.apache.commons.io.input.BoundedInputStream;
 import org.apache.commons.io.IOUtils;
+import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.fs.FSInputStream;
 import org.apache.hadoop.fs.FSDataInputStream;
 import org.apache.hadoop.fs.Path;
@@ -43,21 +50,37 @@ import org.apache.hadoop.hdfs.web.resources.*;
 import org.apache.hadoop.hdfs.web.resources.HttpOpParam.Op;
 import org.apache.hadoop.security.UserGroupInformation;
 import org.apache.hadoop.security.AccessControlException;
+import org.apache.hadoop.security.token.Token;
 import org.apache.hadoop.security.token.SecretManager.InvalidToken;
+import org.apache.hadoop.util.StringUtils;
+
+//import static org.apache.hadoop.fs.impl.PathCapabilitiesSupport.validatePathCapabilityArgs;
 
 public class NdpHdfsFileSystem extends WebHdfsFileSystem {
     public static final String NdpHDFS_SCHEME = "ndphdfs";
     private UserGroupInformation ugi;
+    private URI uri = null;
+    private boolean isInsecureCluster;
 
-    public FSDataInputStream open(final Path f, final int bufferSize,
+    @Override
+    public synchronized void initialize(URI uri, Configuration conf
+    ) throws IOException {
+        this.ugi = UserGroupInformation.getCurrentUser();
+        this.uri = uri;
+        this.isInsecureCluster = !UserGroupInformation.isSecurityEnabled();
+
+        super.initialize(uri, conf);
+    }
+
+    public FSDataInputStream open(final Path fspath, final int bufferSize,
                                   final String readParam) throws IOException {
         if(readParam == null) {
-            return super.open(f, bufferSize);
+            return super.open(fspath, bufferSize);
         }
-        ugi = UserGroupInformation.getCurrentUser();
+
         statistics.incrementReadOps(1);
         NdpHdfsInputStream NdpHdfsfsInputStream =
-                new NdpHdfsInputStream(f, bufferSize, readParam);
+                new NdpHdfsInputStream(fspath, bufferSize, readParam);
 
         return new FSDataInputStream(NdpHdfsfsInputStream);
     }
@@ -119,9 +142,75 @@ public class NdpHdfsFileSystem extends WebHdfsFileSystem {
         }
     }
 
+    enum RunnerState {
+        DISCONNECTED, // Connection is closed programmatically by ReadRunner
+        OPEN,         // Connection has been established by ReadRunner
+        SEEK,         // Calling code has explicitly called seek()
+        CLOSED        // Calling code has explicitly called close()
+    }
+
+    private static final String OFFSET_PARAM_PREFIX = OffsetParam.NAME + "=";
+    static URL removeOffsetParam(final URL url) throws MalformedURLException {
+        String query = url.getQuery();
+        if (query == null) {
+            return url;
+        }
+        final String lower = StringUtils.toLowerCase(query);
+        if (!lower.startsWith(OFFSET_PARAM_PREFIX)
+                && !lower.contains("&" + OFFSET_PARAM_PREFIX)) {
+            return url;
+        }
+
+        //rebuild query
+        StringBuilder b = null;
+        for(final StringTokenizer st = new StringTokenizer(query, "&");
+            st.hasMoreTokens();) {
+            final String token = st.nextToken();
+            if (!StringUtils.toLowerCase(token).startsWith(OFFSET_PARAM_PREFIX)) {
+                if (b == null) {
+                    b = new StringBuilder("?").append(token);
+                } else {
+                    b.append('&').append(token);
+                }
+            }
+        }
+        query = b == null? "": b.toString();
+
+        final String urlStr = url.toString();
+        return new URL(urlStr.substring(0, urlStr.indexOf('?')) + query);
+    }
+
+    private synchronized Param<?, ?>[] getAuthParameters(final HttpOpParam.Op op)
+            throws IOException {
+        List<Param<?,?>> authParams = new ArrayList<Param<?,?>>(); //Lists.newArrayList();
+        // Skip adding delegation token for token operations because these
+        // operations require authentication.
+        Token<?> token = null;
+        if (!op.getRequireAuth()) {
+            token = getDelegationToken();
+        }
+        if (token != null) {
+            authParams.add(new DelegationParam(token.encodeToUrlString()));
+        } else {
+            UserGroupInformation userUgi = ugi;
+            UserGroupInformation realUgi = userUgi.getRealUser();
+            if (realUgi != null) { // proxy user
+                authParams.add(new DoAsParam(userUgi.getShortUserName()));
+                userUgi = realUgi;
+            }
+            UserParam userParam = new UserParam((userUgi.getShortUserName()));
+
+            //in insecure, use user.name parameter, in secure, use spnego auth
+            if(isInsecureCluster) {
+                authParams.add(userParam);
+            }
+        }
+        return authParams.toArray(new Param<?,?>[0]);
+    }
+
     protected class NdpReadRunner extends NdpAbstractRunner<Integer> {
         private String readParam = null;
-        private RunnerState runnerState = WebHdfsFileSystem.RunnerState.SEEK;
+        private RunnerState runnerState = RunnerState.SEEK;
         private HttpURLConnection cachedConnection = null;
         private long fileLength = 0;
         private long pos = 0;
@@ -134,12 +223,12 @@ public class NdpHdfsFileSystem extends WebHdfsFileSystem {
         private int readOffset;
         private int readLength;
 
-        NdpReadRunner(Path p, int bs, String readParam) throws IOException {
+        NdpReadRunner(Path fspath, int bs, String readParam) throws IOException {
             super(GetOpParam.Op.OPEN, false);
             this.readParam = readParam;
-            this.path = p;
+            this.path = fspath;
             this.bufferSize = bs;
-            super.UpdateParameters(p, new BufferSizeParam(bs));
+            super.UpdateParameters(fspath, new BufferSizeParam(bs));
 
             getRedirectedUrl();
         }
@@ -308,8 +397,8 @@ public class NdpHdfsFileSystem extends WebHdfsFileSystem {
         }
 
         protected NdpURLRunner(final HttpOpParam.Op op, final URL url,
-                                boolean redirected, boolean followRedirect,
-                                String readParam) {
+                               boolean redirected, boolean followRedirect,
+                               String readParam) {
             super(op, redirected, followRedirect, readParam);
             this.url = url;
         }
@@ -322,7 +411,16 @@ public class NdpHdfsFileSystem extends WebHdfsFileSystem {
 
     URL toUrl(final HttpOpParam.Op op, final Path fspath,
               final Param<?,?>... parameters) throws IOException {
-        return super.toUrl(op, fspath, parameters);
+
+        String urlString = "http://" + uri.getAuthority() + PATH_PREFIX
+                + makeQualified(fspath).toUri().getRawPath();
+
+        //HttpOpParam.Op op = GetOpParam.Op.OPEN;
+        String query = "?" + op.toQueryString()
+                + Param.toSortedString("&", getAuthParameters(op))
+                + Param.toSortedString("&", parameters);
+
+        return new URL(urlString + query);
     }
 
     abstract class NdpAbstractRunner<T> {
@@ -336,8 +434,8 @@ public class NdpHdfsFileSystem extends WebHdfsFileSystem {
         private String readParam;
         private boolean followRedirect = true;
 
-        private Path fspath;
-        private Param<?,?>[] parameters;
+        protected Path fspath;
+        protected Param<?,?>[] parameters;
 
         protected void UpdateParameters(final Path fspath,
                                         Param<?,?>... parameters) {
@@ -366,7 +464,7 @@ public class NdpHdfsFileSystem extends WebHdfsFileSystem {
         }
 
         protected NdpAbstractRunner(final HttpOpParam.Op op, boolean redirected,
-                                     boolean followRedirect, String readParam) {
+                                    boolean followRedirect, String readParam) {
             this(op, redirected);
             this.followRedirect = followRedirect;
             this.readParam = readParam;
@@ -457,9 +555,7 @@ public class NdpHdfsFileSystem extends WebHdfsFileSystem {
                 } catch (AccessControlException ace) {
                     throw ace;
                 } catch (InvalidToken it) {
-                    if (op.getRequireAuth() || !replaceExpiredDelegationToken()) {
-                        throw it;
-                    }
+                    throw it;
                 } catch (IOException ioe) {
                     throw ioe;
                 }
@@ -469,11 +565,3 @@ public class NdpHdfsFileSystem extends WebHdfsFileSystem {
         abstract T getResponse(HttpURLConnection conn) throws IOException;
     }
 }
-
-
-// mvn archetype:generate -DgroupId=org.dike.hdfs -DartifactId=ndp-hdfs -DarchetypeArtifactId=maven-archetype-quickstart -DarchetypeVersion=1.4 -DinteractiveMode=false
-
-// mvn install:install-file -Dfile=/home/peter/client/ndp-hdfs/target/ndp-hdfs-1.0-jar-with-dependencies.jar -DgroupId=org.dike.hdfs -DartifactId=ndp-hdfs -Dversion=1.0 -Dpackaging=jar
-// mvn package
-// java -classpath target/ndp-hdfs-client-1.0-jar-with-dependencies.jar org.dike.hdfs.DikeClient /lineitem.tbl
-
