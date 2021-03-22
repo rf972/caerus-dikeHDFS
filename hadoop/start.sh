@@ -20,8 +20,8 @@ set -e               # exit on error
 cd "$(dirname "$0")" # connect to root
 
 ROOT_DIR=$(pwd)
-DOCKER_DIR=docker
-DOCKER_FILE="${DOCKER_DIR}/Dockerfile"
+
+echo "ROOT_DIR ${ROOT_DIR}"
 
 USER_NAME=${SUDO_USER:=$USER}
 USER_ID=$(id -u "${USER_NAME}")
@@ -31,24 +31,34 @@ DOCKER_HOME_DIR=${DOCKER_HOME_DIR:-/home/${USER_NAME}}
 
 # If this env variable is empty, docker will be started
 # in non interactive mode
-DOCKER_INTERACTIVE_RUN=${DOCKER_INTERACTIVE_RUN-"-i -t"}
-CMD="/bin/bash"
+#DOCKER_INTERACTIVE_RUN="-i -t"
+DOCKER_INTERACTIVE_RUN="-i -t -d"
 
-if [ "$#" -ge 1 ] && [ $1 = "-d" ]; then
-  echo "Entering debug mode"
-  echo "bin/hdfs --help"  
-  CMD="/bin/bash"
-fi
+
+CMD="/bin/bash"
 
 HADOOP_PATH=/opt/hadoop/hadoop-3.2.2
 
+# Create NameNode and DataNode mount points
+mkdir -p ${ROOT_DIR}/volume/namenode
+mkdir -p ${ROOT_DIR}/volume/datanode0
+
+if [ "$#" -ge 1 ] ; then
+  CMD="$@"
+fi
+
 docker run --rm=true $DOCKER_INTERACTIVE_RUN \
-  -v "${ROOT_DIR}/dikeHDFS:${DOCKER_HOME_DIR}/dikeHDFS" \
-  -v "${ROOT_DIR}/hadoop/etc/hadoop/core-site.xml:${HADOOP_PATH}/etc/hadoop/core-site.xml" \
-  -v "${ROOT_DIR}/hadoop/etc/hadoop/hdfs-site.xml:${HADOOP_PATH}/etc/hadoop/hdfs-site.xml" \
+  -v "${ROOT_DIR}/volume/namenode:/opt/volume/namenode" \
+  -v "${ROOT_DIR}/volume/datanode0:/opt/volume/datanode" \
+  -v "${ROOT_DIR}/etc/hadoop/core-site.xml:${HADOOP_PATH}/etc/hadoop/core-site.xml" \
+  -v "${ROOT_DIR}/etc/hadoop/hdfs-site.xml:${HADOOP_PATH}/etc/hadoop/hdfs-site.xml" \
+  -v "${ROOT_DIR}/bin/start-hadoop.sh:${HADOOP_PATH}/bin/start-hadoop.sh" \
+  -v "${ROOT_DIR}/../server/dikeHDFS:${HADOOP_PATH}/bin/dikeHDFS" \
   -w "${HADOOP_PATH}" \
+  -e HADOOP_PATH=${HADOOP_PATH} \
   -u "${USER_ID}" \
   --network dike-net \
+  --name dikehdfs --hostname dikehdfs \
   "hadoop-ndp-${USER_NAME}" ${CMD}
 
 #"$@"
