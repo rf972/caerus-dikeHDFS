@@ -45,5 +45,5 @@ docker run --rm=true $DOCKER_INTERACTIVE_RUN \
   -v "${ROOT_DIR}/build/.gnupg:${DOCKER_HOME_DIR}/.gnupg" \
   -u "${USER_ID}" \
   --network dike-net \
-  "dike-hdfs-build-${USER_NAME}" "~/scripts/init_tpch.sh"
+  "hadoop-${HADOOP_VERSION}-ndp-${USER_NAME}" "~/scripts/init_tpch.sh"
 
