@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 
 set -e               # exit on error
+source config.sh
 
 if [ "$#" -ne 1 ]; then
     echo "Usage: $0 <DATA_DIR>"
