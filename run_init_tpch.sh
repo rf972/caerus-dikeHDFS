@@ -35,15 +35,14 @@ DOCKER_INTERACTIVE_RUN=${DOCKER_INTERACTIVE_RUN-"-i -t"}
 
 # bin/hdfs dfs -put /data/lineitem.tbl /lineitem.tbl
 
+HADOOP_PATH=/opt/hadoop/hadoop-${HADOOP_VERSION}
+
 docker run --rm=true $DOCKER_INTERACTIVE_RUN \
-  -v "${ROOT_DIR}/external/hadoop:${DOCKER_HOME_DIR}/hadoop" \
-  -v "${ROOT_DIR}/server:${DOCKER_HOME_DIR}/server" \
   -v "${ROOT_DIR}/scripts:${DOCKER_HOME_DIR}/scripts" \
   -v "${DATA_DIR}:/data" \
-  -v "${ROOT_DIR}/opt/volume:/opt/volume" \
-  -w "${DOCKER_HOME_DIR}/server/hadoop/hadoop" \
-  -v "${ROOT_DIR}/build/.m2:${DOCKER_HOME_DIR}/.m2" \
-  -v "${ROOT_DIR}/build/.gnupg:${DOCKER_HOME_DIR}/.gnupg" \
+  -v "${ROOT_DIR}/hadoop/etc/hadoop/core-site.xml:${HADOOP_PATH}/etc/hadoop/core-site.xml" \
+  -v "${ROOT_DIR}/hadoop/etc/hadoop/hdfs-site.xml:${HADOOP_PATH}/etc/hadoop/hdfs-site.xml" \
+  -w "${HADOOP_PATH}" \
   -u "${USER_ID}" \
   --network dike-net \
   "hadoop-${HADOOP_VERSION}-ndp-${USER_NAME}" "~/scripts/init_tpch.sh"
