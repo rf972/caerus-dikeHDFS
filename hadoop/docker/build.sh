@@ -89,7 +89,7 @@ USER ${USER_NAME}
 RUN ssh-keygen -t rsa -P '' -f ~/.ssh/id_rsa
 RUN cat ~/.ssh/id_rsa.pub >> ~/.ssh/authorized_keys
 RUN chmod 0600 ~/.ssh/authorized_keys
-
+RUN sudo mkdir /opt/hadoop/hadoop-3.2.2/logs ; sudo chmod uog+rw /opt/hadoop/hadoop-3.2.2/logs
 EXPOSE 22
 
 UserSpecificDocker
