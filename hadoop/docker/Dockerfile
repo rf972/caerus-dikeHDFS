@@ -102,10 +102,11 @@ ENV FINDBUGS_HOME /usr
 ###
 ENV MAVEN_OPTS -Xms256m -Xmx1536m
 
+ARG HADOOP_VERSION
+ENV ENV_HADOOP_VERSION=$HADOOP_VERSION
 
 RUN mkdir -p /opt/hadoop
-ENV HADOOP_VERSION hadoop-3.2.2
-RUN curl -L https://downloads.apache.org/hadoop/common/$HADOOP_VERSION/$HADOOP_VERSION.tar.gz | tar -xz -C /opt/hadoop
+RUN curl -L https://downloads.apache.org/hadoop/common/hadoop-${ENV_HADOOP_VERSION}/hadoop-${ENV_HADOOP_VERSION}.tar.gz | tar -xz -C /opt/hadoop
 
 COPY entry.sh /usr/local/bin/entry.sh
 RUN chmod a+x /usr/local/bin/entry.sh

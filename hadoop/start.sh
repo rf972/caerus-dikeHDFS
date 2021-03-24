@@ -37,11 +37,12 @@ DOCKER_INTERACTIVE_RUN="-i -t -d"
 
 CMD="/bin/bash"
 
-HADOOP_PATH=/opt/hadoop/hadoop-3.2.2
+HADOOP_PATH=/opt/hadoop/hadoop-${HADOOP_VERSION}
 
 # Create NameNode and DataNode mount points
 mkdir -p ${ROOT_DIR}/volume/namenode
 mkdir -p ${ROOT_DIR}/volume/datanode0
+mkdir -p ${ROOT_DIR}/volume/logs
 
 if [ "$#" -ge 1 ] ; then
   CMD="$@"
@@ -50,6 +51,7 @@ fi
 docker run --rm=true $DOCKER_INTERACTIVE_RUN \
   -v "${ROOT_DIR}/volume/namenode:/opt/volume/namenode" \
   -v "${ROOT_DIR}/volume/datanode0:/opt/volume/datanode" \
+  -v "${ROOT_DIR}/volume/logs:${HADOOP_PATH}/logs" \
   -v "${ROOT_DIR}/etc/hadoop/core-site.xml:${HADOOP_PATH}/etc/hadoop/core-site.xml" \
   -v "${ROOT_DIR}/etc/hadoop/hdfs-site.xml:${HADOOP_PATH}/etc/hadoop/hdfs-site.xml" \
   -v "${ROOT_DIR}/bin/start-hadoop.sh:${HADOOP_PATH}/bin/start-hadoop.sh" \
@@ -59,7 +61,7 @@ docker run --rm=true $DOCKER_INTERACTIVE_RUN \
   -u "${USER_ID}" \
   --network dike-net \
   --name dikehdfs --hostname dikehdfs \
-  "hadoop-ndp-${USER_NAME}" ${CMD}
+  "hadoop-${HADOOP_VERSION}-ndp-${USER_NAME}" ${CMD}
 
 #"$@"
 

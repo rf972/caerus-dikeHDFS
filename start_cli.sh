@@ -17,6 +17,8 @@
 
 set -e               # exit on error
 
+source config.sh
+
 cd "$(dirname "$0")" # connect to root
 
 ROOT_DIR=$(pwd)
@@ -40,7 +42,7 @@ if [ "$#" -ge 1 ] && [ $1 = "-d" ]; then
   CMD="/bin/bash"
 fi
 
-HADOOP_PATH=/opt/hadoop/hadoop-3.2.2
+HADOOP_PATH=/opt/hadoop/hadoop-${HADOOP_VERSION}
 
 docker run --rm=true $DOCKER_INTERACTIVE_RUN \
   -v "${ROOT_DIR}/dikeHDFS:${DOCKER_HOME_DIR}/dikeHDFS" \
@@ -49,8 +51,4 @@ docker run --rm=true $DOCKER_INTERACTIVE_RUN \
   -w "${HADOOP_PATH}" \
   -u "${USER_ID}" \
   --network dike-net \
-  "hadoop-ndp-${USER_NAME}" ${CMD}
-
-#"$@"
-
-#--hostname master
+  "hadoop-${HADOOP_VERSION}-ndp-${USER_NAME}" ${CMD}

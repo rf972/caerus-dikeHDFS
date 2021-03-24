@@ -18,4 +18,4 @@
 set -e               # exit on error
 source config.sh
 
-./hadoop/start.sh bin/start-hadoop.sh
+./hadoop/stop.sh

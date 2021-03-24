@@ -15,8 +15,8 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-set -e               # exit on error
-
+set -e  # exit on error
+source ./config.sh
 pushd "$(dirname "$0")" # connect to root
 
 ROOT_DIR=$(pwd)
@@ -58,8 +58,7 @@ docker run --rm=true $DOCKER_INTERACTIVE_RUN \
   -v "${ROOT_DIR}/build/.gnupg:${DOCKER_HOME_DIR}/.gnupg" \
   -u "${USER_ID}" \
   --network dike-net \
-  -p 8000:8000 \
-  "dike-hdfs-build-${USER_NAME}" ${CMD}
+  "hadoop-${HADOOP_VERSION}-ndp-${USER_NAME}" ${CMD}
 
 popd
 
