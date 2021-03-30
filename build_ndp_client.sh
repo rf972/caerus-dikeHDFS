@@ -40,6 +40,11 @@ DOCKER_INTERACTIVE_RUN=${DOCKER_INTERACTIVE_RUN-"-i -t"}
 mkdir -p ${ROOT_DIR}/build/.m2
 mkdir -p ${ROOT_DIR}/build/.gnupg
 CMD="                           \
+pushd ndp-hdfs               && \
+mvn clean                    && \
+mvn package install          && \
+popd                         && \
+pushd ndp-hdfs-client        && \
 mvn clean                    && \
 mvn package                     \
 "
@@ -53,7 +58,7 @@ fi
 docker run --rm=true $DOCKER_INTERACTIVE_RUN \
   -v "${ROOT_DIR}/client:${DOCKER_HOME_DIR}/client" \
   -v "${ROOT_DIR}/config:${DOCKER_HOME_DIR}/config" \
-  -w "${DOCKER_HOME_DIR}/client/ndp-hdfs" \
+  -w "${DOCKER_HOME_DIR}/client" \
   -v "${ROOT_DIR}/build/.m2:${DOCKER_HOME_DIR}/.m2" \
   -v "${ROOT_DIR}/build/.gnupg:${DOCKER_HOME_DIR}/.gnupg" \
   -u "${USER_ID}" \
