@@ -1,4 +1,4 @@
 #!/usr/bin/env bash
 
-bin/hadoop dfsadmin -safemode leave
+bin/hdfs dfsadmin -safemode leave
 echo "Done disabling safe mode"
