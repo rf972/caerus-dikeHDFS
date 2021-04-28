@@ -7,4 +7,8 @@ client/dikeclient/target/*
 server/dikeHDFS
 dikeHDFS/build/*
 client/ndp-hdfs/target/
+client/ndp-hdfs-client/target/
+data/*
+volume/*
+dikeHDFS/test/*
 

@@ -18,4 +18,5 @@
 set -e               # exit on error
 source config.sh
 
-./hadoop/stop.sh
+docker stop dikehdfs
+

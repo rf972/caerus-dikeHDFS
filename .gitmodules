@@ -1,6 +1,3 @@
-[submodule "external/hadoop"]
-	path = external/hadoop
-	url = https://github.com/peterpuhov-github/hadoop.git
 [submodule "external/poco"]
 	path = external/poco
 	url = https://github.com/peterpuhov-github/poco.git
