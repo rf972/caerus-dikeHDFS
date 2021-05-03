@@ -6,8 +6,7 @@ int dike_sqlite3_result_text(
   int n,
   int isCopyRequiered,
   int affinity)
-{
-    
+{    
     //setResultStrOrError(pCtx, z, n, SQLITE_UTF8, xDel);
     //sqlite3VdbeMemSetStr(pCtx->pOut, z, n, enc, xDel)
     Mem *pMem = pCtx->pOut;
@@ -40,7 +39,7 @@ int dike_sqlite3_result_text(
         pMem->xDel = SQLITE_STATIC;
         flags |= MEM_Static;
     }    
-#if 1 /* This looks to be expencive */    
+#if 0 /* This looks to be expencive */    
     if(affinity == SQLITE_AFF_INTEGER){
         pMem->u.i = sqlite3Atoi(pMem->z);
         flags |= MEM_Int;

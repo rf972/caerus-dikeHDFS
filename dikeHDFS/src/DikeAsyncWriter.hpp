@@ -45,6 +45,7 @@ class DikeAyncWriter{
         sem_init(&free_sem, 0, QUEUE_SIZE);        
         for(int i = 0; i < QUEUE_SIZE; i++){
             DikeBuffer * b = new DikeBuffer(BUFFER_SIZE);
+            b->id = i;
             free_q.push(b);
         }
         buffer = NULL;
@@ -55,9 +56,6 @@ class DikeAyncWriter{
 
     ~DikeAyncWriter(){
         isRunning = false;
-        //std::cout << "~DikeAyncWriter" << std::endl;
-        //sem_post(&work_sem);
-        //workerThread.join();
         sem_destroy(&work_sem);
 
         delete buffer;
@@ -67,8 +65,6 @@ class DikeAyncWriter{
             free_q.pop();
             delete b;
         }
-        //std::cout << "~DikeAyncWriter Push count: " << pushCount << " Empty count: " << emptyCount;
-        //std::cout << " Record count: " << recordCount << std::endl;
     }    
 
     void close(){
@@ -77,10 +73,8 @@ class DikeAyncWriter{
         sem_post(&work_sem);
     }
 
-    DikeBuffer * getBuffer(){
+    DikeBuffer * getBuffer() {
         if(buffer != NULL) {
-            buffer->validate();
-
             q_lock.lock();
             pushCount ++;
             if(work_q.empty()){
@@ -101,35 +95,20 @@ class DikeAyncWriter{
         return b;
     }
 
-    int write(const char * data, char delim){
-        if(!isRunning){
-            return 0;
-        }
-        int rc = buffer->write(data, delim);        
-        if(rc){
-            return rc;
-        }
-        
-        buffer = getBuffer();
-        rc = buffer->write(data, delim);
-        return rc;
-    }
-
-    int write(const char **res, int data_count, char delim, char term, int total_bytes)
-    {
+    int write(const char **res, int data_count, char delim, char term, int total_bytes) {
         if(!isRunning){
             return 0;
         }        
 
-        // We need to terminate each field so we do (+ data_count)
+        // We need to terminate each field, so we do (+ data_count)
         int rc = buffer->write(res, data_count, delim, term, total_bytes + data_count);        
-        if(rc){           
+        if(rc) {           
             return rc;
         }
         buffer = getBuffer();
         rc = buffer->write(res, data_count, delim, term, total_bytes + data_count);
 
-        if(!rc){           
+        if(!rc) {           
             std::cout << "DikeAyncWriter::write failed" << std::endl;
             std::cout << "total_bytes " << total_bytes << std::endl;
             std::cout << "buffer size " << buffer->getSize() << std::endl;
@@ -138,27 +117,13 @@ class DikeAyncWriter{
         return rc;
     }
 
-    int write(const char * data, char delim, char term){
-        if(!isRunning){
-            return 0;
-        }                
-
-        int rc = buffer->write(data, delim, term);        
-        if(rc){           
-            return rc;
-        }
-        buffer = getBuffer();
-        rc = buffer->write(data, delim, term);        
-        return rc;
-    }
-
     int write(char term){
-        if(!isRunning){
+        if(!isRunning) {
             return 0;
         }        
 
         int rc = buffer->write(term);       
-        if(rc){
+        if(rc) {
             return rc;
         }
         buffer = getBuffer();
@@ -181,9 +146,7 @@ class DikeAyncWriter{
             if(!isEmpty){
                 usleep(100);
             }
-        }
-
-        //std::cout << "Flush completed" << std::endl;        
+        }  
     }
 
     std::thread startWorker() {
@@ -206,9 +169,9 @@ class DikeAyncWriter{
             if(output) {
                 int len = b->getSize();
                 int n = 0;
-                if(len > 0 && isRunning){                    
-                    //std::cout << recordCount << " len " << len << std::endl; 
-                    //std::cout << std::string((char*)&b->startPtr[n], len) << std::endl; 
+                if(len > 0 && isRunning) {                    
+                    //std::cout << "DikeAyncWriter:Worker bufferId " << b->id << " len " << len << std::endl; 
+                    //b->validateBeforeWrite();
                     recordCount++;
                     n = output->write((char*)b->startPtr, len);
                     if(n < len) {
@@ -217,6 +180,7 @@ class DikeAyncWriter{
                     }
                 }
             }
+
             b->reset();
             q_lock.lock();
             free_q.push(b);            

@@ -23,7 +23,7 @@
 class DikeRecord {
     public:
     enum{
-        FILED_SIZE  = 1024,
+        FIELED_SIZE  = 1024,
         MAX_COLUMNS = 128
     };
     int nCol;
@@ -33,10 +33,10 @@ class DikeRecord {
 
     DikeRecord(int col) {
         nCol = col;
-        uint8_t * buf = (uint8_t *)malloc(FILED_SIZE * MAX_COLUMNS);
+        uint8_t * buf = (uint8_t *)malloc(FIELED_SIZE * MAX_COLUMNS);
         for(int i = 0; i < nCol; i++) {
             fields[i] = 0;
-            fieldMemory[i] = buf + i * FILED_SIZE;
+            fieldMemory[i] = buf + i * FIELED_SIZE;
             len[i] = 0;            
         }
     }
@@ -49,18 +49,18 @@ class DikeAsyncReader{
     public:
     enum{
         QUEUE_SIZE  = 4,
-        BUFFER_SIZE = (256 << 10)
+        BUFFER_SIZE = (128 << 10)
     };
 
     DikeIO * input = NULL;
 
     uint64_t blockSize = 0; /* Limit reads to one HDFS block */
-    uint64_t blockOffset = 0; /* If not zero we need to seek for record */
-    uint32_t queueSize = 0;
+    uint64_t blockOffset = 0; /* If not zero we need to seek for record */   
     uint8_t * memPool = 0;
     int bytesRead = 0; /* How many bytes did we read so far */
-    int fDelim = '|'; /* Field delimiter */
+    int fDelim = ','; /* Field delimiter */
     int rDelim = '\n'; /* Record Delimiter */
+    int qDelim = '\"'; /* Quotation Delimiter */
 
     DikeRecord * record = NULL; /* Single record */
 
@@ -80,28 +80,16 @@ class DikeAsyncReader{
     DikeAsyncReader(DikeIO * input, uint64_t blockSize){
         this->input = input;        
         this->blockSize = blockSize;
-
-        if(blockSize > 0) { // We reading chunked data
-            queueSize = (blockSize / BUFFER_SIZE)  + 2;
-            memPool = (uint8_t *)malloc(queueSize * BUFFER_SIZE);
-            for(int i = 0; i < queueSize; i++){
-                DikeBuffer * b = new DikeBuffer(&memPool[i * BUFFER_SIZE], BUFFER_SIZE);
-                b->id = i;
-                free_q.push(b);
-            }
-
-        } else {
-            queueSize = QUEUE_SIZE;
-            memPool = 0;
-            for(int i = 0; i < queueSize; i++){
-                DikeBuffer * b = new DikeBuffer(BUFFER_SIZE);
-                b->id = i;
-                free_q.push(b);
-            }
+        
+        memPool = (uint8_t *)malloc(QUEUE_SIZE * BUFFER_SIZE);
+        for(int i = 0; i < QUEUE_SIZE; i++){
+            DikeBuffer * b = new DikeBuffer(&memPool[i * BUFFER_SIZE], BUFFER_SIZE);
+            b->id = i;
+            free_q.push(b);
         }
 
         sem_init(&work_sem, 0, 0);
-        sem_init(&free_sem, 0, queueSize);
+        sem_init(&free_sem, 0, QUEUE_SIZE);
                
         isRunning = true;
         workerThread = startWorker(); // This will start reading immediatelly
@@ -142,15 +130,7 @@ class DikeAsyncReader{
         //std::cout << "~DikeAsyncReader Push count: " << pushCount << " Empty count: " << emptyCount << " bytesRead " << bytesRead << std::endl;        
     }    
 
-    bool isCopyRequiered() {
-        return (memPool == 0);
-    }
-
     int initRecord(int nCol){
-        // At this time blockOffset should be set
-        if(blockOffset > 0){
-            seekRecord();
-        }
         record = new DikeRecord(nCol);
         return (record != NULL);
     }
@@ -164,24 +144,50 @@ class DikeAsyncReader{
     
     int seekRecord() {
         uint8_t * posPtr = buffer->posPtr;        
-        
-        while(*posPtr != rDelim && 
-              posPtr < buffer->endPtr && 
-              *posPtr != 0) 
-        {
-            posPtr++;                       
-        }
-
-        if(*posPtr == rDelim){
-            bytesRead += posPtr - buffer->posPtr + 1;
-            buffer->posPtr = posPtr + 1; // Skiping delimiter            
-            return 0;
-        }
+        bool underQuote = false;
+        while(posPtr < buffer->endPtr) {
+            if(*posPtr == qDelim){
+                underQuote = !underQuote;
+            }
+            if(!underQuote){
+                if(*posPtr == rDelim){
+                    bytesRead += posPtr - buffer->posPtr + 1;
+                    buffer->posPtr = posPtr + 1; // Skiping delimiter            
+                    return 0;
+                }
+            }
+            posPtr++;
+        }        
 
         std::cout << "DikeAsyncReader failed seek " << std::endl;
         return 1;
     }
     
+    int getColumnCount(){
+        int nCol = 0;
+        uint8_t * posPtr = buffer->posPtr;
+        bool underQuote = false;
+
+        while(posPtr < buffer->endPtr) {
+            if(*posPtr == qDelim){
+                underQuote = !underQuote;
+            }
+            if(!underQuote){
+                if(*posPtr == fDelim){
+                    nCol++;
+                } else if (*posPtr == rDelim) {
+                    nCol++;
+                    break;
+                }
+            }
+            posPtr++;
+        }
+
+        std::cout << "DikeAsyncReader detected " << nCol << " columns" << std::endl;
+
+        return nCol;
+    }
+
     int readRecord() {
         if(isEOF()){
             //std::cout << "DikeAsyncReader EOF at " << bytesRead << std::endl;
@@ -196,198 +202,77 @@ class DikeAsyncReader{
                 //std::cout << "DikeAsyncReader EOF at " << bytesRead << std::endl;
                 return 1;
             }
-#if _DEBUG
-            assert(NULL == strchr((char *)record->fields[i], fDelim));
-            std::size_t found = std::string((const char*)record->fields[i]).find('|');
-            assert(std::string::npos == found);
-#endif            
         }
 
-                    
-        if(0 && bytesRead < 10240){
-            for(int i = 0; i < record->nCol; i++) {
-                std::cout << std::string((char*)record->fields[i]) << ",";
-            }
-            std::cout << std::endl;
-        }
-        
         return 0;
-    }
-    
-#if 0 /* Fully functional version */    
-    int readField(int pos) {       
-        if(buffer->posPtr >= buffer->endPtr) {            
-            holdBuffer(buffer);
-            buffer = getBuffer();
-        }
+    }    
 
-        if(pos == 0 && *buffer->posPtr == rDelim){ // Skip CR if it is first
-            buffer->posPtr++;
-            bytesRead += 1;
-            if(buffer->posPtr >= buffer->endPtr) {
-                holdBuffer(buffer);
-                buffer = getBuffer();
-            }
-        }
-
-        int count = 0;
+    int readField(int pos) {
         uint8_t * posPtr = buffer->posPtr;
+        DikeBuffer * orig_buffer = buffer;
+        bool underQuote = false;
+        record->fields[pos] = buffer->posPtr;
+
+        while(posPtr < buffer->endPtr) {
+            if(*posPtr == qDelim){
+                underQuote = !underQuote;
+            }
+            if(!underQuote){
+                if(*posPtr == fDelim || *posPtr == rDelim){                                                      
+                    record->len[pos] = posPtr - record->fields[pos] + 1;
+                    *posPtr = 0; // SQLite expects strings to be NULL terminated
+                    posPtr++;
+                    bytesRead += posPtr - buffer->posPtr;
+                    buffer->posPtr = posPtr;
+                    return 0;
+                }
+            }
+            posPtr++;
+        }
+
+        // Use internal memory
+        int count = 0;
         uint8_t * fieldPtr = record->fieldMemory[pos];
         record->fields[pos] = fieldPtr;
         // Copy first part
         posPtr = buffer->posPtr;
-
-        while( *posPtr != fDelim && *posPtr != rDelim && *posPtr != 0) {
+        while( posPtr < buffer->endPtr) {
             *fieldPtr = *posPtr;
             posPtr++;
             fieldPtr++;
             count++;
-            if(posPtr >= buffer->endPtr) {
-                holdBuffer(buffer);
-                buffer = getBuffer();
-                posPtr = buffer->posPtr;
-            }
         }
+        // Get new buffer
+        holdBuffer(buffer);
+        buffer = getBuffer();
+        posPtr = buffer->posPtr;
+        // Copy second part
+        while(posPtr < buffer->endPtr) {            
+            if(*posPtr == qDelim){
+                underQuote = !underQuote;
+            }
+            if(!underQuote){
+                if(*posPtr == fDelim || *posPtr == rDelim){
+                    count++;
+                    *fieldPtr = 0; // SQLite expects strings to be NULL terminated
+                    posPtr++;
+                    fieldPtr++;
 
-        if(*posPtr == fDelim || *posPtr == rDelim) {                
-            //record->len[pos] = count;
-            bytesRead += count + 1;
-            *fieldPtr = 0;
-            *posPtr = 0;
-            buffer->posPtr = posPtr + 1; // Skiping delimiter                                
-            return 0;
+                    record->len[pos] = count;                    
+                    bytesRead += count;
+                    buffer->posPtr = posPtr;
+                    return 0;
+                }
+            }
+            count++;
+            *fieldPtr = *posPtr;
+            posPtr++;
+            fieldPtr++;
         }
         
-        return 1;        
-    }
-#endif    
-
-#if 1 /* Shallow copy. Under evaluation. Seems to work */
-    int readField(int pos) {       
-        if(buffer->posPtr >= buffer->endPtr) {
-            holdBuffer(buffer);
-            buffer = getBuffer();
-        }
-
-        if(pos == 0 && *buffer->posPtr == rDelim){ // Skip CR if it is first
-            buffer->posPtr++;
-            bytesRead += 1;
-            if(buffer->posPtr >= buffer->endPtr) {
-                holdBuffer(buffer);
-                buffer = getBuffer();
-            }
-        }
-
-        uint8_t * posPtr = buffer->posPtr;
-        DikeBuffer * orig_buffer = buffer;
-
-        while(*posPtr != fDelim && 
-              *posPtr != rDelim && 
-              posPtr < buffer->endPtr - 1 && 
-              *posPtr != 0) 
-        {
-            posPtr++;                       
-        }
-
-        if(*posPtr == fDelim || *posPtr == rDelim) {
-            record->fields[pos] = buffer->posPtr;
-            record->len[pos] = posPtr - buffer->posPtr + 1;
-            if(record->len[pos] <= 0 || record->len[pos] > 1024){
-                std::cout << "DikeAsyncReader wrong record size (1) :" << record->len[pos] << std::endl;
-            }
-
-            *posPtr = 0;
-            posPtr++;
-            bytesRead += posPtr - buffer->posPtr;
-            buffer->posPtr = posPtr;
-            
-            return 0;
-        }
-
-        if(*posPtr == 0 && posPtr < buffer->endPtr){            
-            //std::cout << "DikeAsyncReader End of data 1 at  " << bytesRead << std::endl;
-            return 1;
-        }
-
-        if(!isCopyRequiered()) { // Fetch new buffer and continue
-            // Preserve start field position
-            record->fields[pos] = buffer->posPtr;
-            
-            // Fetch new buffer
-            holdBuffer(buffer);
-            buffer = getBuffer();
-            posPtr = buffer->posPtr;
-
-            while(*posPtr != fDelim && 
-                *posPtr != rDelim && 
-                posPtr < buffer->endPtr - 1 && 
-                *posPtr != 0) 
-            {
-                posPtr++;                       
-            }
-
-            if(*posPtr == fDelim || *posPtr == rDelim) {                
-                record->len[pos] = posPtr - record->fields[pos] + 1;
-                if(record->len[pos] <= 0 || record->len[pos] > 1024){
-                    std::cout << "DikeAsyncReader wrong record size (2) " << record->len[pos] << std::endl;
-                }
-
-                *posPtr = 0;
-                posPtr++;
-                bytesRead += posPtr - record->fields[pos];
-                buffer->posPtr = posPtr; 
-                            
-                return 0;
-            }
-            if(*posPtr == 0 && posPtr < buffer->endPtr){
-                // End of data
-                return 1;
-            }
-
-            std::cout << "DikeAsyncReader::readField is very confused!!!" << std::endl;
-            return 1;
-        }
-
-        if(posPtr >= buffer->endPtr - 1) { // Use internal memory
-            int count = 0;
-            uint8_t * fieldPtr = record->fieldMemory[pos];
-            record->fields[pos] = fieldPtr;
-            // Copy first part
-            posPtr = buffer->posPtr;
-            while( posPtr < buffer->endPtr && *posPtr != 0) {
-                *fieldPtr = *posPtr;
-                posPtr++;
-                fieldPtr++;
-                count++;
-            }
-            // Get new buffer
-            holdBuffer(buffer);
-            buffer = getBuffer();
-            posPtr = buffer->posPtr;
-            // Copy second part
-            while(*posPtr != fDelim && 
-                *posPtr != rDelim && 
-                posPtr < buffer->endPtr - 1 && 
-                *posPtr != 0) 
-            {
-                *fieldPtr = *posPtr;
-                posPtr++;
-                fieldPtr++;
-                count++;
-            }
-
-            if(*posPtr == fDelim || *posPtr == rDelim) {                
-                record->len[pos] = count + 1;
-                bytesRead += count + 1;
-                *fieldPtr = 0;
-                buffer->posPtr = posPtr + 1; // Skiping delimiter                                
-                return 0;
-            }
-        }  // Use internal memory
         //std::cout << "DikeAsyncReader End of data 2 at  " << bytesRead << std::endl;
         return 1;
     }
-#endif
 
     void holdBuffer(DikeBuffer * buf) {
         //q_lock.lock();       
@@ -396,9 +281,6 @@ class DikeAsyncReader{
     }
 
     void releaseBuffers(void) {
-        if(!isCopyRequiered()){ // Buffers can't be reused
-            return;
-        }
         DikeBuffer * b;
         //q_lock.lock();       
         while(!tmp_q.empty()){
@@ -462,6 +344,7 @@ class DikeAsyncReader{
             b->reset();
 
             int n = input->read((char *)b->startPtr, BUFFER_SIZE);
+            b->setReadableBytes(n);            
             if(n < BUFFER_SIZE && n > 0){
                 memset((char*)&b->startPtr[n], 0, BUFFER_SIZE - n);
             }

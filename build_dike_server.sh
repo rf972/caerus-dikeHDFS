@@ -56,13 +56,13 @@ fi
 
 docker run --rm=true $DOCKER_INTERACTIVE_RUN \
   -v "${ROOT_DIR}/external/poco:${DOCKER_HOME_DIR}/dikeHDFS/external/poco" \
-  -v "${ROOT_DIR}/server:${DOCKER_HOME_DIR}/server" \
   -v "${ROOT_DIR}/dikeHDFS:${DOCKER_HOME_DIR}/dikeHDFS" \
   -w "${DOCKER_HOME_DIR}/dikeHDFS" \
   -v "${ROOT_DIR}/build/dikeHDFS:${DOCKER_HOME_DIR}/dikeHDFS/build" \
   -u "${USER_ID}" \
   "hadoop-${HADOOP_VERSION}-ndp-${USER_NAME}" ${CMD}
 
+cp ${ROOT_DIR}/build/dikeHDFS/${BUILD_TYPE}/dikeHDFS ${ROOT_DIR}/server/
 popd
 
 

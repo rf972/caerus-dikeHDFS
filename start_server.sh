@@ -63,7 +63,7 @@ DOCKER_RUN="docker run --rm=true ${DOCKER_IT} \
   -v ${ROOT_DIR}/etc/hadoop/core-site.xml:${HADOOP_HOME}/etc/hadoop/core-site.xml \
   -v ${ROOT_DIR}/etc/hadoop/hdfs-site.xml:${HADOOP_HOME}/etc/hadoop/hdfs-site.xml \
   -v ${ROOT_DIR}/scripts/start-hadoop.sh:${HADOOP_HOME}/bin/start-hadoop.sh \
-  -v ${ROOT_DIR}/server/dikeHDFS:${HADOOP_HOME}/bin/dikeHDFS \
+  -v ${ROOT_DIR}/server:/server \
   -w ${HADOOP_HOME} \
   -e HADOOP_HOME=${HADOOP_HOME} \
   -e RUNNING_MODE=${RUNNING_MODE} \
@@ -82,7 +82,7 @@ else
   done
 
   cat "${ROOT_DIR}/volume/status/HADOOP_STATE"
-  docker exec dikehdfs bin/dikeHDFS &
+  docker exec dikehdfs /server/dikeHDFS &
 fi
 
 popd

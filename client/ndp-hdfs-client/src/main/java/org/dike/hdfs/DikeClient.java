@@ -249,22 +249,15 @@ public class DikeClient
                 BufferedReader br = new BufferedReader(new InputStreamReader(dataInputStream,StandardCharsets.UTF_8));
                 String record;
                 record = br.readLine();
-                while (record != null && record.length() > 0){
+                while (record != null){
                     if(totalRecords < 5) {
                         System.out.println(record);
                     }
-/*                    
-                    String[] values = record.split(",");
-                    if(values.length < 15){
-                        System.out.println(totalRecords);
-                        System.out.println(record);
-                        return;
-                    }
 
-                    if(totalRecords > 6001215) {
-                        System.out.println(record);
+                    if (record.length() == 0){
+                        System.out.println("Recieved zero length record");
+                        break;
                     }
-*/
                     totalDataSize += record.length() + 1; // +1 to count end of line
                     totalRecords += 1;
 
@@ -371,6 +364,6 @@ public class DikeClient
 }
 
 // mvn package -o
-// java -classpath target/ndp-hdfs-client-1.0-jar-with-dependencies.jar org.dike.hdfs.DikeClient /lineitem.tbl
+// java -classpath target/ndp-hdfs-client-1.0-jar-with-dependencies.jar org.dike.hdfs.DikeClient /lineitem.csv
 // java -Xdebug -agentlib:jdwp=transport=dt_socket,server=y,suspend=y,address=*:8000 -Xmx1g -classpath target/dikeclient-1.0-jar-with-dependencies.jar org.dike.hdfs.DikeClient /lineitem.tbl
 // for i in $(seq 1 10); do echo $i && java -classpath target/dikeclient-1.0-jar-with-dependencies.jar org.dike.hdfs.DikeClient /lineitem.tbl; done

@@ -57,18 +57,26 @@ class DikeBuffer{
         startPtr = 0;
     }
 
-    int validate(){
-        assert(posPtr <= endPtr);
-        assert(posPtr >= startPtr);
-        if(memoryOwner){
-            for(int i = 0; i < DIKE_BUFFER_GUARD; i++){
-                assert(endPtr[i] == 0);
+    void validateBeforeWrite() {
+        // Check if we have zeroes in the buffer
+        for(int i = 0; i < getSize(); i++){
+            if(startPtr[i] == 0){
+                std::cout << "Detected zero at pos : " << i << std::endl;
             }
         }
-#if _DEBUG
-        std::size_t found = std::string((char *)startPtr, posPtr - startPtr).find('|');
-        assert(std::string::npos == found);
-#endif        
+
+        // Check if we have two consecutive terminations
+        for(int i = 1; i < getSize(); i++){
+            if(startPtr[i-1] == '\n' && startPtr[i] == '\n'){
+                std::cout << "Detected consecutive terminations at pos : " << i << std::endl;
+            }
+        }
+
+    }
+
+    void setReadableBytes(int length)
+    {
+        endPtr = startPtr + length;   
     }
 
     int write(const char **res, int data_count, char delim, char term, int total_bytes) 
@@ -89,131 +97,20 @@ class DikeBuffer{
                 *p = *d;
                 p++;
                 d++;
-            }
-            if(col < data_count -1){
-                *p = delim;
-                p++;
-            }
+            }            
+            *p = delim;
+            p++;            
         }
-        *p = term;
-        p++;
+
+        *(p - 1) = term;        
         bytes = p - posPtr;
         posPtr = p;
         return bytes;
     }
 
-    int write(const char * data, char delim){
-        uint8_t * d = (uint8_t *)data;
-        uint8_t * p = posPtr;
-        int rc;
-        while(*d != 0 && p < endPtr/* && *d != delim*/){
-            *p = *d;
-            p++;
-            d++;
-        }
-
-        if(p >= endPtr){ // out of space new buffer needed
-            return 0;
-        }
-
-        if(*d == 0){ // end of data
-            *p = delim;
-            p++;
-            rc = p - posPtr;
-            posPtr = p;
-#if _DEBUG
-            std::size_t found = std::string(data, rc).find('|');
-            assert(std::string::npos == found);
-#endif
-            return rc;
-        }
-
-        if(*d != delim){ // sanity check
-            std::cout << "Something is very wrong there" << std::endl;
-            return 0;
-        }
-        std::cout << "Something is very wrong there" << std::endl;
-        // We need to wrap delimiter in quotations
-        d = (uint8_t *)data;
-        p = posPtr;
-        *p = '"';
-        p++;
-        while(*d != 0 && p < endPtr){
-            *p = *d;
-            p++;
-            d++;
-        }
-
-        if(p >= endPtr-2){ // out of space new buffer needed
-            return 0;
-        }
-        *p = '"';
-        p++;
-        *p = delim;
-        p++;
-        rc = p - posPtr;
-        posPtr = p;
-#if _DEBUG
-        std::size_t found = std::string(data, rc).find('|');
-        assert(std::string::npos == found);
-#endif
-        return rc;
-    }
-
-    int write(const char * data, char delim, char term){         
-        uint8_t * d = (uint8_t *)data;
-        uint8_t * p = posPtr;
-        int rc;
-        while(*d != 0 && p < endPtr/* && *d != delim*/){
-            *p = *d;
-            p++;
-            d++;
-        }
-
-        if(p >= endPtr){ // out of space new buffer needed
-            return 0;
-        }
-
-        if(*d == 0){ // end of data
-            *p = term;
-            p++;
-            rc = p - posPtr;
-            posPtr = p;
-            return rc;
-        }
-
-        if(*d != delim){ // sanity check
-            std::cout << "Something is very wrong there" << std::endl;
-            return 0;
-        }
-
-        std::cout << "Something is very wrong there" << std::endl;
-        // We need to wrap delimiter in quotations
-        d = (uint8_t *)data;
-        p = posPtr;
-        *p = '"';
-        p++;
-        while(*d != 0 && p < endPtr){
-            *p = *d;
-            p++;
-            d++;
-        }
-
-        if(p >= endPtr-2){ // out of space new buffer needed
-            return 0;
-        }
-        *p = '"';
-        p++;
-        *p = term;
-        p++;
-        rc = p - posPtr;
-        posPtr = p;
-        return rc;
-    }
-
     int write(char term){         
         uint8_t * p = posPtr;
-        if( p < endPtr){
+        if( p < endPtr - 2){
             *p = term;
             p++;
             posPtr = p;
@@ -228,11 +125,11 @@ class DikeBuffer{
         posPtr = startPtr;
     }
 
-    std::streamsize getSize(){
+    int getSize(){
         assert(posPtr <= endPtr);
         int rc = posPtr - startPtr;
         //assert(rc > 0);
-        return std::streamsize(rc);
+        return rc;
     }
 };
 

@@ -12,6 +12,7 @@ struct DikeSQLParam {
     std::string schema;
     uint64_t    blockOffset;
     uint64_t    blockSize;
+    std::string headerInfo;
 };
 
 class DikeSQL {    

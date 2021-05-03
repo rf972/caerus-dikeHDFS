@@ -128,7 +128,7 @@ class DikeInSession : public DikeIO {
             }
         }
       } catch (...) {
-        std::cout << "DikeIn: Caught exception " << std::endl;
+        std::cout << "DikeInSession: Caught exception " << std::endl;
       }
 
       readBytes += n;
@@ -151,6 +151,7 @@ class DikeOut : public DikeIO {
   virtual int read(char * buf, uint32_t size) {
     return -1;
   }
+
   virtual int write(const char * buf, uint32_t size) {
     int len = size;
     int n = 0;
@@ -166,7 +167,7 @@ class DikeOut : public DikeIO {
         }
         return n; 
       } catch (...) {
-        std::cout << "DikeIn: Caught exception " << std::endl;
+        std::cout << "DikeOut: Caught exception " << std::endl;
       }
     }
     return -1;
@@ -314,6 +315,7 @@ public:
         dikeSQLParam.schema = cfg->getString("Configuration.Schema");
         dikeSQLParam.query = cfg->getString("Configuration.Query");
         dikeSQLParam.blockSize = cfg->getUInt64("Configuration.BlockSize");
+        dikeSQLParam.headerInfo = cfg->getString("Configuration.headerInfo", "IGNORE");
 
         ostream& toClient = resp.send();
         toClient.flush();

@@ -27,7 +27,3 @@ target_link_libraries(dikeHDFS PUBLIC
     "-lpthread -lm"
 #    "-L${CMAKE_SOURCE_DIR}/external/build-aws/lib -laws-c-event-stream  -laws-checksums -laws-c-common"
     )
-
-add_custom_command(TARGET dikeHDFS POST_BUILD
-    COMMAND ${CMAKE_COMMAND} -E copy $<TARGET_FILE:dikeHDFS> ${CMAKE_SOURCE_DIR}/../server/
-)

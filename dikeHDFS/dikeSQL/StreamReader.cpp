@@ -82,8 +82,6 @@ static void srd_errmsg(StreamReader *p, const char *zFormat, ...){
   va_end(ap);
 }
 
-
-
 static std::size_t readFromStream( std::istream& in, char* buf, std::size_t len ) {
 	std::size_t n = 0;
 	
@@ -237,43 +235,6 @@ static int srd_reader_open(StreamReader *p)
   // Do not forget to seek
   return 0;
 }
-#if 0
-static int srd_reader_open(StreamReader *p, 
-                            std::istream * in,
-                            Poco::Net::StreamSocket * inSocket,
-                            Poco::Net::HTTPSession * inSession,
-                            uint64_t blockOffset, 
-                            uint64_t blockSize)
-{ 
-  p->in = in;
-  p->inSocket = inSocket;
-  p->inSession = inSession;
-  p->blockSize = blockSize;
-  p->zStreamBuf[0] = (char *)malloc(SRD_INBUFSZ);
-  p->zStreamBuf[1] = (char *)malloc(SRD_INBUFSZ);
-  if(p->zStreamBuf[0]==0 || p->zStreamBuf[1]==0){
-    srd_errmsg(p, "out of memory");
-    return 1;
-  }
-
-  p->zStream = p->zStreamBuf[0];
-  p->nStream = -1;
-  sem_init(&p->sem,0,1);
-  pthread_mutex_init(&p->lock, NULL);
-  pthread_create(&p->thread,NULL,srd_stream_thread,p);
-  
-  // Check if we need to scan for record start
-  if(blockOffset > 0){
-    int c;
-    do {
-      c = srd_getc(p);
-    } while( c != '\n' && c != EOF);
-    std::cout << "Starting at  " << blockOffset + p->nBytesRead << std::endl;
-  }
-  
-  return 0;
-}
-#endif
 
 /* Increase the size of p->z and append character c to the end. 
 ** Return 0 on success and non-zero if there is an OOM error */
@@ -425,8 +386,6 @@ static void srd_xfer_error(srdTable *pTab, StreamReader *pRdr){
 /* This method is the destructor fo a srdTable object. */
 static int srd_Disconnect(sqlite3_vtab *pVtab){
   srdTable *p = (srdTable*)pVtab;
-  //sqlite3_free(p->zFilename);
-  //sqlite3_free(p->zData);
   sqlite3_free(p);
   return SQLITE_OK;
 }
@@ -463,8 +422,7 @@ static void csv_dequote(char *z){
 
 static int srd_parse_until(const char * str, const char *expr, int * pos)
 {
-  int p = *pos;
-  //char * debug = &str[p];
+  int p = *pos;  
   int expr_len = strlen(expr);
   int i;
 
@@ -484,7 +442,6 @@ static int srd_parse_until(const char * str, const char *expr, int * pos)
 static int srd_parse_skip(const char * str, int c, int * pos)
 {
   int p = *pos;
-  //char * debug = &str[p];
 
   while(str[p] != 0) {
     if(str[p]!=c) {
@@ -582,67 +539,64 @@ static int srd_Connect(
   void *pAux,
   int argc, const char *const*argv,
   sqlite3_vtab **ppVtab,
-  char **pzErr
-){
+  char **pzErr)
+  {
   srdTable *pTable = 0;     /* The srdTable object to construct */  
-  int rc = SQLITE_OK;     /* Result code from this routine */
-  int i;                  /* Loop counters */      
+  int rc = SQLITE_OK;     /* Result code from this routine */  
   std::string schema;
   StreamReaderParam * param = (StreamReaderParam*)pAux;
     
   pTable =(srdTable *) sqlite3_malloc( sizeof(srdTable) );
   *ppVtab = (sqlite3_vtab*)pTable;
-  if( pTable==0 ) {
-    goto tbltab_connect_oom;
+  if( pTable==0 ) {    
+    std::cerr << "out of memory" << std::endl;
+    return SQLITE_ERROR;
   }
 
   memset(pTable, 0, sizeof(srdTable));
-  /*
-  for(i = 0; i < argc; i++) {
-      std::cout << i << " " << argv[i] << std::endl;
-  }
-  */
-  schema = std::string("CREATE TABLE S3Object (") +  param->schema + ")";
 
-  //std::cout << "schema" << " " << schema << std::endl;
-  
+  #if 0
+  schema = std::string("CREATE TABLE S3Object (") +  param->schema + ")";  
   rc = srd_parse_schema(schema.c_str(), pTable);
   if( rc ) {
     std::cerr << "BAD schema" << " " << schema << std::endl;
     goto tbltab_connect_error;
   }  
+  #endif
 
+  
+  if(param->reader->blockOffset > 0){
+    param->reader->seekRecord();
+  } else if (param->headerInfo != HEADER_INFO_NONE) {
+    param->reader->seekRecord();
+  }
+  
+  pTable->nCol = param->reader->getColumnCount();
+
+  schema = std::string("CREATE TABLE S3Object (");
+  for(int i = 0; i < pTable->nCol; i++) {
+    schema += "_" +  std::to_string(i+1);
+    if (i < pTable->nCol -1 ){
+      schema += ",";
+    } else {
+      schema += ")";
+    }
+  }
+
+  std::cout << "Schema: " << schema << std::endl;
+  
   param->reader->initRecord(pTable->nCol);
   pTable->reader = param->reader;
   
   rc = sqlite3_declare_vtab(db, schema.c_str());
   if( rc ){
     std::cerr << "Bad schema: " <<  schema << " - " << sqlite3_errmsg(db) << std::endl;
-    goto tbltab_connect_error;
-  }
-
-  /* Rationale for DIRECTONLY:
-  ** An attacker who controls a database schema could use this vtab
-  ** to exfiltrate sensitive data from other files in the filesystem.
-  ** And, recommended practice is to put all virtual tables in the
-  ** TEMP namespace, so they should still be usable from within TEMP
-  ** views, so there shouldn't be a serious loss of functionality by
-  ** prohibiting the use of this vtab from persistent triggers and views.
-  */
-  sqlite3_vtab_config(db, SQLITE_VTAB_DIRECTONLY);
-
-  return SQLITE_OK;
-
-tbltab_connect_oom:
-  rc = SQLITE_NOMEM;
-  std::cerr << "out of memory" << std::endl;
-
-tbltab_connect_error:
-  if( pTable ) {
     srd_Disconnect(&pTable->base);
+    return SQLITE_ERROR;
   }
 
-  return SQLITE_ERROR;
+  sqlite3_vtab_config(db, SQLITE_VTAB_DIRECTONLY);
+  return SQLITE_OK;
 }
 
 /*
@@ -787,77 +741,6 @@ static int srd_Next(sqlite3_vtab_cursor *cur){
   return SQLITE_OK;
 }
 
-#if 0
-static int srd_Next(sqlite3_vtab_cursor *cur){
-  srdCursor *pCur = (srdCursor*)cur;
-  srdTable *pTab = (srdTable*)cur->pVtab;
-  int i = 0;
-  char *z;
-
-  // pCur->rdr.reader->isEOF()
-  if(pCur->rdr.blockSize > 0 && pCur->rdr.nBytesRead > pCur->rdr.blockSize){
-    std::cout << "EOB nBytesRead " << pCur->rdr.nBytesRead << std::endl;    
-    pCur->iRowid = -1;
-    return SQLITE_OK;
-  }
-
-  #if 1
-  int rc;
-
-  /* Evaluate if we can use inplace pointers */ 
-  rc = srd_get_field_indecies(pCur, pTab->nCol, FDELIM);
-  if(rc == SQLITE_OK){
-    pCur->iRowid++;
-    return SQLITE_OK;
-  }
-
-  for(i = 0; i < pTab->nCol; i++){
-    pCur->azPtr[i] = 0;
-  }
-  #endif
-
-  i = 0;
-
-  do{
-    z = srd_read_one_field(&pCur->rdr, FDELIM);
-    //if( z==0 ){ break; }
-    if(pCur->rdr.cTerm==EOF) { 
-      break; 
-    }
-
-    if( i<pTab->nCol ){
-      if( SRD_UNLIKELY(pCur->aLen[i] < pCur->rdr.n+1 )){
-        char *zNew = (char *)sqlite3_realloc64(pCur->azVal[i], pCur->rdr.n+1);
-        if( zNew==0 ){
-          srd_errmsg(&pCur->rdr, "out of memory");
-          srd_xfer_error(pTab, &pCur->rdr);
-          break;
-        }
-        pCur->azVal[i] = zNew;
-        pCur->aLen[i] = pCur->rdr.n+1;
-      }
-      memcpy(pCur->azVal[i], z, pCur->rdr.n+1);
-      i++;
-    }
-  }while( pCur->rdr.cTerm!='\n' ); // while( pCur->rdr.cTerm==FDELIM );
-
-  if( /* z==0 || */ (pCur->rdr.cTerm==EOF && i<pTab->nCol) ){
-    pCur->iRowid = -1;
-    //std::cout << "Unexpected termination "<< std::endl;
-    //std::cout << pCur->rdr.zIn << std::endl;
-  }else{
-    pCur->iRowid++;
-    while( i<pTab->nCol ){
-      sqlite3_free(pCur->azVal[i]);
-      pCur->azVal[i] = 0;
-      pCur->aLen[i] = 0;
-      pCur->azPtr[i] = 0;
-      i++;
-    }
-  }
-  return SQLITE_OK;
-}
-#endif
 
 /*
 ** Return values of columns for the row at which the srdCursor
@@ -875,23 +758,12 @@ static int srd_Column(
     dike_sqlite3_result_text(ctx, 
                               (const char*)pCur->rdr.reader->record->fields[i], 
                               pCur->rdr.reader->record->len[i], 
-                              pCur->rdr.reader->isCopyRequiered(),
+                              true, // Copy requiered
                               pTab->cTypes[i]);
 
     //dike_sqlite3_result_text(ctx, (const char*)pCur->rdr.reader->record->fields[i], pCur->rdr.reader->record->len[i], pTab->cTypes[i]);
     //sqlite3_result_text(ctx, (const char*)pCur->rdr.reader->record->fields[i], -1 , SQLITE_TRANSIENT);
   }
-
-  /*
-  if( i>=0 && i<pTab->nCol && pCur->azVal[i]!=0 ){
-    if(pTab->cTypes[i]){
-      sqlite3_result_int(ctx, atoi(pCur->azVal[i]));
-    } else {      
-      sqlite3_result_text(ctx, pCur->azVal[i], -1 , SQLITE_STATIC);
-      //sqlite3_result_text(ctx, pCur->azVal[i], pCur->aLen[i] -1, SQLITE_STATIC);
-    }
-  }
-  */
   return SQLITE_OK;
 }
 

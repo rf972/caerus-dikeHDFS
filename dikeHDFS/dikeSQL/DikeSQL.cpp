@@ -37,6 +37,7 @@ int DikeSQL::Run(DikeSQLParam * dikeSQLParam, DikeIO * input, DikeIO * output)
     streamReaderParam.reader->blockOffset = dikeSQLParam->blockOffset;
     streamReaderParam.name = "S3Object";
     streamReaderParam.schema = dikeSQLParam->schema;
+    streamReaderParam.headerInfo = GetHeaderInfo(dikeSQLParam->headerInfo);
 
     rc = StreamReaderInit(db, &streamReaderParam);
     if(rc != SQLITE_OK) {
@@ -116,7 +117,7 @@ void DikeSQL::Worker()
             record_counter++;            
             data_count = dike_sqlite3_get_data(sqlRes, res, 128, &total_bytes);
             if(total_bytes > 0){
-                writer_rc = dikeWriter->write(res, data_count, '|', '\n', total_bytes);
+                writer_rc = dikeWriter->write(res, data_count, ',', '\n', total_bytes);
             }
             sqlite3_rc = sqlite3_step(sqlRes);
         }
