@@ -87,7 +87,7 @@ public class DikeClient
         Path dikehdfsPath = new Path("ndphdfs://dikehdfs:9860/");
         Path hdfsPath = new Path("hdfs://dikehdfs:9000/");
 
-        //perfTest(dikehdfsPath, fname, conf, true /*pushdown*/, true/*partitionned*/);
+        perfTest(dikehdfsPath, fname, conf, true /*pushdown*/, true/*partitionned*/);
         perfTest(dikehdfsPath, fname, conf, true/*pushdown*/, false/*partitionned*/);
         //perfTest(dikehdfsPath, fname, conf, false/*pushdown*/, false/*partitionned*/);        
         //Validate(dikehdfsPath, fname, conf);
@@ -141,7 +141,8 @@ public class DikeClient
         xmlw.writeEndElement(); // Schema
 
         xmlw.writeStartElement("Query");
-        xmlw.writeCData("SELECT * FROM S3Object");
+        //xmlw.writeCData("SELECT * FROM S3Object");
+        xmlw.writeCData("SELECT s._1, s._2, _16 FROM S3Object s");
 
         //System.out.println("This case should have results of: 15|5|10|7.5");
         //xmlw.writeCData("SELECT  SUM(\"j\"), MIN(\"j\"), MAX(\"j\"), AVG(\"j\") FROM S3Object s WHERE i IS NOT NULL AND s.\"i\" > 4");        
