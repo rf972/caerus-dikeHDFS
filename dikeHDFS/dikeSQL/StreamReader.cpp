@@ -553,17 +553,7 @@ static int srd_Connect(
     return SQLITE_ERROR;
   }
 
-  memset(pTable, 0, sizeof(srdTable));
-
-  #if 0
-  schema = std::string("CREATE TABLE S3Object (") +  param->schema + ")";  
-  rc = srd_parse_schema(schema.c_str(), pTable);
-  if( rc ) {
-    std::cerr << "BAD schema" << " " << schema << std::endl;
-    goto tbltab_connect_error;
-  }  
-  #endif
-
+  memset(pTable, 0, sizeof(srdTable));  
   
   if(param->reader->blockOffset > 0){
     param->reader->seekRecord();
@@ -583,7 +573,7 @@ static int srd_Connect(
     }
   }
 
-  std::cout << "Schema: " << schema << std::endl;
+  //std::cout << "Schema: " << schema << std::endl;
   
   param->reader->initRecord(pTable->nCol);
   pTable->reader = param->reader;

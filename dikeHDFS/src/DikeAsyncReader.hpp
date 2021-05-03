@@ -183,7 +183,7 @@ class DikeAsyncReader{
             posPtr++;
         }
 
-        std::cout << "DikeAsyncReader detected " << nCol << " columns" << std::endl;
+       // std::cout << "DikeAsyncReader detected " << nCol << " columns" << std::endl;
 
         return nCol;
     }
