@@ -2,8 +2,8 @@ setup
 =====
 
 ```bash
-git clone https://github.com/peterpuhov-github/dikeHDFS.git
-cd dikeHDFS
+git clone https://github.com/open-infrastructure-labs/caerus-dikeHDFS.git
+cd caerus-dikeHDFS
 git submodule init
 git submodule update --recursive
 # docker network create dike-net

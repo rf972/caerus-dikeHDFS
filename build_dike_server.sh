@@ -34,6 +34,10 @@ DOCKER_INTERACTIVE_RUN=${DOCKER_INTERACTIVE_RUN-"-i -t"}
 
 mkdir -p ${ROOT_DIR}/build/dikeHDFS
 
+# Make sure server directory exists
+mkdir -p ${ROOT_DIR}/server
+
+
 BUILD_TYPE=Release
 
 if [ "$#" -ge 1 ] && [ $1 = "Debug" ]; then
