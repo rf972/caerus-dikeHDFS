@@ -31,6 +31,9 @@ DOCKER_HOME_DIR=${DOCKER_HOME_DIR:-/home/${USER_NAME}}
 
 HADOOP_HOME=/opt/hadoop/hadoop-${HADOOP_VERSION}
 
+# Make sure server directory exists
+mkdir -p ${ROOT_DIR}/server
+
 # Create NameNode and DataNode mount points
 mkdir -p ${ROOT_DIR}/volume/namenode
 mkdir -p ${ROOT_DIR}/volume/datanode0
