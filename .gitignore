@@ -1,5 +1,4 @@
 opt/*
-server/hadoop/*
 .idea/*
 build/*
 client/dikeclient/dependency-reduced-pom.xml
