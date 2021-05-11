@@ -38,6 +38,64 @@ using namespace Poco::Net;
 using namespace Poco::Util;
 using namespace std;
 
+class S3GatewayHandler : public Poco::Net::HTTPRequestHandler {
+public:  
+  int verbose = 0;
+  map<std::string, std::string> dikeConfig;
+  S3GatewayHandler(int verbose, map<std::string, std::string> & dikeConfig): HTTPRequestHandler() {
+    this->verbose = verbose;
+    this->dikeConfig = dikeConfig;
+  }
+
+  virtual void handleRequest(Poco::Net::HTTPServerRequest &req, Poco::Net::HTTPServerResponse &resp)
+  {    
+    std::istream& fromClient = req.stream();
+    
+    cout << DikeUtil().Yellow() << DikeUtil().Now() << " NN Start " << DikeUtil().Reset() << endl;      
+    req.write(cout);
+    return;
+    
+    /* Instantiate a copy of original request */
+    HTTPRequest hdfs_req((HTTPRequest)req);
+
+    /* Redirect to HDFS port */
+    hdfs_req.setHost(dikeConfig["dfs.namenode.http-address"]);
+
+    if(verbose) {      
+      cout << hdfs_req.getURI() << endl;
+      hdfs_req.write(cout);
+    }
+
+    /* Open HDFS session */    
+    SocketAddress namenodeSocketAddress = SocketAddress(dikeConfig["dfs.namenode.http-address"]);
+    HTTPClientSession session(namenodeSocketAddress);
+    std::ostream& toHDFS =session.sendRequest(hdfs_req);
+    Poco::StreamCopier::copyStream(fromClient, toHDFS, 8192);  
+    HTTPResponse hdfs_resp;
+    std::istream& fromHDFS = session.receiveResponse(hdfs_resp);
+    (HTTPResponse &)resp = hdfs_resp;    
+    
+    if(req.has("ReadParam") && resp.has("Location")) {
+      //cout << DikeUtil().Blue() << resp.get("Location") << DikeUtil().Reset() << endl;      
+      Poco::URI uri = Poco::URI(resp.get("Location"));      
+      uri.setPort(std::stoi(dikeConfig["dike.dfs.ndp.http-port"]));
+      resp.set("Location", uri.toString());
+      //cout << DikeUtil().Blue() << resp.get("Location") << DikeUtil().Reset() << endl;
+    }
+
+    if(verbose) {
+      resp.write(cout);
+    }
+    ostream& toClient = resp.send();
+    Poco::StreamCopier::copyStream(fromHDFS, toClient, 8192);
+    toClient.flush();
+
+    if(verbose) {
+      cout << DikeUtil().Yellow() << DikeUtil().Now() << " NN End " << DikeUtil().Reset() << endl;
+    }
+  }   
+};
+
 class NameNodeHandler : public Poco::Net::HTTPRequestHandler {
 public:  
   int verbose = 0;
@@ -228,6 +286,20 @@ public:
   }
 };
 
+class S3GatewayHandlerFactory : public HTTPRequestHandlerFactory {
+public:
+  int verbose = 0;
+  map<std::string, std::string> dikeConfig;
+  S3GatewayHandlerFactory(int verbose, map<std::string, std::string>& dikeConfig):HTTPRequestHandlerFactory() {
+    this->verbose = verbose;
+    this->dikeConfig = dikeConfig;
+  }
+
+  virtual HTTPRequestHandler* createRequestHandler(const HTTPServerRequest & req) {
+    return new S3GatewayHandler(verbose, dikeConfig);
+  }
+};
+
 class DikeServerApp : public ServerApplication
 {
   public:
@@ -268,6 +340,7 @@ class DikeServerApp : public ServerApplication
   {
     HTTPServerParams* nameNodeParams = new HTTPServerParams;
     HTTPServerParams* dataNodeParams = new HTTPServerParams;
+    HTTPServerParams* s3GatewayParams = new HTTPServerParams;
 
     loadConfiguration(Poco::Util::Application::PRIO_DEFAULT);   
     loadDikeConfig();
@@ -276,16 +349,21 @@ class DikeServerApp : public ServerApplication
     dataNodeParams->setMaxThreads(16);
     dataNodeParams->setMaxQueued(128);
         
-    HTTPServer nameNode(new NameNodeHandlerFactory(verbose, dikeConfig), 
-                        ServerSocket(SocketAddress(dikeConfig["dike.dfs.gateway.http-address"])), 
+    HTTPServer nameNode(new NameNodeHandlerFactory(verbose, dikeConfig),                         
+                        ServerSocket(std::stoi(dikeConfig["dike.dfs.gateway.http-port"])),
                         nameNodeParams);
 
     HTTPServer dataNode(new DataNodeHandlerFactory(verbose, dikeConfig),
                         ServerSocket(std::stoi(dikeConfig["dike.dfs.ndp.http-port"])), 
                         dataNodeParams);
 
+    HTTPServer s3Gateway(new S3GatewayHandlerFactory(verbose, dikeConfig),
+                        ServerSocket(std::stoi(dikeConfig["dike.S3.gateway.http-port"])), 
+                        s3GatewayParams);
+
     nameNode.start();
     dataNode.start();
+    s3Gateway.start();
 
 #if _DEBUG
     cout << endl << "Server started (Debug)" << endl;
@@ -298,6 +376,7 @@ class DikeServerApp : public ServerApplication
     cout << endl << "Shutting down..." << endl;
     nameNode.stop();
     dataNode.stop();
+    s3Gateway.stop();
 
     return Application::EXIT_OK;
   }

@@ -11,13 +11,19 @@
     </property>
 
     <property>
-        <name>dike.dfs.gateway.http-address</name>
-        <value>dikehdfs:9860</value>
+        <name>dike.dfs.gateway.http-port</name>
+        <value>9860</value>
+    </property> 
+
+    <property>
+        <name>dike.S3.gateway.http-port</name>
+        <value>9858</value>
     </property> 
 
     <property>
         <name>dike.dfs.ndp.http-port</name>
         <value>9859</value>
     </property>
+
     </dike>
 </configuration>

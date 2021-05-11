@@ -7,6 +7,7 @@ server/dikeHDFS
 dikeHDFS/build/*
 client/ndp-hdfs/target/
 client/ndp-hdfs-client/target/
+client/ndp-s3-client/target/
 data/*
 volume/*
 dikeHDFS/test/*
