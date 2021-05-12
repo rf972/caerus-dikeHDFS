@@ -147,7 +147,7 @@ class DikeAsyncReader{
         bool underQuote = false;
         while(posPtr < buffer->endPtr) {
             if(*posPtr == qDelim){
-                underQuote = !underQuote;
+                //underQuote = !underQuote;
             }
             if(!underQuote){
                 if(*posPtr == rDelim){
