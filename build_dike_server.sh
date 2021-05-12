@@ -37,20 +37,13 @@ mkdir -p ${ROOT_DIR}/build/dikeHDFS
 # Make sure server directory exists
 mkdir -p ${ROOT_DIR}/server
 
-
 BUILD_TYPE=Release
 
 if [ "$#" -ge 1 ] && [ $1 = "Debug" ]; then
   BUILD_TYPE=Debug
 fi
 
-CMD="                                              \
-mkdir -p build/${BUILD_TYPE}                    && \
-cd build/${BUILD_TYPE}                          && \
-cmake -D CMAKE_BUILD_TYPE=${BUILD_TYPE} ../..   && \
-make                                            && \
-cd ../../                                          \
-"
+CMD="./build.sh ${BUILD_TYPE}"
 
 if [ "$#" -ge 1 ] && [ $1 = "-d" ]; then
   echo "Entering debug mode"
@@ -59,10 +52,10 @@ if [ "$#" -ge 1 ] && [ $1 = "-d" ]; then
 fi
 
 docker run --rm=true $DOCKER_INTERACTIVE_RUN \
-  -v "${ROOT_DIR}/external/poco:${DOCKER_HOME_DIR}/dikeHDFS/external/poco" \
   -v "${ROOT_DIR}/dikeHDFS:${DOCKER_HOME_DIR}/dikeHDFS" \
+  -v "${ROOT_DIR}/external:${DOCKER_HOME_DIR}/dikeHDFS/external" \
   -w "${DOCKER_HOME_DIR}/dikeHDFS" \
-  -v "${ROOT_DIR}/build/dikeHDFS:${DOCKER_HOME_DIR}/dikeHDFS/build" \
+  -v "${ROOT_DIR}/build/dikeHDFS:${DOCKER_HOME_DIR}/build" \
   -u "${USER_ID}" \
   "hadoop-${HADOOP_VERSION}-ndp-${USER_NAME}" ${CMD}
 
@@ -70,3 +63,4 @@ cp ${ROOT_DIR}/build/dikeHDFS/${BUILD_TYPE}/dikeHDFS ${ROOT_DIR}/server/
 popd
 
 
+# "-L${CMAKE_SOURCE_DIR}/external/build-aws-debug/lib -laws-c-event-stream  -laws-checksums -laws-c-common"
