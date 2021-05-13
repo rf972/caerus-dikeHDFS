@@ -12,6 +12,7 @@ import com.amazonaws.services.s3.model.SelectObjectContentEvent;
 import com.amazonaws.services.s3.model.SelectObjectContentEventVisitor;
 import com.amazonaws.services.s3.model.SelectObjectContentRequest;
 import com.amazonaws.services.s3.model.SelectObjectContentResult;
+import com.amazonaws.services.s3.model.ScanRange;
 
 import java.io.File;
 //import java.io.FileOutputStream;
@@ -27,7 +28,7 @@ import static com.amazonaws.util.IOUtils.copy;
 public class NdpS3Client {
 
     private static final String BUCKET_NAME = "tpch-test";
-    private static final String CSV_OBJECT_KEY = "ineitem.csv";    
+    private static final String CSV_OBJECT_KEY = "lineitem.csv";    
     private static final String QUERY = "select s._1 from S3Object s";
 
     public static void main(String[] args) throws Exception {
@@ -98,6 +99,9 @@ public class NdpS3Client {
         OutputSerialization outputSerialization = new OutputSerialization();
         outputSerialization.setCsv(new CSVOutput());
         request.setOutputSerialization(outputSerialization);
+
+        ScanRange scanRange = new ScanRange().withStart(0).withEnd(42);
+        request.setScanRange(scanRange);
 
         return request;
     }

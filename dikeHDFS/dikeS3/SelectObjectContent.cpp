@@ -10,7 +10,6 @@
 #include <Poco/Util/AbstractConfiguration.h>
 #include <Poco/Util/XMLConfiguration.h>
 
-
 #include <aws/event-stream/event_stream.h>
 #include <aws/common/encoding.h>
 #include <aws/checksums/crc.h> 
@@ -24,16 +23,10 @@
 #include <memory.h>
 #include <assert.h>
 
-#include <sqlite3.h>
 #include <stdio.h>
 
 #include "S3Handlers.hpp"
-#include "TimeUtil.hpp"
-
-extern "C" {
-extern int sqlite3_csv_init(sqlite3 *db, char **pzErrMsg, const sqlite3_api_routines *pApi);
-extern int sqlite3_tbl_init(sqlite3 *db, char **pzErrMsg, const sqlite3_api_routines *pApi);
-}
+#include "DikeUtil.hpp"
 
 #  define DIKE_ALWAYS_INLINE  __attribute__((always_inline)) inline
 #  define DIKE_LIKELY(x)      __builtin_expect(!!(x), 1)
@@ -94,10 +87,10 @@ class DikeByteBuffer
         free(m_Msg.message_buffer);      
     }
 
-    void Write(ostream& outStream, const char * buf, int len) {
+    void Write(ostream& toClient, const char * buf, int len) {
         if(m_Pos + len > DIKE_BYTE_BUFFER_SIZE){        
             UpdateCrc(&m_Msg, m_Pos);
-            outStream.write((const char *)(m_Msg.message_buffer) , m_MsgLen + m_Pos);
+            toClient.write((const char *)(m_Msg.message_buffer) , m_MsgLen + m_Pos);
             m_TotalBytes += m_Pos;
             m_Pos = 0;
         }
@@ -105,9 +98,9 @@ class DikeByteBuffer
         m_Pos += len;
     }
 
-    void Flush(ostream& outStream) {      
+    void Flush(ostream& toClient) {      
         UpdateCrc(&m_Msg, m_Pos);      
-        outStream.write((const char *)(m_Msg.message_buffer), m_MsgLen + m_Pos);
+        toClient.write((const char *)(m_Msg.message_buffer), m_MsgLen + m_Pos);
         m_TotalBytes += m_Pos;
         m_Pos = 0;
     }
@@ -137,7 +130,7 @@ class DikeByteBuffer
         aws_write_u32(running_crc, buffer_offset);        
     }
 
-    int SendEnd(ostream& outStream) {
+    int SendEnd(ostream& toClient) {
         struct aws_array_list headers;
         struct aws_allocator *alloc = aws_default_allocator();
         struct aws_event_stream_message msg;        
@@ -146,14 +139,14 @@ class DikeByteBuffer
         aws_event_stream_add_string_header(&headers, MESSAGE_TYPE_HEADER, sizeof(MESSAGE_TYPE_HEADER) - 1, MESSAGE_TYPE_EVENT, sizeof(MESSAGE_TYPE_EVENT) - 1, 0);    
         aws_event_stream_add_string_header(&headers, EVENT_TYPE_HEADER, sizeof(EVENT_TYPE_HEADER) - 1, EVENT_TYPE_END, sizeof(EVENT_TYPE_END) - 1, 0);
         aws_event_stream_message_init(&msg, alloc, &headers, NULL);    
-        outStream.write((const char *)aws_event_stream_message_buffer(&msg), aws_event_stream_message_total_length(&msg));    
+        toClient.write((const char *)aws_event_stream_message_buffer(&msg), aws_event_stream_message_total_length(&msg));    
         aws_event_stream_message_clean_up(&msg);
         aws_event_stream_headers_list_cleanup(&headers);
 
         return 0;
     }    
 
-    int SendCont(ostream& outStream) {  
+    int SendCont(ostream& toClient) {  
         struct aws_array_list headers;
         struct aws_allocator *alloc = aws_default_allocator();
         struct aws_event_stream_message msg;        
@@ -162,7 +155,7 @@ class DikeByteBuffer
         aws_event_stream_add_string_header(&headers, MESSAGE_TYPE_HEADER, sizeof(MESSAGE_TYPE_HEADER) - 1, MESSAGE_TYPE_EVENT, sizeof(MESSAGE_TYPE_EVENT) - 1, 0);    
         aws_event_stream_add_string_header(&headers, EVENT_TYPE_HEADER, sizeof(EVENT_TYPE_HEADER) - 1, EVENT_TYPE_CONT, sizeof(EVENT_TYPE_CONT) - 1, 0);
         aws_event_stream_message_init(&msg, alloc, &headers, NULL);    
-        outStream.write((const char *)aws_event_stream_message_buffer(&msg), aws_event_stream_message_total_length(&msg));    
+        toClient.write((const char *)aws_event_stream_message_buffer(&msg), aws_event_stream_message_total_length(&msg));    
         aws_event_stream_message_clean_up(&msg);
         aws_event_stream_headers_list_cleanup(&headers);
 
@@ -179,6 +172,28 @@ class DikeByteBuffer
     int m_MsgLen;
 };
 
+void AbstractConfigutationWrite(AbstractConfiguration & cfg, const std::string& base, std::ostream& ostr)
+{
+    AbstractConfiguration::Keys keys;
+    cfg.keys(base, keys);
+    if (keys.empty()) {
+        if (cfg.hasProperty(base)) {
+            std::string msg;
+            msg.append(base);
+            msg.append(" = ");
+            msg.append(cfg.getString(base));
+            ostr << msg << endl;
+        }
+    } else {
+        for (AbstractConfiguration::Keys::const_iterator it = keys.begin(); it != keys.end(); ++it) {
+            std::string fullKey = base;
+            if (!fullKey.empty()) fullKey += '.';
+            fullKey.append(*it);
+            AbstractConfigutationWrite(cfg, fullKey, ostr);
+        }
+    }
+}
+
 void SelectObjectContent::handleRequest(Poco::Net::HTTPServerRequest &req, Poco::Net::HTTPServerResponse &resp)
 {
     resp.setStatus(HTTPResponse::HTTP_OK);
@@ -191,138 +206,31 @@ void SelectObjectContent::handleRequest(Poco::Net::HTTPServerRequest &req, Poco:
     resp.setChunkedTransferEncoding(true);    
     resp.setKeepAlive(true);
 
-    ostream& outStream = resp.send();    
-    int rc;
-    char  * errmsg;
+    req.write(cout);
 
-    sqlite3 *db;
-    rc = sqlite3_open(":memory:", &db);
-    if( rc ) {
-        cout << "Can't open database: " << sqlite3_errmsg(db);
-        return;
-    }
-
-    rc = sqlite3_csv_init(db, &errmsg, NULL);
-    if(rc != SQLITE_OK) {
-        cout << "Can't load csv extention: " << errmsg << std::endl;
-        sqlite3_free(errmsg);
-        return;
-    }
-
-    rc = sqlite3_tbl_init(db, &errmsg, NULL);
-    if(rc != SQLITE_OK) {
-        cout << "Can't load tbl extention: " << errmsg << std::endl;
-        sqlite3_free(errmsg);
-        return;
-    }
-
-    string dataPath = "/data";
-    char * env = getenv("DIKECS_DATA_PATH");
-    if(env != NULL){
-        dataPath = string(env);
-        cout << "dataPath set to " << dataPath << endl;
-    }    
+    ostream& toClient = resp.send();    
 
     string uri = req.getURI();
     size_t pos = uri.find("%2F");
     if(pos != string::npos){
         uri.replace(pos,3, "/");
     }
-    string sqlFileName = dataPath + uri.substr(0, uri.find("?"));
-
-    cout << sqlFileName << endl;
-
-    string sqlCreateVirtualTable;
-
-    bool tbl_mode = false;
-    size_t extIndex = sqlFileName.find(".tbl");
-    if (extIndex != string::npos) {
-        tbl_mode = true;
-    }
-
-    if(!tbl_mode){
-        sqlCreateVirtualTable = "CREATE VIRTUAL TABLE S3Object USING csv(filename='";
-        sqlCreateVirtualTable += sqlFileName + "'";
-        sqlCreateVirtualTable += ", header=true" ;
-    }
-
-    if(tbl_mode){         
-        string schemaFileName = sqlFileName.substr(0, extIndex) + ".schema";                   
-
-        sqlCreateVirtualTable = "CREATE VIRTUAL TABLE S3Object USING tbl(filename='";
-        sqlCreateVirtualTable += sqlFileName + "'";
-        ifstream fs(schemaFileName);
-        string schema((istreambuf_iterator<char>(fs)), istreambuf_iterator<char>());
-        
-        if(!schema.empty()) {
-            sqlCreateVirtualTable += ", schema=CREATE TABLE S3Object (" + schema + ")";
-        }
-    }
-
-    sqlCreateVirtualTable += ");";
-
-    rc = sqlite3_exec(db, sqlCreateVirtualTable.c_str(), NULL, NULL, &errmsg);
-    if(rc != SQLITE_OK) {
-        cout << "Can't create virtual table: " << errmsg << endl;
-        sqlite3_free(errmsg);
-        sqlite3_close(db);
-        return;
-    }
+    string sqlFileName = uri.substr(0, uri.find("?"));    
 
     AbstractConfiguration *cfg = new XMLConfiguration(req.stream());
+    AbstractConfigutationWrite(*cfg, "", cout);
+
+    cout << sqlFileName << endl;
     string sqlQuery = cfg->getString("Expression");
     cout << "SQL " << sqlQuery << endl;
 
     DikeByteBuffer dbb = DikeByteBuffer(); 
 
-    sqlite3_stmt *sqlRes;
-    rc = sqlite3_prepare_v2(db, sqlQuery.c_str(), -1, &sqlRes, 0);        
-    if (rc != SQLITE_OK) {
-        std::cerr << "Can't execute query: " << sqlite3_errmsg(db) << std::endl;        
-        sqlite3_close(db);
-        return;
-    }            
-
-    int records = 0;
-    while ( (rc = sqlite3_step(sqlRes)) == SQLITE_ROW) {      
-        int data_count = sqlite3_data_count(sqlRes);
-        
-        for(int i = 0; i < data_count; i++) {
-            const char* text = (const char*)sqlite3_column_text(sqlRes, i);
-                
-            if(text){
-            int len = strlen(text);
-            if(DIKE_UNLIKELY(strchr(text,','))){
-                dbb.Write(outStream, "\"", 1);
-                dbb.Write(outStream, text, len);
-                dbb.Write(outStream, "\"", 1);
-            } else {                  
-                dbb.Write(outStream,text, len);
-            }
-            } else {            
-                dbb.Write(outStream,"NULL", 4);
-            }
-            if(i < data_count -1) {                  
-                dbb.Write(outStream,",", 1);
-            }          
-        }
-        dbb.Write(outStream,"\n", 1);
-        if(records%1000000 == 0){
-        dbb.SendCont(outStream);
-        }
-        records++;
-    }
-
-    dbb.Flush(outStream);
-
-    dbb.SendEnd(outStream);
-    outStream.flush();
-
-    sqlite3_finalize(sqlRes);
-    sqlite3_close(db);
+    dbb.SendEnd(toClient);
+    toClient.flush();
    
-    cout << TimeUtil().Yellow() << TimeUtil().Now() << " Done " << TimeUtil().Reset();
-    cout << TimeUtil().Red() << "Total bytes " << dbb.m_TotalBytes << " " << TimeUtil().Reset();
-    cout << req.getURI() << endl;
+    cout << DikeUtil().Yellow() << DikeUtil().Now() << " Done " << DikeUtil().Reset();
+    cout << DikeUtil().Red() << "Total bytes " << dbb.m_TotalBytes << " " << DikeUtil().Reset() << endl;
+   
 }
 

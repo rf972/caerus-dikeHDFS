@@ -28,7 +28,7 @@
 #include <algorithm>
 #include <map>
 
-//#include "S3Handlers.hpp"
+#include "S3Handlers.hpp"
 #include "DikeUtil.hpp"
 #include "DikeIO.hpp"
 #include "DikeSQL.hpp"
@@ -296,7 +296,8 @@ public:
   }
 
   virtual HTTPRequestHandler* createRequestHandler(const HTTPServerRequest & req) {
-    return new S3GatewayHandler(verbose, dikeConfig);
+    //return new S3GatewayHandler(verbose, dikeConfig);
+    return new SelectObjectContent();
   }
 };
 

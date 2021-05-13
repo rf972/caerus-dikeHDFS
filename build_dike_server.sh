@@ -52,8 +52,8 @@ if [ "$#" -ge 1 ] && [ $1 = "-d" ]; then
 fi
 
 docker run --rm=true $DOCKER_INTERACTIVE_RUN \
-  -v "${ROOT_DIR}/dikeHDFS:${DOCKER_HOME_DIR}/dikeHDFS" \
   -v "${ROOT_DIR}/external:${DOCKER_HOME_DIR}/dikeHDFS/external" \
+  -v "${ROOT_DIR}/dikeHDFS:${DOCKER_HOME_DIR}/dikeHDFS" \
   -w "${DOCKER_HOME_DIR}/dikeHDFS" \
   -v "${ROOT_DIR}/build/dikeHDFS:${DOCKER_HOME_DIR}/build" \
   -u "${USER_ID}" \

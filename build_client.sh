@@ -58,8 +58,8 @@ docker run --rm=true -it \
   -w "${DOCKER_HOME_DIR}/client" \
   -v "${ROOT_DIR}/build/.m2:${DOCKER_HOME_DIR}/.m2" \
   -v "${ROOT_DIR}/build/.gnupg:${DOCKER_HOME_DIR}/.gnupg" \
-  -e "AWS_ACCESS_KEY_ID=${USER_ID}" \
-  -e "AWS_SECRET_ACCESS_KEY=${USER_ID}" \
+  -e "AWS_ACCESS_KEY_ID=${USER_NAME}" \
+  -e "AWS_SECRET_ACCESS_KEY=admin123" \
   -e "AWS_EC2_METADATA_DISABLED" \
   -u "${USER_ID}" \
   --network dike-net \
