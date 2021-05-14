@@ -121,7 +121,7 @@ void DikeSQL::Worker()
             }
             sqlite3_rc = sqlite3_step(sqlRes);
         }
-        dikeWriter->write('\n');        
+        //dikeWriter->write('\n');        
     } catch (...) {
         std::cout << "Caught exception " << std::endl;
     }

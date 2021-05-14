@@ -256,6 +256,8 @@ void SelectObjectContent::handleRequest(Poco::Net::HTTPServerRequest &req, Poco:
     readParam["userName"] = userName;
     readParam["fileName"] = fileName;
     readParam["sqlQuery"] = sqlQuery;
+    readParam["ScanRange.Start"] = cfg->getString("ScanRange.Start", "0");
+    readParam["ScanRange.End"] = cfg->getString("ScanRange.End", "0");
 
     readFromHdfs(readParam, toClient);
 }
@@ -284,9 +286,10 @@ void SelectObjectContent::readFromHdfs(std::map<std::string, std::string> readPa
     HTTPResponse nameNodeResp;
     nameNodeSession.sendRequest(nameNodeReq);
     nameNodeSession.receiveResponse(nameNodeResp);
-
-    // nameNodeResp.write(cout);
     
+    uint64_t offset = std::stoull(readParam["ScanRange.Start"]);
+    uint64_t blockSize = std::stoull(readParam["ScanRange.End"]) - offset;    
+
     /* Create XML string for NDP ReadParam */
     Poco::XML::Document* doc = new Poco::XML::Document();
     Poco::XML::Element* processorElement = doc->createElement("Processor");
@@ -305,7 +308,7 @@ void SelectObjectContent::readFromHdfs(std::map<std::string, std::string> readPa
     
     Poco::XML::Element* blockSizeElement = doc->createElement("BlockSize");
     configurationElement->appendChild(blockSizeElement);
-    Poco::XML::Text *  blockSizeText = doc->createTextNode("0");        
+    Poco::XML::Text *  blockSizeText = doc->createTextNode(std::to_string(blockSize));        
     blockSizeElement->appendChild((Poco::XML::Node *)blockSizeText);
 
     std::ostringstream ostr;
@@ -318,10 +321,23 @@ void SelectObjectContent::readFromHdfs(std::map<std::string, std::string> readPa
     uri = Poco::URI(nameNodeResp.get("Location"));
     uri.setPort(std::stoi(dikeConfig["dike.dfs.ndp.http-port"]));
 
+    queryParameters = uri.getQueryParameters();
+    /* Remove offset from parameters */
+    QueryParameters::iterator it = queryParameters.begin();
+    while (it != queryParameters.end()) {
+        if((*it).first == "offset") {
+            queryParameters.erase(it);
+            break;
+        }
+        ++it;
+    }
+
+    uri.setQueryParameters(queryParameters);
+    uri.addQueryParameter("offset", std::to_string(offset));
+
     HTTPRequest dataNodeReq;
     dataNodeReq.setHost(uri.getHost(), uri.getPort());
     dataNodeReq.setMethod("GET");
- 
     dataNodeReq.setURI(uri.getPath() + "?" + uri.getRawQuery());
     dataNodeReq.set("ReadParam", ostr.str());
     HTTPClientSession dataNodeSession(uri.getHost(), uri.getPort());    
@@ -337,25 +353,3 @@ void SelectObjectContent::readFromHdfs(std::map<std::string, std::string> readPa
     cout << DikeUtil().Yellow() << DikeUtil().Now() << " Done " << DikeUtil().Reset();
     cout << DikeUtil().Red() << "Total bytes " << dbb.m_TotalBytes << " " << DikeUtil().Reset() << endl;       
 }
-
-#if 0
-
-http://dikehdfs:9859/webhdfs/v1/tpch-test/lineitem.csv?op=OPEN&user.name=peter&namenoderpcaddress=dikehdfs:9000&buffersize=131072&offset=0
-offset: 0
-GET http://dikehdfs:9859/webhdfs/v1/tpch-test/lineitem.csv?op=OPEN&user.name=peter&namenoderpcaddress=dikehdfs:9000&buffersize=131072&offset=0 HTTP/1.0
-Host: dikehdfs:9864
-ReadParam: <Processor><Name>dikeSQL</Name><Configuration><Query><![CDATA[select s._1 from S3Object s]]></Query><BlockSize>0</BlockSize></Configuration></Processor>
-Connection: Close
-
-
-/webhdfs/v1/tpch-test/lineitem.csv?op=OPEN&user.name=peter&namenoderpcaddress=dikehdfs:9000&buffersize=131072&offset=0
-offset: 0
-GET /webhdfs/v1/tpch-test/lineitem.csv?op=OPEN&user.name=peter&namenoderpcaddress=dikehdfs:9000&buffersize=131072&offset=0 HTTP/1.1
-X-Hadoop-Accept-EZ: true
-ReadParam: <?xml version='1.0' encoding='UTF-8'?><Processor><Name>dikeSQL</Name><Configuration><Schema>l_orderkey INTEGER,l_partkey INTEGER,l_suppkey INTEGER,l_linenumber INTEGER,l_quantity NUMERIC,l_extendedprice NUMERIC,l_discount NUMERIC,l_tax NUMERIC,l_returnflag,l_linestatus,l_shipdate,l_commitdate,l_receiptdate,l_shipinstruct,l_shipmode,l_comment</Schema><Query><![CDATA[SELECT s._1, s._2, _16 FROM S3Object s]]></Query><BlockSize>0</BlockSize></Configuration></Processor>
-User-Agent: Java/11.0.10
-Host: dikehdfs:9864
-Accept: text/html, image/gif, image/jpeg, *; q=.2, ; q=.2
-Connection: keep-alive
-
-#endif

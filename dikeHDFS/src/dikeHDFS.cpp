@@ -161,7 +161,7 @@ public:
         
         dikeSQLParam.query = cfg->getString("Configuration.Query");
         dikeSQLParam.blockSize = cfg->getUInt64("Configuration.BlockSize");
-        dikeSQLParam.headerInfo = cfg->getString("Configuration.headerInfo", "IGNORE");
+        dikeSQLParam.headerInfo = cfg->getString("Configuration.HeaderInfo", "IGNORE");
 
         ostream& toClient = resp.send();
         toClient.flush();

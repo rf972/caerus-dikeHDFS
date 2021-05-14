@@ -100,7 +100,7 @@ public class NdpS3Client {
         outputSerialization.setCsv(new CSVOutput());
         request.setOutputSerialization(outputSerialization);
 
-        ScanRange scanRange = new ScanRange().withStart(0).withEnd(42);
+        ScanRange scanRange = new ScanRange().withStart(128<<20).withEnd(2* (128<<20));
         request.setScanRange(scanRange);
 
         return request;
