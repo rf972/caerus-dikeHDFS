@@ -88,7 +88,7 @@ public class DikeClient
         Path hdfsPath = new Path("hdfs://dikehdfs:9000/");
 
         perfTest(dikehdfsPath, fname, conf, true/*pushdown*/, false/*partitionned*/);
-        perfTest(dikehdfsPath, fname, conf, true /*pushdown*/, true/*partitionned*/);
+        //perfTest(dikehdfsPath, fname, conf, true /*pushdown*/, true/*partitionned*/);
         
         //perfTest(dikehdfsPath, fname, conf, false/*pushdown*/, false/*partitionned*/);        
         //Validate(dikehdfsPath, fname, conf);

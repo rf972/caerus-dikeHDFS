@@ -29,7 +29,7 @@ public class NdpS3Client {
 
     private static final String BUCKET_NAME = "tpch-test";
     private static final String CSV_OBJECT_KEY = "lineitem.csv";    
-    private static final String QUERY = "select s._1 from S3Object s";
+    private static final String QUERY = "SELECT s._1, s._2, _16 FROM S3Object s";
 
     public static void main(String[] args) throws Exception {
         long totalDataSize = 0;

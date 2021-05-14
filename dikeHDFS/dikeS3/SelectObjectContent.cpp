@@ -5,10 +5,22 @@
 #include <Poco/Net/HTTPResponse.h>
 #include <Poco/Net/HTTPServerRequest.h>
 #include <Poco/Net/HTTPServerResponse.h>
-#include <Poco/Util/ServerApplication.h>
+#include <Poco/Net/HTTPClientSession.h>
 
+#include <Poco/Util/ServerApplication.h>
 #include <Poco/Util/AbstractConfiguration.h>
 #include <Poco/Util/XMLConfiguration.h>
+#include <Poco/URI.h>
+
+/* XML related headers */
+#include "Poco/DOM/DOMParser.h"
+#include "Poco/DOM/DOMWriter.h"
+#include "Poco/DOM/Document.h"
+#include "Poco/DOM/Element.h"
+#include "Poco/DOM/AutoPtr.h"
+#include "Poco/SAX/InputSource.h"
+#include "Poco/XML/XMLWriter.h"
+#include <sstream>
 
 #include <aws/event-stream/event_stream.h>
 #include <aws/common/encoding.h>
@@ -22,15 +34,10 @@
 #include <ctype.h>
 #include <memory.h>
 #include <assert.h>
-
 #include <stdio.h>
 
 #include "S3Handlers.hpp"
 #include "DikeUtil.hpp"
-
-#  define DIKE_ALWAYS_INLINE  __attribute__((always_inline)) inline
-#  define DIKE_LIKELY(x)      __builtin_expect(!!(x), 1)
-#  define DIKE_UNLIKELY(x)    __builtin_expect(!!(x), 0)
 
 using namespace Poco::Net;
 using namespace Poco::Util;
@@ -96,6 +103,21 @@ class DikeByteBuffer
         }
         memcpy(m_Payload + m_Pos, buf, len); // This cost 0.8 sec
         m_Pos += len;
+    }
+
+    void copyStreamToAWS(std::istream& istr, ostream& toClient) {
+        std::streamsize n;
+        do {
+            istr.read((char*)(m_Payload + m_Pos), DIKE_BYTE_BUFFER_SIZE - m_Pos);
+            n = istr.gcount();
+            if (n > 0) {
+                m_Pos += n;
+                UpdateCrc(&m_Msg, m_Pos);
+                toClient.write((const char *)(m_Msg.message_buffer) , m_MsgLen + m_Pos);
+                m_TotalBytes += m_Pos;
+                m_Pos = 0;
+            }
+        } while (n > 0);
     }
 
     void Flush(ostream& toClient) {      
@@ -209,28 +231,131 @@ void SelectObjectContent::handleRequest(Poco::Net::HTTPServerRequest &req, Poco:
     req.write(cout);
 
     ostream& toClient = resp.send();    
+    Poco::URI uri = Poco::URI(req.getURI());
+    
+    cout << "uri.getQuery() : " << uri.getQuery() << endl;
+    cout << "uri.getPath() : " << uri.getPath() << endl;
+    //cout << "Authorization : " << req.get("Authorization") << endl;
 
-    string uri = req.getURI();
-    size_t pos = uri.find("%2F");
-    if(pos != string::npos){
-        uri.replace(pos,3, "/");
-    }
-    string sqlFileName = uri.substr(0, uri.find("?"));    
-
+    string authorization = req.get("Authorization");
+    std::size_t startPos = authorization.find("Credential=");
+    startPos = authorization.find("=", startPos) + 1;
+    std::size_t endPos = authorization.find("/", startPos);
+    string userName = authorization.substr(startPos, endPos - startPos);
+    cout << "User name: " << userName << endl;
+    
     AbstractConfiguration *cfg = new XMLConfiguration(req.stream());
     AbstractConfigutationWrite(*cfg, "", cout);
 
-    cout << sqlFileName << endl;
+    string fileName = uri.getPath();
+    cout << "File name: " << fileName << endl;
     string sqlQuery = cfg->getString("Expression");
     cout << "SQL " << sqlQuery << endl;
 
-    DikeByteBuffer dbb = DikeByteBuffer(); 
+    std::map<std::string, std::string> readParam;
+    readParam["userName"] = userName;
+    readParam["fileName"] = fileName;
+    readParam["sqlQuery"] = sqlQuery;
 
-    dbb.SendEnd(toClient);
-    toClient.flush();
-   
-    cout << DikeUtil().Yellow() << DikeUtil().Now() << " Done " << DikeUtil().Reset();
-    cout << DikeUtil().Red() << "Total bytes " << dbb.m_TotalBytes << " " << DikeUtil().Reset() << endl;
-   
+    readFromHdfs(readParam, toClient);
 }
 
+void SelectObjectContent::readFromHdfs(std::map<std::string, std::string> readParam, std::ostream & toClient)
+{    
+    using QueryParameters = std::vector<std::pair<std::string, std::string>>;
+    using Pair = std::pair<std::string, std::string>;
+
+    HTTPRequest nameNodeReq;
+    nameNodeReq.setHost(dikeConfig["dfs.namenode.http-address"]);
+    /* We need to create URI similar to this: /webhdfs/v1/tpch-test/lineitem.csv?op=OPEN&user.name=peter&buffersize=131072 */
+    Poco::URI uri = Poco::URI("/webhdfs/v1" + readParam["fileName"]);
+    QueryParameters queryParameters;
+    queryParameters.push_back(Pair("op","OPEN"));
+    queryParameters.push_back(Pair("user.name",readParam["userName"]));
+    queryParameters.push_back(Pair("buffersize","131072"));
+
+    uri.setQueryParameters(queryParameters);
+    cout << uri.toString() << endl;
+    nameNodeReq.setURI(uri.toString());
+    
+    /* Open HDFS Nane Node session */    
+    SocketAddress nameNodeSocketAddress = SocketAddress(dikeConfig["dfs.namenode.http-address"]);
+    HTTPClientSession nameNodeSession(nameNodeSocketAddress);
+    HTTPResponse nameNodeResp;
+    nameNodeSession.sendRequest(nameNodeReq);
+    nameNodeSession.receiveResponse(nameNodeResp);
+
+    // nameNodeResp.write(cout);
+    
+    /* Create XML string for NDP ReadParam */
+    Poco::XML::Document* doc = new Poco::XML::Document();
+    Poco::XML::Element* processorElement = doc->createElement("Processor");
+    doc->appendChild(processorElement);
+    Poco::XML::Element* nameElement = doc->createElement("Name");
+    processorElement->appendChild(nameElement);
+    Poco::XML::Text * nameText = doc->createTextNode("dikeSQL");        
+    nameElement->appendChild((Poco::XML::Node *)nameText);
+
+    Poco::XML::Element* configurationElement = doc->createElement("Configuration");
+    processorElement->appendChild(configurationElement);
+    Poco::XML::Element* queryElement = doc->createElement("Query");
+    configurationElement->appendChild(queryElement);
+    Poco::XML::CDATASection * queryCDATASection = doc->createCDATASection(readParam["sqlQuery"]);
+    queryElement->appendChild((Poco::XML::Node *)queryCDATASection);
+    
+    Poco::XML::Element* blockSizeElement = doc->createElement("BlockSize");
+    configurationElement->appendChild(blockSizeElement);
+    Poco::XML::Text *  blockSizeText = doc->createTextNode("0");        
+    blockSizeElement->appendChild((Poco::XML::Node *)blockSizeText);
+
+    std::ostringstream ostr;
+    Poco::XML::DOMWriter writer;
+    writer.writeNode(ostr, doc);    
+    doc->release();
+    cout << ostr.str() << endl;
+
+    /* Redirect request to NDP port on datanode */    
+    uri = Poco::URI(nameNodeResp.get("Location"));
+    uri.setPort(std::stoi(dikeConfig["dike.dfs.ndp.http-port"]));
+
+    HTTPRequest dataNodeReq;
+    dataNodeReq.setHost(uri.getHost(), uri.getPort());
+    dataNodeReq.setMethod("GET");
+ 
+    dataNodeReq.setURI(uri.getPath() + "?" + uri.getRawQuery());
+    dataNodeReq.set("ReadParam", ostr.str());
+    HTTPClientSession dataNodeSession(uri.getHost(), uri.getPort());    
+    dataNodeSession.sendRequest(dataNodeReq);
+    HTTPResponse dataNodeResp;
+    std::istream& fromHDFS = dataNodeSession.receiveResponse(dataNodeResp);
+
+    DikeByteBuffer dbb = DikeByteBuffer(); 
+    dbb.copyStreamToAWS(fromHDFS, toClient);
+    dbb.SendEnd(toClient);
+    toClient.flush();
+
+    cout << DikeUtil().Yellow() << DikeUtil().Now() << " Done " << DikeUtil().Reset();
+    cout << DikeUtil().Red() << "Total bytes " << dbb.m_TotalBytes << " " << DikeUtil().Reset() << endl;       
+}
+
+#if 0
+
+http://dikehdfs:9859/webhdfs/v1/tpch-test/lineitem.csv?op=OPEN&user.name=peter&namenoderpcaddress=dikehdfs:9000&buffersize=131072&offset=0
+offset: 0
+GET http://dikehdfs:9859/webhdfs/v1/tpch-test/lineitem.csv?op=OPEN&user.name=peter&namenoderpcaddress=dikehdfs:9000&buffersize=131072&offset=0 HTTP/1.0
+Host: dikehdfs:9864
+ReadParam: <Processor><Name>dikeSQL</Name><Configuration><Query><![CDATA[select s._1 from S3Object s]]></Query><BlockSize>0</BlockSize></Configuration></Processor>
+Connection: Close
+
+
+/webhdfs/v1/tpch-test/lineitem.csv?op=OPEN&user.name=peter&namenoderpcaddress=dikehdfs:9000&buffersize=131072&offset=0
+offset: 0
+GET /webhdfs/v1/tpch-test/lineitem.csv?op=OPEN&user.name=peter&namenoderpcaddress=dikehdfs:9000&buffersize=131072&offset=0 HTTP/1.1
+X-Hadoop-Accept-EZ: true
+ReadParam: <?xml version='1.0' encoding='UTF-8'?><Processor><Name>dikeSQL</Name><Configuration><Schema>l_orderkey INTEGER,l_partkey INTEGER,l_suppkey INTEGER,l_linenumber INTEGER,l_quantity NUMERIC,l_extendedprice NUMERIC,l_discount NUMERIC,l_tax NUMERIC,l_returnflag,l_linestatus,l_shipdate,l_commitdate,l_receiptdate,l_shipinstruct,l_shipmode,l_comment</Schema><Query><![CDATA[SELECT s._1, s._2, _16 FROM S3Object s]]></Query><BlockSize>0</BlockSize></Configuration></Processor>
+User-Agent: Java/11.0.10
+Host: dikehdfs:9864
+Accept: text/html, image/gif, image/jpeg, *; q=.2, ; q=.2
+Connection: keep-alive
+
+#endif

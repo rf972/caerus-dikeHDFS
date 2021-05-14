@@ -33,77 +33,15 @@
 #include "DikeIO.hpp"
 #include "DikeSQL.hpp"
 #include "DikeStream.hpp"
+#include "DikeHTTPRequestHandler.hpp"
 
 using namespace Poco::Net;
 using namespace Poco::Util;
 using namespace std;
 
-class S3GatewayHandler : public Poco::Net::HTTPRequestHandler {
-public:  
-  int verbose = 0;
-  map<std::string, std::string> dikeConfig;
-  S3GatewayHandler(int verbose, map<std::string, std::string> & dikeConfig): HTTPRequestHandler() {
-    this->verbose = verbose;
-    this->dikeConfig = dikeConfig;
-  }
-
-  virtual void handleRequest(Poco::Net::HTTPServerRequest &req, Poco::Net::HTTPServerResponse &resp)
-  {    
-    std::istream& fromClient = req.stream();
-    
-    cout << DikeUtil().Yellow() << DikeUtil().Now() << " NN Start " << DikeUtil().Reset() << endl;      
-    req.write(cout);
-    return;
-    
-    /* Instantiate a copy of original request */
-    HTTPRequest hdfs_req((HTTPRequest)req);
-
-    /* Redirect to HDFS port */
-    hdfs_req.setHost(dikeConfig["dfs.namenode.http-address"]);
-
-    if(verbose) {      
-      cout << hdfs_req.getURI() << endl;
-      hdfs_req.write(cout);
-    }
-
-    /* Open HDFS session */    
-    SocketAddress namenodeSocketAddress = SocketAddress(dikeConfig["dfs.namenode.http-address"]);
-    HTTPClientSession session(namenodeSocketAddress);
-    std::ostream& toHDFS =session.sendRequest(hdfs_req);
-    Poco::StreamCopier::copyStream(fromClient, toHDFS, 8192);  
-    HTTPResponse hdfs_resp;
-    std::istream& fromHDFS = session.receiveResponse(hdfs_resp);
-    (HTTPResponse &)resp = hdfs_resp;    
-    
-    if(req.has("ReadParam") && resp.has("Location")) {
-      //cout << DikeUtil().Blue() << resp.get("Location") << DikeUtil().Reset() << endl;      
-      Poco::URI uri = Poco::URI(resp.get("Location"));      
-      uri.setPort(std::stoi(dikeConfig["dike.dfs.ndp.http-port"]));
-      resp.set("Location", uri.toString());
-      //cout << DikeUtil().Blue() << resp.get("Location") << DikeUtil().Reset() << endl;
-    }
-
-    if(verbose) {
-      resp.write(cout);
-    }
-    ostream& toClient = resp.send();
-    Poco::StreamCopier::copyStream(fromHDFS, toClient, 8192);
-    toClient.flush();
-
-    if(verbose) {
-      cout << DikeUtil().Yellow() << DikeUtil().Now() << " NN End " << DikeUtil().Reset() << endl;
-    }
-  }   
-};
-
-class NameNodeHandler : public Poco::Net::HTTPRequestHandler {
-public:  
-  int verbose = 0;
-  map<std::string, std::string> dikeConfig;
-  NameNodeHandler(int verbose, map<std::string, std::string> & dikeConfig): HTTPRequestHandler() {
-    this->verbose = verbose;
-    this->dikeConfig = dikeConfig;
-  }
+class NameNodeHandler : public DikeHTTPRequestHandler {
+  public:  
+  NameNodeHandler(int verbose, DikeConfig & dikeConfig): DikeHTTPRequestHandler(verbose, dikeConfig){}
 
   virtual void handleRequest(Poco::Net::HTTPServerRequest &req, Poco::Net::HTTPServerResponse &resp)
   {    
@@ -126,7 +64,7 @@ public:
     /* Open HDFS session */    
     SocketAddress namenodeSocketAddress = SocketAddress(dikeConfig["dfs.namenode.http-address"]);
     HTTPClientSession session(namenodeSocketAddress);
-    std::ostream& toHDFS =session.sendRequest(hdfs_req);
+    std::ostream& toHDFS = session.sendRequest(hdfs_req);
     Poco::StreamCopier::copyStream(fromClient, toHDFS, 8192);  
     HTTPResponse hdfs_resp;
     std::istream& fromHDFS = session.receiveResponse(hdfs_resp);
@@ -153,14 +91,9 @@ public:
   }   
 };
 
-class DataNodeHandler : public HTTPRequestHandler {
-public:  
-  int verbose = 0;
-  map<std::string, std::string> dikeConfig;
-  DataNodeHandler(int verbose, map<std::string, std::string> & dikeConfig): HTTPRequestHandler() {
-    this->verbose = verbose;
-    this->dikeConfig = dikeConfig;
-  }
+class DataNodeHandler : public DikeHTTPRequestHandler {
+public:
+  DataNodeHandler(int verbose, DikeConfig & dikeConfig): DikeHTTPRequestHandler(verbose, dikeConfig){}
 
   virtual void handleRequest(Poco::Net::HTTPServerRequest &req, Poco::Net::HTTPServerResponse &resp)
   {
@@ -220,13 +153,12 @@ public:
         std::istream& xmlStream(readParamStream);
         AbstractConfiguration *cfg = new XMLConfiguration(xmlStream);
         if(verbose) {
-          cout << "Name: " << cfg->getString("Name") << endl;
-          cout << "Schema: " << cfg->getString("Configuration.Schema") << endl;
+          cout << "Name: " << cfg->getString("Name") << endl;          
           cout << "Query: " << cfg->getString("Configuration.Query") << endl;
           cout << "BlockSize: " << cfg->getString("Configuration.BlockSize") << endl;
           cout << DikeUtil().Reset() << endl;
         }        
-        dikeSQLParam.schema = cfg->getString("Configuration.Schema");
+        
         dikeSQLParam.query = cfg->getString("Configuration.Query");
         dikeSQLParam.blockSize = cfg->getUInt64("Configuration.BlockSize");
         dikeSQLParam.headerInfo = cfg->getString("Configuration.headerInfo", "IGNORE");
@@ -262,8 +194,8 @@ public:
 class NameNodeHandlerFactory : public HTTPRequestHandlerFactory {
 public:
   int verbose = 0;
-  map<std::string, std::string> dikeConfig;
-  NameNodeHandlerFactory(int verbose, map<std::string, std::string>& dikeConfig):HTTPRequestHandlerFactory() {
+  DikeConfig dikeConfig;
+  NameNodeHandlerFactory(int verbose, DikeConfig& dikeConfig):HTTPRequestHandlerFactory() {
     this->verbose = verbose;
     this->dikeConfig = dikeConfig;
   }
@@ -275,8 +207,8 @@ public:
 class DataNodeHandlerFactory : public HTTPRequestHandlerFactory {
 public:
   int verbose = 0;
-  map<std::string, std::string> dikeConfig;
-  DataNodeHandlerFactory(int verbose, map<std::string, std::string>& dikeConfig):HTTPRequestHandlerFactory() {
+  DikeConfig dikeConfig;
+  DataNodeHandlerFactory(int verbose, DikeConfig& dikeConfig):HTTPRequestHandlerFactory() {
     this->verbose = verbose;
     this->dikeConfig = dikeConfig;
   }
@@ -289,15 +221,14 @@ public:
 class S3GatewayHandlerFactory : public HTTPRequestHandlerFactory {
 public:
   int verbose = 0;
-  map<std::string, std::string> dikeConfig;
-  S3GatewayHandlerFactory(int verbose, map<std::string, std::string>& dikeConfig):HTTPRequestHandlerFactory() {
+  DikeConfig dikeConfig;
+  S3GatewayHandlerFactory(int verbose, DikeConfig& dikeConfig):HTTPRequestHandlerFactory() {
     this->verbose = verbose;
     this->dikeConfig = dikeConfig;
   }
 
-  virtual HTTPRequestHandler* createRequestHandler(const HTTPServerRequest & req) {
-    //return new S3GatewayHandler(verbose, dikeConfig);
-    return new SelectObjectContent();
+  virtual HTTPRequestHandler* createRequestHandler(const HTTPServerRequest & req) {    
+    return new SelectObjectContent(verbose, dikeConfig);
   }
 };
 
@@ -305,7 +236,7 @@ class DikeServerApp : public ServerApplication
 {
   public:
   int verbose = 0;
-  map<std::string, std::string> dikeConfig;
+  DikeConfig dikeConfig;
 
   protected:
   void defineOptions(OptionSet& options)
