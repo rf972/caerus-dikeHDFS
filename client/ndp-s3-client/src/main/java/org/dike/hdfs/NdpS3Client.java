@@ -14,6 +14,11 @@ import com.amazonaws.services.s3.model.SelectObjectContentRequest;
 import com.amazonaws.services.s3.model.SelectObjectContentResult;
 import com.amazonaws.services.s3.model.ScanRange;
 
+import com.amazonaws.services.s3.model.ListObjectsV2Request;
+import com.amazonaws.services.s3.model.ListObjectsV2Result;
+import com.amazonaws.services.s3.model.S3ObjectSummary;
+
+
 import java.io.File;
 //import java.io.FileOutputStream;
 import java.io.InputStream;
@@ -47,6 +52,16 @@ public class NdpS3Client {
             .withEndpointConfiguration(endpointConfiguration)
             .build();
 
+        ListObjectsV2Request listObjectsV2Request = new ListObjectsV2Request()
+            .withBucketName(BUCKET_NAME)
+            .withPrefix("line")
+            .withMaxKeys(1024);
+
+        ListObjectsV2Result listObjectsV2Result = s3Client.listObjectsV2(listObjectsV2Request);
+        for (S3ObjectSummary objectSummary : listObjectsV2Result.getObjectSummaries()) {
+            System.out.printf(" - %s (size: %d)\n", objectSummary.getKey(), objectSummary.getSize());
+        }
+    
         SelectObjectContentRequest request = generateBaseCSVRequest(BUCKET_NAME, CSV_OBJECT_KEY, QUERY);
         final AtomicBoolean isResultComplete = new AtomicBoolean(false);
 

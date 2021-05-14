@@ -227,8 +227,16 @@ public:
     this->dikeConfig = dikeConfig;
   }
 
-  virtual HTTPRequestHandler* createRequestHandler(const HTTPServerRequest & req) {    
-    return new SelectObjectContent(verbose, dikeConfig);
+  virtual HTTPRequestHandler* createRequestHandler(const HTTPServerRequest & req) {
+    Poco::URI uri = Poco::URI(req.getURI());
+    if (uri.getQuery() == "select&select-type=2") {
+      return new SelectObjectContent(verbose, dikeConfig);
+    }
+    if(uri.getQuery().find("list-type=2") == 0){
+      return new ListObjectsV2(verbose, dikeConfig);
+    }
+    cout << DikeUtil().Yellow() << "Unsupported query " << uri.getQuery() << DikeUtil().Reset() << endl;
+    return NULL;
   }
 };
 

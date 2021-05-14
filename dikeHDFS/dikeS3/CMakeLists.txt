@@ -4,6 +4,7 @@ project(dikeS3 VERSION 0.1.0)
 
 add_library(libdikeS3 STATIC 
     SelectObjectContent.cpp
+    ListObjectsV2.cpp
 )
 
 include_directories(

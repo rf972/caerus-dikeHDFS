@@ -11,8 +11,9 @@
 
 #include "DikeHTTPRequestHandler.hpp"
 
-class ListObjectsV2 : public Poco::Net::HTTPRequestHandler {
-public:  
+class ListObjectsV2 : public DikeHTTPRequestHandler {
+public:
+   ListObjectsV2(int verbose, DikeConfig & dikeConfig): DikeHTTPRequestHandler(verbose, dikeConfig){}
    virtual void handleRequest(Poco::Net::HTTPServerRequest &req, Poco::Net::HTTPServerResponse &resp);
    virtual ~ListObjectsV2() {};
 };
