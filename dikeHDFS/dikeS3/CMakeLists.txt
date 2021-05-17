@@ -14,6 +14,7 @@ include_directories(
     ${CMAKE_SOURCE_DIR}/external/poco/Util/include
     ${CMAKE_SOURCE_DIR}/external/poco/Net/include
     ${CMAKE_SOURCE_DIR}/external/poco/XML/include
+    ${CMAKE_SOURCE_DIR}/external/poco/JSON/include
     ${CMAKE_SOURCE_DIR}/external/aws-c-event-stream/include
     ${CMAKE_SOURCE_DIR}/external/aws-c-common/include
     ${CMAKE_SOURCE_DIR}/external/aws-c-common/build/generated/include

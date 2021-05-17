@@ -54,7 +54,7 @@ public class NdpS3Client {
 
         ListObjectsV2Request listObjectsV2Request = new ListObjectsV2Request()
             .withBucketName(BUCKET_NAME)
-            .withPrefix("line")
+            //.withPrefix("line")
             .withMaxKeys(1024);
 
         ListObjectsV2Result listObjectsV2Result = s3Client.listObjectsV2(listObjectsV2Request);
@@ -62,6 +62,9 @@ public class NdpS3Client {
             System.out.printf(" - %s (size: %d)\n", objectSummary.getKey(), objectSummary.getSize());
         }
     
+        if (true) {
+            return;
+        }
         SelectObjectContentRequest request = generateBaseCSVRequest(BUCKET_NAME, CSV_OBJECT_KEY, QUERY);
         final AtomicBoolean isResultComplete = new AtomicBoolean(false);
 
