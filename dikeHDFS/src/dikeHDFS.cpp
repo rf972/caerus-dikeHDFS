@@ -26,160 +26,22 @@
 
 #include <iostream>
 #include <algorithm>
+#include <map>
 
-//#include "S3Handlers.hpp"
+#include "S3Handlers.hpp"
 #include "DikeUtil.hpp"
 #include "DikeIO.hpp"
 #include "DikeSQL.hpp"
+#include "DikeStream.hpp"
+#include "DikeHTTPRequestHandler.hpp"
 
 using namespace Poco::Net;
 using namespace Poco::Util;
 using namespace std;
 
-class DikeHDFSSession : public HTTPClientSession {
-  public:
-  DikeHDFSSession(const std::string& host, Poco::UInt16 port = HTTPSession::HTTP_PORT)
-  :HTTPClientSession(host,port) { }
-  
-  int readResponseHeader(HTTPResponse& response)
-  {
-    flushRequest();
-   
-    do {
-      response.clear();
-      HTTPHeaderInputStream his(*this);
-      try {
-        response.read(his);
-      } catch (...) {
-        close();
-        std::cout << "DikeHDFSSession::readResponseHeader Exception" << std::endl;
-      }
-    } while (response.getStatus() == HTTPResponse::HTTP_CONTINUE);
-        
-    return response.getStatus();
-  }
-
-  int read(char * buf, uint32_t size) {
-    return HTTPClientSession::read(buf, (std::streamsize)size);
-  }
-};
-
-class DikeIn : public DikeIO {
-  public:
-  std::istream * inStream = NULL;
-
-  DikeIn(std::istream * stream){
-    inStream = stream;
-  }
-
-  ~DikeIn(){ }
-  virtual int write(const char * buf, uint32_t size) {
-    return -1;
-  }
-  virtual int read(char * buf, uint32_t size) {
-    if(inStream) {
-      int n = 0;
-      int len = size;
-      try {
-        while( len > 0 && inStream->good() ) {
-            inStream->read((char*)&buf[n], len );
-            int i = inStream->gcount();
-            n += i;
-            len -= i;
-            if(i <= 0){
-                return n;
-            }
-        }
-      } catch (...) {
-        std::cout << "DikeIn: Caught exception " << std::endl;
-      }     
-      return n;
-    }
-    
-    return -1;
-  }
-};
-
-class DikeInSession : public DikeIO {
-  public:
-  DikeHDFSSession * inSession = NULL;
-
-  DikeInSession(DikeHDFSSession * inSession){
-    this->inSession = inSession;
-  }
-
-  ~DikeInSession(){ }
-  virtual int write(const char * buf, uint32_t size) {
-    return -1;
-  }
-
-  virtual int read(char * buf, uint32_t size) {
-    if(inSession) {
-      int n = 0;
-      int len = size;
-      try {
-        while( len > 0 ) {
-            int i = inSession->read((char*)&buf[n], len );            
-            n += i;
-            len -= i;
-            if(i <= 0){
-                readBytes += n;
-                return n;
-            }
-        }
-      } catch (...) {
-        std::cout << "DikeInSession: Caught exception " << std::endl;
-      }
-
-      readBytes += n;
-      return n;
-    }
-    
-    return -1;
-  }
-};
-
-class DikeOut : public DikeIO {
-  public:
-  Poco::Net::StreamSocket * outSocket = NULL;
-
-  DikeOut(Poco::Net::StreamSocket * outSocket){
-    this->outSocket = outSocket;
-  }
-
-  ~DikeOut(){ }
-  virtual int read(char * buf, uint32_t size) {
-    return -1;
-  }
-
-  virtual int write(const char * buf, uint32_t size) {
-    int len = size;
-    int n = 0;
-    if(outSocket) {
-      try {
-        while(len > 0) {
-            int i = outSocket->sendBytes(&buf[n], len, 0);
-            n += i;
-            len -= i;
-            if(i <= 0){
-              return n;
-            }
-        }
-        return n; 
-      } catch (...) {
-        std::cout << "DikeOut: Caught exception " << std::endl;
-      }
-    }
-    return -1;
-  }
-};
-
-class NameNodeHandler : public Poco::Net::HTTPRequestHandler {
-public:  
-  int verbose = 0;
-    NameNodeHandler(int verbose): HTTPRequestHandler() {
-      this->verbose = verbose;
-  }
+class NameNodeHandler : public DikeHTTPRequestHandler {
+  public:  
+  NameNodeHandler(int verbose, DikeConfig & dikeConfig): DikeHTTPRequestHandler(verbose, dikeConfig){}
 
   virtual void handleRequest(Poco::Net::HTTPServerRequest &req, Poco::Net::HTTPServerResponse &resp)
   {    
@@ -192,32 +54,27 @@ public:
     HTTPRequest hdfs_req((HTTPRequest)req);
 
     /* Redirect to HDFS port */
-    string host = req.getHost();    
-    host = host.substr(0, host.find(':'));
-    hdfs_req.setHost(host, 9870);
-
-    string client = req.clientAddress().toString();
-    client = client.substr(0, client.find(':'));    
-    hdfs_req.set("X-Forwarded-For", client);
+    hdfs_req.setHost(dikeConfig["dfs.namenode.http-address"]);
 
     if(verbose) {      
       cout << hdfs_req.getURI() << endl;
       hdfs_req.write(cout);
     }
 
-    /* Open HDFS session */
-    HTTPClientSession session(host, 9870);
-    std::ostream& toHDFS =session.sendRequest(hdfs_req);
+    /* Open HDFS session */    
+    SocketAddress namenodeSocketAddress = SocketAddress(dikeConfig["dfs.namenode.http-address"]);
+    HTTPClientSession session(namenodeSocketAddress);
+    std::ostream& toHDFS = session.sendRequest(hdfs_req);
     Poco::StreamCopier::copyStream(fromClient, toHDFS, 8192);  
     HTTPResponse hdfs_resp;
     std::istream& fromHDFS = session.receiveResponse(hdfs_resp);
     (HTTPResponse &)resp = hdfs_resp;    
     
     if(req.has("ReadParam") && resp.has("Location")) {
-      //cout << DikeUtil().Blue() << resp.get("Location") << DikeUtil().Reset() << endl;
-      string location = resp.get("Location");
-      location.replace(location.find(":9864"), 5, ":9859");
-      resp.set("Location", location);
+      //cout << DikeUtil().Blue() << resp.get("Location") << DikeUtil().Reset() << endl;      
+      Poco::URI uri = Poco::URI(resp.get("Location"));      
+      uri.setPort(std::stoi(dikeConfig["dike.dfs.ndp.http-port"]));
+      resp.set("Location", uri.toString());
       //cout << DikeUtil().Blue() << resp.get("Location") << DikeUtil().Reset() << endl;
     }
 
@@ -234,12 +91,9 @@ public:
   }   
 };
 
-class DataNodeHandler : public HTTPRequestHandler {
-public:  
-  int verbose = 0;
-  DataNodeHandler(int verbose): HTTPRequestHandler() {
-    this->verbose = verbose;
-  }
+class DataNodeHandler : public DikeHTTPRequestHandler {
+public:
+  DataNodeHandler(int verbose, DikeConfig & dikeConfig): DikeHTTPRequestHandler(verbose, dikeConfig){}
 
   virtual void handleRequest(Poco::Net::HTTPServerRequest &req, Poco::Net::HTTPServerResponse &resp)
   {
@@ -250,15 +104,15 @@ public:
     }
 
     HTTPRequest hdfs_req((HTTPRequest)req);
-
     string host = req.getHost();    
     host = host.substr(0, host.find(':'));
-    hdfs_req.setHost(host, 9864);
-
+    hdfs_req.setHost(host, std::stoi(dikeConfig["dfs.datanode.http-port"]));
+    
     if(verbose) {
       cout << hdfs_req.getURI() << endl;
     }
-    Poco::URI uri(hdfs_req.getURI());
+    
+    Poco::URI uri = Poco::URI(hdfs_req.getURI());
     Poco::URI::QueryParameters uriParams = uri.getQueryParameters();
     dikeSQLParam.blockOffset = 0;
     for(int i = 0; i < uriParams.size(); i++){        
@@ -274,18 +128,11 @@ public:
       hdfs_req.write(cout);
     }
 
-    //HTTPClientSession hdfs_session(host, 9864);
-    DikeHDFSSession hdfs_session(host, 9864);
-
+    DikeHDFSSession hdfs_session(host, std::stoi(dikeConfig["dfs.datanode.http-port"]));
     hdfs_session.sendRequest(hdfs_req);
+
     HTTPResponse hdfs_resp;
-
-    //std::istream& fromHDFS = hdfs_session.receiveResponse(hdfs_resp);
-
-    //hdfs_session.receiveResponse(hdfs_resp);
-    //hdfs_session.peekResponse(hdfs_resp);
     hdfs_session.readResponseHeader(hdfs_resp);
-
 
     (HTTPResponse &)resp = hdfs_resp;
     //cout << "From HDFS we got \"" << hdfs_resp.getTransferEncoding() << "\" TransferEncoding" << endl;
@@ -306,30 +153,27 @@ public:
         std::istream& xmlStream(readParamStream);
         AbstractConfiguration *cfg = new XMLConfiguration(xmlStream);
         if(verbose) {
-          cout << "Name: " << cfg->getString("Name") << endl;
-          cout << "Schema: " << cfg->getString("Configuration.Schema") << endl;
+          cout << "Name: " << cfg->getString("Name") << endl;          
           cout << "Query: " << cfg->getString("Configuration.Query") << endl;
           cout << "BlockSize: " << cfg->getString("Configuration.BlockSize") << endl;
           cout << DikeUtil().Reset() << endl;
         }        
-        dikeSQLParam.schema = cfg->getString("Configuration.Schema");
+        
         dikeSQLParam.query = cfg->getString("Configuration.Query");
         dikeSQLParam.blockSize = cfg->getUInt64("Configuration.BlockSize");
-        dikeSQLParam.headerInfo = cfg->getString("Configuration.headerInfo", "IGNORE");
+        dikeSQLParam.headerInfo = cfg->getString("Configuration.HeaderInfo", "IGNORE");
 
         ostream& toClient = resp.send();
         toClient.flush();
 
         Poco::Net::HTTPServerRequestImpl & req_impl = (Poco::Net::HTTPServerRequestImpl &)req;          
         Poco::Net::StreamSocket toClientSocket = req_impl.detachSocket();
-        
-        //DikeIn input(&fromHDFS);
+                
         DikeInSession input(&hdfs_session);
         DikeOut output(&toClientSocket);
         dikeSQL.Run(&dikeSQLParam, &input, &output);       
         
-      } catch (Poco::NotFoundException&)
-      {
+      } catch (Poco::NotFoundException&) {
         cout << DikeUtil().Red() << "Exeption while parsing readParam" << endl;
         cout << DikeUtil().Reset() << endl;
       }      
@@ -350,23 +194,49 @@ public:
 class NameNodeHandlerFactory : public HTTPRequestHandlerFactory {
 public:
   int verbose = 0;
-  NameNodeHandlerFactory(int verbose):HTTPRequestHandlerFactory() {
-    this->verbose = verbose;    
+  DikeConfig dikeConfig;
+  NameNodeHandlerFactory(int verbose, DikeConfig& dikeConfig):HTTPRequestHandlerFactory() {
+    this->verbose = verbose;
+    this->dikeConfig = dikeConfig;
   }
   virtual HTTPRequestHandler* createRequestHandler(const HTTPServerRequest & req) {
-    return new NameNodeHandler(verbose);
+    return new NameNodeHandler(verbose, dikeConfig);
   }
 };
 
 class DataNodeHandlerFactory : public HTTPRequestHandlerFactory {
 public:
   int verbose = 0;
-  DataNodeHandlerFactory(int verbose):HTTPRequestHandlerFactory() {
-    this->verbose = verbose;    
+  DikeConfig dikeConfig;
+  DataNodeHandlerFactory(int verbose, DikeConfig& dikeConfig):HTTPRequestHandlerFactory() {
+    this->verbose = verbose;
+    this->dikeConfig = dikeConfig;
   }
 
   virtual HTTPRequestHandler* createRequestHandler(const HTTPServerRequest & req) {
-    return new DataNodeHandler(verbose);
+    return new DataNodeHandler(verbose, dikeConfig);
+  }
+};
+
+class S3GatewayHandlerFactory : public HTTPRequestHandlerFactory {
+public:
+  int verbose = 0;
+  DikeConfig dikeConfig;
+  S3GatewayHandlerFactory(int verbose, DikeConfig& dikeConfig):HTTPRequestHandlerFactory() {
+    this->verbose = verbose;
+    this->dikeConfig = dikeConfig;
+  }
+
+  virtual HTTPRequestHandler* createRequestHandler(const HTTPServerRequest & req) {
+    Poco::URI uri = Poco::URI(req.getURI());
+    if (uri.getQuery() == "select&select-type=2") {
+      return new SelectObjectContent(verbose, dikeConfig);
+    }
+    if(uri.getQuery().find("list-type=2") == 0){
+      return new ListObjectsV2(verbose, dikeConfig);
+    }
+    cout << DikeUtil().Yellow() << "Unsupported query " << uri.getQuery() << DikeUtil().Reset() << endl;
+    return NULL;
   }
 };
 
@@ -374,6 +244,8 @@ class DikeServerApp : public ServerApplication
 {
   public:
   int verbose = 0;
+  DikeConfig dikeConfig;
+
   protected:
   void defineOptions(OptionSet& options)
  	{
@@ -391,20 +263,47 @@ class DikeServerApp : public ServerApplication
     verbose = 1;
 	}
 
+  void loadDikeConfig()
+  {
+    std::string base = "dike";
+ 		AbstractConfiguration::Keys keys;
+		config().keys(base, keys);
+    for (AbstractConfiguration::Keys::const_iterator it = keys.begin(); it != keys.end(); ++it) {
+      std::string name = config().getString(base + "." + (*it) + ".name");
+      std::string value = config().getString(base + "." + (*it) + ".value");
+      logger().information(name + " = " + value);
+      dikeConfig[name] = value;
+    }
+  }
+
   int main(const vector<string> & argv)
   {
     HTTPServerParams* nameNodeParams = new HTTPServerParams;
     HTTPServerParams* dataNodeParams = new HTTPServerParams;
+    HTTPServerParams* s3GatewayParams = new HTTPServerParams;
+
+    loadConfiguration(Poco::Util::Application::PRIO_DEFAULT);   
+    loadDikeConfig();
 
     dataNodeParams->setKeepAlive(false);
     dataNodeParams->setMaxThreads(16);
     dataNodeParams->setMaxQueued(128);
+        
+    HTTPServer nameNode(new NameNodeHandlerFactory(verbose, dikeConfig),                         
+                        ServerSocket(std::stoi(dikeConfig["dike.dfs.gateway.http-port"])),
+                        nameNodeParams);
 
-    HTTPServer nameNode(new NameNodeHandlerFactory(verbose), ServerSocket(9860), nameNodeParams);
-    HTTPServer dataNode(new DataNodeHandlerFactory(verbose), ServerSocket(9859), dataNodeParams);
+    HTTPServer dataNode(new DataNodeHandlerFactory(verbose, dikeConfig),
+                        ServerSocket(std::stoi(dikeConfig["dike.dfs.ndp.http-port"])), 
+                        dataNodeParams);
+
+    HTTPServer s3Gateway(new S3GatewayHandlerFactory(verbose, dikeConfig),
+                        ServerSocket(std::stoi(dikeConfig["dike.S3.gateway.http-port"])), 
+                        s3GatewayParams);
 
     nameNode.start();
     dataNode.start();
+    s3Gateway.start();
 
 #if _DEBUG
     cout << endl << "Server started (Debug)" << endl;
@@ -417,6 +316,7 @@ class DikeServerApp : public ServerApplication
     cout << endl << "Shutting down..." << endl;
     nameNode.stop();
     dataNode.stop();
+    s3Gateway.stop();
 
     return Application::EXIT_OK;
   }
@@ -425,5 +325,6 @@ class DikeServerApp : public ServerApplication
 int main(int argc, char** argv)
 {  
   DikeServerApp app;
+  
   return app.run(argc, argv);
 }
