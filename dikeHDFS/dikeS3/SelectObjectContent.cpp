@@ -228,13 +228,15 @@ void SelectObjectContent::handleRequest(Poco::Net::HTTPServerRequest &req, Poco:
     resp.setChunkedTransferEncoding(true);    
     resp.setKeepAlive(true);
 
-    req.write(cout);
+    if(verbose) {
+        req.write(cout);
+    }
 
     ostream& toClient = resp.send();    
     Poco::URI uri = Poco::URI(req.getURI());
     
-    cout << "uri.getQuery() : " << uri.getQuery() << endl;
-    cout << "uri.getPath() : " << uri.getPath() << endl;
+    //cout << "uri.getQuery() : " << uri.getQuery() << endl;
+    //cout << "uri.getPath() : " << uri.getPath() << endl;
     //cout << "Authorization : " << req.get("Authorization") << endl;
 
     string authorization = req.get("Authorization");
@@ -242,15 +244,15 @@ void SelectObjectContent::handleRequest(Poco::Net::HTTPServerRequest &req, Poco:
     startPos = authorization.find("=", startPos) + 1;
     std::size_t endPos = authorization.find("/", startPos);
     string userName = authorization.substr(startPos, endPos - startPos);
-    cout << "User name: " << userName << endl;
+    //cout << "User name: " << userName << endl;
     
     AbstractConfiguration *cfg = new XMLConfiguration(req.stream());
-    AbstractConfigutationWrite(*cfg, "", cout);
+    //AbstractConfigutationWrite(*cfg, "", cout);
 
     string fileName = uri.getPath();
-    cout << "File name: " << fileName << endl;
+    //cout << "File name: " << fileName << endl;
     string sqlQuery = cfg->getString("Expression");
-    cout << "SQL " << sqlQuery << endl;
+    //cout << "SQL " << sqlQuery << endl;
 
     std::map<std::string, std::string> readParam;
     readParam["userName"] = userName;
@@ -277,7 +279,7 @@ void SelectObjectContent::readFromHdfs(std::map<std::string, std::string> readPa
     queryParameters.push_back(Pair("buffersize","131072"));
 
     uri.setQueryParameters(queryParameters);
-    cout << uri.toString() << endl;
+    //cout << uri.toString() << endl;
     nameNodeReq.setURI(uri.toString());
     
     /* Open HDFS Nane Node session */    
@@ -315,7 +317,7 @@ void SelectObjectContent::readFromHdfs(std::map<std::string, std::string> readPa
     Poco::XML::DOMWriter writer;
     writer.writeNode(ostr, doc);    
     doc->release();
-    cout << ostr.str() << endl;
+    //cout << ostr.str() << endl;
 
     /* Redirect request to NDP port on datanode */    
     uri = Poco::URI(nameNodeResp.get("Location"));
@@ -350,6 +352,8 @@ void SelectObjectContent::readFromHdfs(std::map<std::string, std::string> readPa
     dbb.SendEnd(toClient);
     toClient.flush();
 
-    cout << DikeUtil().Yellow() << DikeUtil().Now() << " Done " << DikeUtil().Reset();
-    cout << DikeUtil().Red() << "Total bytes " << dbb.m_TotalBytes << " " << DikeUtil().Reset() << endl;       
+    if(verbose) {
+        cout << DikeUtil().Yellow() << DikeUtil().Now() << " Done " << DikeUtil().Reset();
+        cout << DikeUtil().Red() << "Total bytes " << dbb.m_TotalBytes << " " << DikeUtil().Reset() << endl;       
+    }
 }

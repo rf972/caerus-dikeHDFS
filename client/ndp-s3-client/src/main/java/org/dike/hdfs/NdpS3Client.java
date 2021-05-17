@@ -72,29 +72,17 @@ public class NdpS3Client {
         
         long readSize = 0;
         while (readSize < fileSize) {            
-            final AtomicBoolean isResultComplete = new AtomicBoolean(false);
-            
             long readEnd = Math.min(readSize + blockSize, fileSize);
 
             ScanRange scanRange = new ScanRange().withStart(readSize).withEnd(readEnd);                
             SelectObjectContentRequest request = generateBaseCSVRequest(BUCKET_NAME, CSV_OBJECT_KEY, QUERY, scanRange);
 
-            System.out.format("Reading from %d to  %d ", readSize, readEnd);
+            System.out.format("Reading from %d to  %d \n", readSize, readEnd);
             readSize = readEnd;
 
             SelectObjectContentResult result = s3Client.selectObjectContent(request);
-            InputStream resultInputStream = result.getPayload().getRecordsInputStream(
-                new SelectObjectContentEventVisitor() {
-                @Override
-                    public void visit(SelectObjectContentEvent.EndEvent event)
-                    {
-                        isResultComplete.set(true);
-                        System.out.println("Received End Event. Result is complete.");
-                    }
-                }
-            );                
-
-            //copy(resultInputStream, fileOutputStream);
+            InputStream resultInputStream = result.getPayload().getRecordsInputStream();                
+            
             BufferedReader br = new BufferedReader(new InputStreamReader(resultInputStream));
             String record = br.readLine();
             while (record != null) {
@@ -105,10 +93,6 @@ public class NdpS3Client {
                 }
                 record = br.readLine();
             }                                
-
-            if (!isResultComplete.get()) {
-                throw new Exception("S3 Select request was incomplete as End Event was not received.");
-            }
             
         } // Partition loop
         long end_time = System.currentTimeMillis();        

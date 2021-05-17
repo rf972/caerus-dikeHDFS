@@ -58,7 +58,9 @@ void ListObjectsV2::handleRequest(HTTPServerRequest &req, HTTPServerResponse &re
     Poco::XML::XMLString value;
     Poco::XML::XMLWriter writer(xmlstream, 0);    
 
-    req.write(cout);
+    if(verbose) {
+        req.write(cout);
+    }
 
     Poco::URI uriS3 = Poco::URI(req.getURI());
     using QueryParameters = std::vector<std::pair<std::string, std::string>>;
@@ -69,7 +71,7 @@ void ListObjectsV2::handleRequest(HTTPServerRequest &req, HTTPServerResponse &re
     QueryParameters queryParametersS3 = uriS3.getQueryParameters();
     for (auto & it : queryParametersS3) {
         param[it.first] = it.second;
-        cout << it.first << " = " << it.second << endl;
+        //cout << it.first << " = " << it.second << endl;
     }
     param["fileName"] = uriS3.getPath();
 
@@ -90,7 +92,7 @@ void ListObjectsV2::handleRequest(HTTPServerRequest &req, HTTPServerResponse &re
     queryParametersHDFS.push_back(Pair("user.name",param["userName"]));
 
     uriHDFS.setQueryParameters(queryParametersHDFS);
-    cout << uriHDFS.toString() << endl;
+    //cout << uriHDFS.toString() << endl;
     nameNodeReq.setURI(uriHDFS.toString());
     
     /* Open HDFS Nane Node session */    
@@ -102,35 +104,14 @@ void ListObjectsV2::handleRequest(HTTPServerRequest &req, HTTPServerResponse &re
     string jsonString;
     Poco::StreamCopier::copyToString(fromHDFS, jsonString);
 
-    cout << jsonString << endl;
+    //cout << jsonString << endl;
     Poco::JSON::Parser parser;    
     Poco::Dynamic::Var parserResult = parser.parse(jsonString);
     Poco::JSON::Object::Ptr json = parserResult.extract<Poco::JSON::Object::Ptr>();
     Poco::JSON::Object::Ptr fileStatuses = json->getObject("FileStatuses");
 
     Array::Ptr fileStatus = fileStatuses->getArray("FileStatus");
-    cout << "fileStatus array size : " << fileStatus->size() << endl;
-
-#if 0
-    for (int i = 0; i < fileStatus->size(); i++) {
-        string pathSuffix = fileStatus->getObject(i)->get("pathSuffix").convert<std::string>();
-        cout << "pathSuffix : " << pathSuffix << endl;
-        param["key"] = pathSuffix;
-
-        string length = fileStatus->getObject(i)->get("length").convert<std::string>();
-        cout << "length : " << length << endl;
-        param["size"] = length;
-
-        string modificationTime = fileStatus->getObject(i)->get("modificationTime").convert<std::string>();
-        cout << "modificationTime : " << modificationTime << endl;
-        Poco::Timestamp ts = std::stoull(modificationTime) * 1000; //microseconds since midnight, January 1, 1970
-        Poco::DateTime dt = Poco::DateTime(ts); 
-        cout << "dt.year()" << dt.year() << endl;
-        Poco::LocalDateTime ldt = Poco::LocalDateTime(dt);
-        param["LastModified"] = Poco::DateTimeFormatter::format(ldt,"%Y-%n-%fT%H:%M:%S.%iZ");
-        cout << "LastModified : " << param["LastModified"] << endl;
-    }
-#endif
+    //cout << "fileStatus array size : " << fileStatus->size() << endl;
 
     writer.startDocument();
     
@@ -211,6 +192,8 @@ void ListObjectsV2::handleRequest(HTTPServerRequest &req, HTTPServerResponse &re
     outStream.write(xmlstream.str().c_str(), xmlstream.str().length());
     outStream.flush();
 
-    cout << DikeUtil().Yellow() << DikeUtil().Now() << " Done " << DikeUtil().Reset();
-    cout << req.getURI() << endl;
+    if(verbose){
+        cout << DikeUtil().Yellow() << DikeUtil().Now() << " Done " << DikeUtil().Reset();
+        cout << req.getURI() << endl;
+    }
 }
