@@ -54,33 +54,45 @@ public class NdpS3Client {
 
         ListObjectsV2Request listObjectsV2Request = new ListObjectsV2Request()
             .withBucketName(BUCKET_NAME)
-            //.withPrefix("line")
+            //.withPrefix(CSV_OBJECT_KEY)
             .withMaxKeys(1024);
+
+        long fileSize = 0;
+        long blockSize = 128 << 20;
 
         ListObjectsV2Result listObjectsV2Result = s3Client.listObjectsV2(listObjectsV2Request);
         for (S3ObjectSummary objectSummary : listObjectsV2Result.getObjectSummaries()) {
             System.out.printf(" - %s (size: %d)\n", objectSummary.getKey(), objectSummary.getSize());
-        }
-    
-        if (true) {
-            return;
-        }
-        SelectObjectContentRequest request = generateBaseCSVRequest(BUCKET_NAME, CSV_OBJECT_KEY, QUERY);
-        final AtomicBoolean isResultComplete = new AtomicBoolean(false);
+            if (objectSummary.getKey().equals(CSV_OBJECT_KEY)){
+                fileSize = objectSummary.getSize();
+            }
+        }        
 
         long start_time = System.currentTimeMillis();
-        try (
-            SelectObjectContentResult result = s3Client.selectObjectContent(request)) {
+        
+        long readSize = 0;
+        while (readSize < fileSize) {            
+            final AtomicBoolean isResultComplete = new AtomicBoolean(false);
+            
+            long readEnd = Math.min(readSize + blockSize, fileSize);
+
+            ScanRange scanRange = new ScanRange().withStart(readSize).withEnd(readEnd);                
+            SelectObjectContentRequest request = generateBaseCSVRequest(BUCKET_NAME, CSV_OBJECT_KEY, QUERY, scanRange);
+
+            System.out.format("Reading from %d to  %d ", readSize, readEnd);
+            readSize = readEnd;
+
+            SelectObjectContentResult result = s3Client.selectObjectContent(request);
             InputStream resultInputStream = result.getPayload().getRecordsInputStream(
-                    new SelectObjectContentEventVisitor() {
-                       @Override
-                        public void visit(SelectObjectContentEvent.EndEvent event)
-                        {
-                            isResultComplete.set(true);
-                            System.out.println("Received End Event. Result is complete.");
-                        }
+                new SelectObjectContentEventVisitor() {
+                @Override
+                    public void visit(SelectObjectContentEvent.EndEvent event)
+                    {
+                        isResultComplete.set(true);
+                        System.out.println("Received End Event. Result is complete.");
                     }
-                );
+                }
+            );                
 
             //copy(resultInputStream, fileOutputStream);
             BufferedReader br = new BufferedReader(new InputStreamReader(resultInputStream));
@@ -92,17 +104,18 @@ public class NdpS3Client {
                     System.out.println(record);
                 }
                 record = br.readLine();
-             }
-        }
+            }                                
 
-        if (!isResultComplete.get()) {
-            throw new Exception("S3 Select request was incomplete as End Event was not received.");
-        }
+            if (!isResultComplete.get()) {
+                throw new Exception("S3 Select request was incomplete as End Event was not received.");
+            }
+            
+        } // Partition loop
         long end_time = System.currentTimeMillis();        
         System.out.format("Received %d records (%d bytes) in %.3f sec\n", totalRecords, totalDataSize, (end_time - start_time) / 1000.0);
     }
 
-    private static SelectObjectContentRequest generateBaseCSVRequest(String bucket, String key, String query) {
+    private static SelectObjectContentRequest generateBaseCSVRequest(String bucket, String key, String query, ScanRange scanRange) {
         SelectObjectContentRequest request = new SelectObjectContentRequest();
         request.setBucketName(bucket);
         request.setKey(key);
@@ -118,9 +131,7 @@ public class NdpS3Client {
         outputSerialization.setCsv(new CSVOutput());
         request.setOutputSerialization(outputSerialization);
 
-        ScanRange scanRange = new ScanRange().withStart(128<<20).withEnd(2* (128<<20));
         request.setScanRange(scanRange);
-
         return request;
     }
 }
