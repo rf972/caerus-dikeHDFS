@@ -32,8 +32,11 @@ import static com.amazonaws.util.IOUtils.copy;
 
 public class NdpS3Client {
 
-    private static final String BUCKET_NAME = "tpch-test";
-    private static final String CSV_OBJECT_KEY = "lineitem.csv";    
+    /* This suppose to work for following path
+      /tpch-test/lineitem.csv/part-00000-4b1396a9-a9f2-4951-822f-5e7df5ec5913-c000.csv
+    */
+    private static final String BUCKET_NAME = "tpch-test";    
+    private static final String CSV_OBJECT_PREFIX = "lineitem.csv/part";
     private static final String QUERY = "SELECT s._1, s._2, _16 FROM S3Object s";
 
     public static void main(String[] args) throws Exception {
@@ -54,19 +57,19 @@ public class NdpS3Client {
 
         ListObjectsV2Request listObjectsV2Request = new ListObjectsV2Request()
             .withBucketName(BUCKET_NAME)
-            //.withPrefix(CSV_OBJECT_KEY)
+            .withPrefix(CSV_OBJECT_PREFIX)
             .withMaxKeys(1024);
 
         long fileSize = 0;
         long blockSize = 128 << 20;
+        String objectKey = "";
 
         ListObjectsV2Result listObjectsV2Result = s3Client.listObjectsV2(listObjectsV2Request);
         for (S3ObjectSummary objectSummary : listObjectsV2Result.getObjectSummaries()) {
             System.out.printf(" - %s (size: %d)\n", objectSummary.getKey(), objectSummary.getSize());
-            if (objectSummary.getKey().equals(CSV_OBJECT_KEY)){
-                fileSize = objectSummary.getSize();
-            }
-        }        
+            objectKey = objectSummary.getKey();
+            fileSize = objectSummary.getSize();            
+        }
 
         long start_time = System.currentTimeMillis();
         
@@ -75,7 +78,7 @@ public class NdpS3Client {
             long readEnd = Math.min(readSize + blockSize, fileSize);
 
             ScanRange scanRange = new ScanRange().withStart(readSize).withEnd(readEnd);                
-            SelectObjectContentRequest request = generateBaseCSVRequest(BUCKET_NAME, CSV_OBJECT_KEY, QUERY, scanRange);
+            SelectObjectContentRequest request = generateBaseCSVRequest(BUCKET_NAME, objectKey, QUERY, scanRange);
 
             System.out.format("Reading from %d to  %d \n", readSize, readEnd);
             readSize = readEnd;
