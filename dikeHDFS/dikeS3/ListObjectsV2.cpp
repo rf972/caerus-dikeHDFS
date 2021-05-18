@@ -71,9 +71,18 @@ void ListObjectsV2::handleRequest(HTTPServerRequest &req, HTTPServerResponse &re
     QueryParameters queryParametersS3 = uriS3.getQueryParameters();
     for (auto & it : queryParametersS3) {
         param[it.first] = it.second;
-        //cout << it.first << " = " << it.second << endl;
+         if(verbose) {
+            cout << it.first << " = " << it.second << endl;
+         }
     }
-    param["fileName"] = uriS3.getPath();
+    std::size_t prefixPathPos = param["prefix"].find_last_of("/");
+
+    param["prefixPath"] = "";
+    if (prefixPathPos != string::npos) {
+        param["prefixPath"] = param["prefix"].substr(0, prefixPathPos+1);
+        param["filePath"] = uriS3.getPath() + param["prefixPath"];
+        param["prefix"] = param["prefix"].substr(prefixPathPos + 1);
+    }
 
     string authorization = req.get("Authorization");
     std::size_t startPos = authorization.find("Credential=");
@@ -86,7 +95,7 @@ void ListObjectsV2::handleRequest(HTTPServerRequest &req, HTTPServerResponse &re
 
     HTTPRequest nameNodeReq;
     nameNodeReq.setHost(dikeConfig["dfs.namenode.http-address"]);    
-    Poco::URI uriHDFS = Poco::URI("/webhdfs/v1" + param["fileName"]);
+    Poco::URI uriHDFS = Poco::URI("/webhdfs/v1" + param["filePath"]);
     QueryParameters queryParametersHDFS;
     queryParametersHDFS.push_back(Pair("op","LISTSTATUS"));
     queryParametersHDFS.push_back(Pair("user.name",param["userName"]));
@@ -119,7 +128,7 @@ void ListObjectsV2::handleRequest(HTTPServerRequest &req, HTTPServerResponse &re
     writer.characters(XMLString("xmlns=\"http://s3.amazonaws.com/doc/2006-03-01/\""));
     
     writer.startElement("", "", XMLString("Name"));
-    writer.characters(XMLString(param["fileName"]));
+    writer.characters(XMLString(param["filePath"]));
     writer.endElement("", "", XMLString("Name"));
 
     writer.startElement("", "", XMLString("Prefix"));
@@ -157,7 +166,7 @@ void ListObjectsV2::handleRequest(HTTPServerRequest &req, HTTPServerResponse &re
         writer.startElement("", "", XMLString("Contents"));
         
             writer.startElement("", "", XMLString("Key"));
-            writer.characters(fileStatus->getObject(i)->get("pathSuffix").convert<std::string>());
+            writer.characters(param["prefixPath"] + fileStatus->getObject(i)->get("pathSuffix").convert<std::string>());
             writer.endElement("", "", XMLString("Key"));
 
             writer.startElement("", "", XMLString("LastModified"));
