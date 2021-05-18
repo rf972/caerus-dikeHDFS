@@ -75,12 +75,16 @@ void ListObjectsV2::handleRequest(HTTPServerRequest &req, HTTPServerResponse &re
             cout << it.first << " = " << it.second << endl;
          }
     }
-    std::size_t prefixPathPos = param["prefix"].find_last_of("/");
 
     param["prefixPath"] = "";
+    string bucketName = uriS3.getPath();
+    param["bucketName"] = bucketName.substr(1, bucketName.length() - 2);
+    param["filePath"] = uriS3.getPath();
+
+    std::size_t prefixPathPos = param["prefix"].find_last_of("/");
     if (prefixPathPos != string::npos) {
         param["prefixPath"] = param["prefix"].substr(0, prefixPathPos+1);
-        param["filePath"] = uriS3.getPath() + param["prefixPath"];
+        param["filePath"] = param["filePath"] + param["prefixPath"];
         param["prefix"] = param["prefix"].substr(prefixPathPos + 1);
     }
 
@@ -128,7 +132,7 @@ void ListObjectsV2::handleRequest(HTTPServerRequest &req, HTTPServerResponse &re
     writer.characters(XMLString("xmlns=\"http://s3.amazonaws.com/doc/2006-03-01/\""));
     
     writer.startElement("", "", XMLString("Name"));
-    writer.characters(XMLString(param["filePath"]));
+    writer.characters(XMLString(param["bucketName"]));
     writer.endElement("", "", XMLString("Name"));
 
     writer.startElement("", "", XMLString("Prefix"));
