@@ -17,6 +17,7 @@ import com.amazonaws.services.s3.model.ScanRange;
 import com.amazonaws.services.s3.model.ListObjectsV2Request;
 import com.amazonaws.services.s3.model.ListObjectsV2Result;
 import com.amazonaws.services.s3.model.S3ObjectSummary;
+import com.amazonaws.services.s3.model.FileHeaderInfo;
 
 
 import java.io.File;
@@ -110,7 +111,8 @@ public class NdpS3Client {
         request.setExpressionType(ExpressionType.SQL);
 
         InputSerialization inputSerialization = new InputSerialization();
-        inputSerialization.setCsv(new CSVInput());
+        inputSerialization.setCsv(new CSVInput().withFileHeaderInfo(FileHeaderInfo.IGNORE));
+        //inputSerialization.setCsv(new CSVInput().withFileHeaderInfo(FileHeaderInfo.NONE));
         inputSerialization.setCompressionType(CompressionType.NONE);
         request.setInputSerialization(inputSerialization);
 
