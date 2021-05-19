@@ -247,17 +247,19 @@ void SelectObjectContent::handleRequest(Poco::Net::HTTPServerRequest &req, Poco:
     //cout << "User name: " << userName << endl;
     
     AbstractConfiguration *cfg = new XMLConfiguration(req.stream());
+    
     //AbstractConfigutationWrite(*cfg, "", cout);
 
     string fileName = uri.getPath();
     //cout << "File name: " << fileName << endl;
     string sqlQuery = cfg->getString("Expression");
-    //cout << "SQL " << sqlQuery << endl;
+    //cout << "SQL " << sqlQuery << endl;    
 
     std::map<std::string, std::string> readParam;
     readParam["userName"] = userName;
     readParam["fileName"] = fileName;
     readParam["sqlQuery"] = sqlQuery;
+    readParam["headerInfo"] = cfg->getString("InputSerialization.CSV.FileHeaderInfo", "IGNORE");
     readParam["ScanRange.Start"] = cfg->getString("ScanRange.Start", "0");
     readParam["ScanRange.End"] = cfg->getString("ScanRange.End", "0");
 
@@ -312,6 +314,11 @@ void SelectObjectContent::readFromHdfs(std::map<std::string, std::string> readPa
     configurationElement->appendChild(blockSizeElement);
     Poco::XML::Text *  blockSizeText = doc->createTextNode(std::to_string(blockSize));        
     blockSizeElement->appendChild((Poco::XML::Node *)blockSizeText);
+
+    Poco::XML::Element* headerInfoElement = doc->createElement("HeaderInfo");
+    configurationElement->appendChild(headerInfoElement);
+    Poco::XML::Text *  headerInfoText = doc->createTextNode(readParam["headerInfo"]);        
+    headerInfoElement->appendChild((Poco::XML::Node *)headerInfoText);
 
     std::ostringstream ostr;
     Poco::XML::DOMWriter writer;
