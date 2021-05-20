@@ -1,5 +1,6 @@
 package org.dike.hdfs;
 
+import com.amazonaws.ClientConfiguration;
 import com.amazonaws.services.s3.AmazonS3;
 import com.amazonaws.services.s3.AmazonS3ClientBuilder;
 import com.amazonaws.services.s3.model.CSVInput;
@@ -54,6 +55,12 @@ public class NdpS3Client {
 
         final AmazonS3 s3Client = AmazonS3ClientBuilder.standard()
             .withEndpointConfiguration(endpointConfiguration)
+            .withClientConfiguration(new ClientConfiguration()
+                .withRequestTimeout(24*3600*1000)
+                .withSocketTimeout(24*3600*1000)
+                .withTcpKeepAlive(true)
+                .withRequestTimeout(24*3600*1000)
+                .withClientExecutionTimeout(24*3600*1000))
             .build();
 
         ListObjectsV2Request listObjectsV2Request = new ListObjectsV2Request()
