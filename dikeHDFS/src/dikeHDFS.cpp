@@ -282,6 +282,12 @@ class DikeServerApp : public ServerApplication
     HTTPServerParams* dataNodeParams = new HTTPServerParams;
     HTTPServerParams* s3GatewayParams = new HTTPServerParams;
 
+    Poco::Timespan timeout = Poco::Timespan(60*60*24, 0);
+
+    nameNodeParams->setTimeout(timeout);
+    dataNodeParams->setTimeout(timeout);
+    s3GatewayParams->setTimeout(timeout);
+ 
     loadConfiguration(Poco::Util::Application::PRIO_DEFAULT);   
     loadDikeConfig();
 

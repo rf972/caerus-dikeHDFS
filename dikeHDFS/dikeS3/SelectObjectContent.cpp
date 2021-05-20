@@ -11,6 +11,7 @@
 #include <Poco/Util/AbstractConfiguration.h>
 #include <Poco/Util/XMLConfiguration.h>
 #include <Poco/URI.h>
+#include <Poco/Timespan.h>
 
 /* XML related headers */
 #include "Poco/DOM/DOMParser.h"
@@ -287,6 +288,7 @@ void SelectObjectContent::readFromHdfs(std::map<std::string, std::string> readPa
     /* Open HDFS Nane Node session */    
     SocketAddress nameNodeSocketAddress = SocketAddress(dikeConfig["dfs.namenode.http-address"]);
     HTTPClientSession nameNodeSession(nameNodeSocketAddress);
+
     HTTPResponse nameNodeResp;
     nameNodeSession.sendRequest(nameNodeReq);
     nameNodeSession.receiveResponse(nameNodeResp);
@@ -349,7 +351,10 @@ void SelectObjectContent::readFromHdfs(std::map<std::string, std::string> readPa
     dataNodeReq.setMethod("GET");
     dataNodeReq.setURI(uri.getPath() + "?" + uri.getRawQuery());
     dataNodeReq.set("ReadParam", ostr.str());
-    HTTPClientSession dataNodeSession(uri.getHost(), uri.getPort());    
+    HTTPClientSession dataNodeSession(uri.getHost(), uri.getPort());
+    Poco::Timespan timeout = Poco::Timespan(60*60*24, 0);
+    dataNodeSession.setTimeout(timeout);
+
     dataNodeSession.sendRequest(dataNodeReq);
     HTTPResponse dataNodeResp;
     std::istream& fromHDFS = dataNodeSession.receiveResponse(dataNodeResp);
