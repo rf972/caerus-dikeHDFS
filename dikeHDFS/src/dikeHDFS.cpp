@@ -232,9 +232,18 @@ public:
     if (uri.getQuery() == "select&select-type=2") {
       return new SelectObjectContent(verbose, dikeConfig);
     }
+    
+    
     if(uri.getQuery().find("list-type=2") == 0){
       return new ListObjectsV2(verbose, dikeConfig);
+    }    
+
+    DikeConfig::iterator it = dikeConfig.find("dike.S3.endpoint.http-address");
+    if(it != dikeConfig.end()) { // S3 proxy is configured
+      return new ProxyHandler(verbose, dikeConfig);
     }
+
+
     cout << DikeUtil().Yellow() << "Unsupported query " << uri.getQuery() << DikeUtil().Reset() << endl;
     return NULL;
   }
