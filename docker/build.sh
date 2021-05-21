@@ -80,6 +80,7 @@ RUN echo "${USER_NAME} ALL=NOPASSWD: ALL" > "/etc/sudoers.d/hadoop-build-${USER_
 ENV HOME "${DOCKER_HOME_DIR}"
 
 USER ${USER_NAME}
+WORKDIR "${DOCKER_HOME_DIR}"
 RUN ssh-keygen -t rsa -P '' -f ~/.ssh/id_rsa
 RUN cat ~/.ssh/id_rsa.pub >> ~/.ssh/authorized_keys
 RUN chmod 0600 ~/.ssh/authorized_keys
