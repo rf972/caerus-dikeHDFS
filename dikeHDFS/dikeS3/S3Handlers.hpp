@@ -27,4 +27,11 @@ private:
    void readFromHdfs(std::map<std::string, std::string> readParamMap, std::ostream & toClient);
 };
 
+class ProxyHandler : public DikeHTTPRequestHandler {
+public:
+   ProxyHandler(int verbose, DikeConfig & dikeConfig): DikeHTTPRequestHandler(verbose, dikeConfig){}
+   virtual void handleRequest(Poco::Net::HTTPServerRequest &req, Poco::Net::HTTPServerResponse &resp);
+   virtual ~ProxyHandler() {};
+};
+
 #endif /* S3_HANDLERS_HPP */
