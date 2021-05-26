@@ -20,6 +20,7 @@ import com.amazonaws.services.s3.model.ListObjectsV2Result;
 import com.amazonaws.services.s3.model.S3ObjectSummary;
 import com.amazonaws.services.s3.model.FileHeaderInfo;
 
+import com.amazonaws.metrics.AwsSdkMetrics;
 
 import java.io.File;
 //import java.io.FileOutputStream;
@@ -42,6 +43,11 @@ public class NdpS3Client {
     private static final String QUERY = "SELECT s._1, s._2, _16 FROM S3Object s";
 
     public static void main(String[] args) throws Exception {
+        NdpS3Client client = new NdpS3Client();
+        client.test(args);
+    }
+    
+    public void test(String[] args) throws Exception {
         long totalDataSize = 0;
         int totalRecords = 0;
 
@@ -49,7 +55,14 @@ public class NdpS3Client {
         InetAddress inet = InetAddress.getByName(hostname);
         String IPAddress = inet.getHostAddress();   
         System.out.printf("IP address of host %s is %s %n", hostname, IPAddress);  
+        
+        if( AwsSdkMetrics.isMetricsEnabled()) {
+            System.out.format("MetricsEnabled\n");
+        } else {
+            System.out.format("MetricsDisabled\n");
+        }
 
+        long start_time = System.currentTimeMillis();
         AmazonS3ClientBuilder.EndpointConfiguration endpointConfiguration = 
             new AmazonS3ClientBuilder.EndpointConfiguration("http://" + IPAddress + ":9858", "us-east-1");
 
@@ -58,10 +71,13 @@ public class NdpS3Client {
             .withClientConfiguration(new ClientConfiguration()
                 .withRequestTimeout(24*3600*1000)
                 .withSocketTimeout(24*3600*1000)
-                .withTcpKeepAlive(true)
-                .withRequestTimeout(24*3600*1000)
+                //.withTcpKeepAlive(true)                
                 .withClientExecutionTimeout(24*3600*1000))
             .build();
+
+        long end_time = System.currentTimeMillis();
+        System.out.format("It took %.3f sec to create s3Client\n", (end_time - start_time) / 1000.0);
+        start_time = System.currentTimeMillis();
 
         ListObjectsV2Request listObjectsV2Request = new ListObjectsV2Request()
             .withBucketName(BUCKET_NAME)
@@ -79,7 +95,9 @@ public class NdpS3Client {
             fileSize = objectSummary.getSize();            
         }
 
-        long start_time = System.currentTimeMillis();
+        end_time = System.currentTimeMillis();
+        System.out.format("It took %.3f sec to get Object List\n", (end_time - start_time) / 1000.0);
+        start_time = System.currentTimeMillis();
         
         long readSize = 0;
         while (readSize < fileSize) {            
@@ -103,10 +121,11 @@ public class NdpS3Client {
                     System.out.println(record);
                 }
                 record = br.readLine();
-            }                                
-            
+            }
+            br.close();
         } // Partition loop
-        long end_time = System.currentTimeMillis();        
+        
+        end_time = System.currentTimeMillis();        
         System.out.format("Received %d records (%d bytes) in %.3f sec\n", totalRecords, totalDataSize, (end_time - start_time) / 1000.0);
     }
 

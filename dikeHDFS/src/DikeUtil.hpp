@@ -14,6 +14,9 @@
 #include <semaphore.h>
 #include <unistd.h>
 
+#include <sys/time.h>
+#include <time.h>
+
 class DikeUtil{
     public:
     DikeUtil(){ }
@@ -21,16 +24,22 @@ class DikeUtil{
 
     std::string Now(){
         std::ostringstream now;
+        struct timeval tv;
         
+        gettimeofday(&tv, NULL);
+
         time_t curr_time;
-	    curr_time = time(NULL);
+	    //curr_time = time(NULL);
+        curr_time = tv.tv_sec;
+
 	    tm *tm_local = localtime(&curr_time);
         now << std::to_string(tm_local->tm_year - 100) << "/";
         now << std::setw(2) << std::setfill('0') << std::to_string(tm_local->tm_mon + 1) << "/";
         now << std::setw(2) << std::setfill('0') << std::to_string(tm_local->tm_mday) << " ";
         now << std::setw(2) << std::setfill('0') << std::to_string(tm_local->tm_hour) << ":";
         now << std::setw(2) << std::setfill('0') << std::to_string(tm_local->tm_min)  << ":";
-        now << std::setw(2) << std::setfill('0') << std::to_string(tm_local->tm_sec);         
+        now << std::setw(2) << std::setfill('0') << std::to_string(tm_local->tm_sec) << ":";         
+        now << tv.tv_usec / 1000;
         return now.str();
     }
     

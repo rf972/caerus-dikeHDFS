@@ -59,6 +59,10 @@ void ListObjectsV2::handleRequest(HTTPServerRequest &req, HTTPServerResponse &re
     Poco::XML::XMLWriter writer(xmlstream, 0);    
 
     if(verbose) {
+      cout << DikeUtil().Yellow() << DikeUtil().Now() << " S3 List Start " << DikeUtil().Reset() << endl;
+    }
+
+    if(verbose) {        
         req.write(cout);
     }
 
@@ -205,8 +209,8 @@ void ListObjectsV2::handleRequest(HTTPServerRequest &req, HTTPServerResponse &re
     outStream.write(xmlstream.str().c_str(), xmlstream.str().length());
     outStream.flush();
 
-    if(verbose){
-        cout << DikeUtil().Yellow() << DikeUtil().Now() << " Done " << DikeUtil().Reset();
-        cout << req.getURI() << endl;
+    if(verbose) {
+      cout << DikeUtil().Yellow() << DikeUtil().Now() << " S3 List Done " << DikeUtil().Reset() << endl;
     }
+
 }
