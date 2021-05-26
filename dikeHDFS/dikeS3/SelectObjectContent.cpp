@@ -219,6 +219,10 @@ void AbstractConfigutationWrite(AbstractConfiguration & cfg, const std::string& 
 
 void SelectObjectContent::handleRequest(Poco::Net::HTTPServerRequest &req, Poco::Net::HTTPServerResponse &resp)
 {
+    if(verbose) {
+      cout << DikeUtil().Yellow() << DikeUtil().Now() << " S3 Select Start " << DikeUtil().Reset() << endl;
+    }
+
     resp.setStatus(HTTPResponse::HTTP_OK);
     resp.set("Content-Security-Policy", "block-all-mixed-content");
     resp.set("Vary", "Origin");
@@ -265,6 +269,9 @@ void SelectObjectContent::handleRequest(Poco::Net::HTTPServerRequest &req, Poco:
     readParam["ScanRange.End"] = cfg->getString("ScanRange.End", "0");
 
     readFromHdfs(readParam, toClient);
+    if(verbose) {
+        cout << DikeUtil().Yellow() << DikeUtil().Now() << " S3 Select Done " << DikeUtil().Reset() << endl;
+    }    
 }
 
 void SelectObjectContent::readFromHdfs(std::map<std::string, std::string> readParam, std::ostream & toClient)
@@ -364,8 +371,7 @@ void SelectObjectContent::readFromHdfs(std::map<std::string, std::string> readPa
     dbb.SendEnd(toClient);
     toClient.flush();
 
-    if(verbose) {
-        cout << DikeUtil().Yellow() << DikeUtil().Now() << " Done " << DikeUtil().Reset();
+    if(verbose) {        
         cout << DikeUtil().Red() << "Total bytes " << dbb.m_TotalBytes << " " << DikeUtil().Reset() << endl;       
     }
 }

@@ -60,7 +60,7 @@ docker run --rm=true -it \
   -v "${ROOT_DIR}/build/.gnupg:${DOCKER_HOME_DIR}/.gnupg" \
   -e "AWS_ACCESS_KEY_ID=${USER_NAME}" \
   -e "AWS_SECRET_ACCESS_KEY=admin123" \
-  -e "AWS_EC2_METADATA_DISABLED" \
+  -e "AWS_EC2_METADATA_DISABLED=true" \
   -u "${USER_ID}" \
   --network dike-net \
   "hadoop-${HADOOP_VERSION}-ndp-${USER_NAME}" ${CMD}
