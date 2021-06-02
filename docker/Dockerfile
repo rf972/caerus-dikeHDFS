@@ -86,8 +86,24 @@ RUN apt-get -q update \
         openssh-server \
         net-tools \
         gdb \
+        ca-certificates lsb-release wget 
+
+#    && apt-get clean \
+#    && rm -rf /var/lib/apt/lists/*
+RUN wget https://apache.jfrog.io/artifactory/arrow/$(lsb_release --id --short | tr 'A-Z' 'a-z')/apache-arrow-apt-source-latest-$(lsb_release --codename --short).deb
+
+RUN apt-get -q install -y --no-install-recommends \
+    ./apache-arrow-apt-source-latest-$(lsb_release --codename --short).deb
+
+RUN apt-get -q update \
+    && apt-get -q install -y --no-install-recommends \
+        libarrow-dev \
+        libarrow-glib-dev \
+        libarrow-dataset-dev \
+        libarrow-flight-dev \
     && apt-get clean \
     && rm -rf /var/lib/apt/lists/*
+
 
 ######
 # Set env vars required to build Hadoop

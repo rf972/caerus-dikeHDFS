@@ -37,6 +37,9 @@ mkdir -p ${ROOT_DIR}/build/dikeHDFS
 # Make sure server directory exists
 mkdir -p ${ROOT_DIR}/server
 
+# Make sure data directory exists
+mkdir -p ${ROOT_DIR}/data
+
 BUILD_TYPE=Release
 
 if [ "$#" -ge 1 ] && [ $1 = "Debug" ]; then
@@ -52,6 +55,7 @@ if [ "$#" -ge 1 ] && [ $1 = "-d" ]; then
 fi
 
 docker run --rm=true $DOCKER_INTERACTIVE_RUN \
+  -v "${ROOT_DIR}/data:/data" \
   -v "${ROOT_DIR}/external:${DOCKER_HOME_DIR}/dikeHDFS/external" \
   -v "${ROOT_DIR}/dikeHDFS:${DOCKER_HOME_DIR}/dikeHDFS" \
   -w "${DOCKER_HOME_DIR}/dikeHDFS" \
