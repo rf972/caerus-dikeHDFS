@@ -4,7 +4,8 @@
 #include <parquet/metadata.h>  // IWYU pragma: keep
 #include <parquet/properties.h>
 
-
+#include <arrow/api.h>
+#include <arrow/io/api.h>
 #include <arrow/io/memory.h>
 #include <arrow/table.h>
 #include <arrow/filesystem/filesystem.h>
@@ -14,40 +15,32 @@
 int main(int argc, char ** argv)
 {
     arrow::Status st;    
-
+#if 0
     std::shared_ptr<arrow::fs::FileSystem> fs;
     fs = arrow::fs::FileSystemFromUri("file:///data").ValueOrDie();
 
     std::shared_ptr<arrow::io::RandomAccessFile> inputFile;
     inputFile = fs->OpenInputFile("/data/lineitem.parquet").ValueOrDie();
+#endif
 
     // Open Parquet file reader
     //std::unique_ptr<parquet::arrow::FileReader>  arrow_reader;
     std::shared_ptr<arrow::Table> table;
 
-#if 0
+    // https://gist.github.com/hurdad/06058a22ca2b56e25d63aaa6f3a9108f
+	arrow::io::HdfsConnectionConfig conf;
+	conf.host = "dikehdfs";	
+	//conf.port = 8020;
+    conf.port = 9000;
+    conf.user = "peter";
 
-    st = parquet::arrow::OpenFile(inputFile, pool, &arrow_reader);
-    if (!st.ok()) {      
-        std::cout << "Handle OpenFile error ... " << std::endl;
-    }
-#endif
+	std::shared_ptr<arrow::io::HadoopFileSystem> fs;
+	st = arrow::io::HadoopFileSystem::Connect(&conf, &fs);
+	std::cout << st.ToString() << std::endl;
 
-#if 0
-    // Read entire file as a single Arrow table   
-    st = arrow_reader->ReadTable(&table);
-    if (!st.ok()) {
-        std::cout << "Handle ReadTable error ... "  << std::endl;
-    }
-#endif
-#if 0
-    st = arrow_reader->ReadRowGroup(1, &table);
-    if (!st.ok()) {
-        std::cout << "Handle ReadRowGroup error... "  << std::endl;
-    }
-
-   std::cout << "Succesfully read RowGroup(1) " << table->num_rows() << " rows out of " << arrow_reader->num_row_groups() << " RowGroups" << std::endl;
-#endif
+    std::shared_ptr<arrow::io::HdfsReadableFile> inputFile;
+    st = fs->OpenReadable("/lineitem.parquet", &inputFile);
+    std::cout << st.ToString() << std::endl;
 
     std::shared_ptr<parquet::FileMetaData> fileMetaData;    
     fileMetaData = parquet::ReadMetaData(inputFile);
@@ -77,7 +70,10 @@ int main(int argc, char ** argv)
 
     std::cout << "Succesfully read RowGroup(1) " << table->num_rows() << " rows out of " << arrow_reader->num_row_groups() << " RowGroups" << std::endl;
 
+    
     return 0;
 }
 
+// export LD_LIBRARY_PATH=$LD_LIBRARY_PATH:$HADOOP_HOME/lib/native
+// export CLASSPATH=$(bin/hadoop classpath) 
 // gcc pq_test.cpp -o pq_test -lstdc++  -lpthread -lm -larrow -lparquet
