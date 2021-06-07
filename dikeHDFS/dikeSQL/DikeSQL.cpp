@@ -16,6 +16,7 @@
 #include "DikeSQL.hpp"
 #include "DikeUtil.hpp"
 
+#include "DikeCsvReader.hpp"
 
 int DikeSQL::Run(DikeSQLParam * dikeSQLParam, DikeIO * input, DikeIO * output)
 {
@@ -32,7 +33,7 @@ int DikeSQL::Run(DikeSQLParam * dikeSQLParam, DikeIO * input, DikeIO * output)
     }
 
     StreamReaderParam streamReaderParam;        
-    streamReaderParam.reader = new DikeAsyncReader(input, dikeSQLParam->blockSize);
+    streamReaderParam.reader = (DikeAsyncReader *)new DikeCsvReader(input, dikeSQLParam->blockSize);
     streamReaderParam.reader->blockSize = dikeSQLParam->blockSize;
     streamReaderParam.reader->blockOffset = dikeSQLParam->blockOffset;
     streamReaderParam.name = "S3Object";

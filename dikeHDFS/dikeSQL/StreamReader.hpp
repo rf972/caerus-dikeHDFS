@@ -16,7 +16,18 @@ typedef enum header_info_e {
     HEADER_INFO_USE
 }header_info_t;
 
-static header_info_t GetHeaderInfo(std::string & headerInfo) {
+/* This is a copy from sqlite3.c file */
+typedef enum sqlite_aff_e {
+    SQLITE_AFF_NONE     = 0x40,  /* '@' */
+    SQLITE_AFF_BLOB     = 0x41,  /* 'A' */
+    SQLITE_AFF_TEXT     = 0x42,  /* 'B' */
+    SQLITE_AFF_NUMERIC  = 0x43,  /* 'C' */
+    SQLITE_AFF_INTEGER  = 0x44,  /* 'D' */
+    SQLITE_AFF_REAL     = 0x45,  /* 'E' */
+} sqlite_aff_t;
+
+static header_info_t GetHeaderInfo(std::string & headerInfo) 
+{
     std::string str = headerInfo;
     header_info_t info = HEADER_INFO_NONE;
     // Convert header info string to uppercase

@@ -2,48 +2,15 @@
 SQLITE_EXTENSION_INIT1
 #include <string.h>
 #include <stdlib.h>
-#include <assert.h>
 #include <stdarg.h>
 #include <ctype.h>
 #include <stdio.h>
-#include <pthread.h>
-#include <semaphore.h> 
 #include <unistd.h>
 
 #include "StreamReader.hpp"
 #include "dikeSQLite3.h"
 
 #ifndef SQLITE_OMIT_VIRTUALTABLE
-
-/* This is a copy for sqlite3.c file */
-#define SQLITE_AFF_NONE     0x40  /* '@' */
-#define SQLITE_AFF_BLOB     0x41  /* 'A' */
-#define SQLITE_AFF_TEXT     0x42  /* 'B' */
-#define SQLITE_AFF_NUMERIC  0x43  /* 'C' */
-#define SQLITE_AFF_INTEGER  0x44  /* 'D' */
-#define SQLITE_AFF_REAL     0x45  /* 'E' */
-
-
-/* Max size of the error message in a StreamReader */
-#define SRD_MXERR 200
-
-/* A context object used when read a file. */
-struct StreamReader {    
-  DikeAsyncReader * reader;
-};
-
-/* Close StreamReader object */
-static void srd_reader_close(StreamReader *p){}
-
-/* Open the file associated with a StreamReader
-** Return the number of errors.
-*/
-static int srd_reader_open(StreamReader *p)
-{
-  // Do not forget to seek
-  return 0;
-}
-
 
 /* Forward references to the various virtual table methods implemented
 ** in this file. */
@@ -71,10 +38,7 @@ typedef struct srdTable {
 /* A cursor for the virtual table */
 typedef struct srdCursor {
   sqlite3_vtab_cursor base;       /* Base class.  Must be first */
-  StreamReader rdr;               /* The StreamReader object */
-  char **azVal;                   /* Value of the current row */
-  int *aLen;                      /* Length of each entry */
-  char **azPtr;                   /* Deliminator indices to reader array */
+  DikeAsyncReader * reader;
   sqlite3_int64 iRowid;           /* The current rowid.  Negative for EOF */
 } srdCursor;
 
@@ -238,33 +202,24 @@ static int srd_Connect( sqlite3 *db, void *pAux,
 
     //std::cout << "Schema: " << schema << std::endl;
   
-  param->reader->initRecord(pTable->nCol);
-  pTable->reader = param->reader;
+    param->reader->initRecord(pTable->nCol);
+    pTable->reader = param->reader;
   
-  rc = sqlite3_declare_vtab(db, schema.c_str());
-  if( rc ){
-    std::cerr << "Bad schema: " <<  schema << " - " << sqlite3_errmsg(db) << std::endl;
-    srd_Disconnect(&pTable->base);
-    return SQLITE_ERROR;
-  }
+    rc = sqlite3_declare_vtab(db, schema.c_str());
+    if( rc ){
+        std::cerr << "Bad schema: " <<  schema << " - " << sqlite3_errmsg(db) << std::endl;
+        srd_Disconnect(&pTable->base);
+        return SQLITE_ERROR;
+    }
 
-  sqlite3_vtab_config(db, SQLITE_VTAB_DIRECTONLY);
-  return SQLITE_OK;
+    sqlite3_vtab_config(db, SQLITE_VTAB_DIRECTONLY);
+    return SQLITE_OK;
 }
 
 /*
 ** Reset the current row content held by a srdCursor.
 */
-static void srd_CursorRowReset(srdCursor *pCur){
-  srdTable *pTab = (srdTable*)pCur->base.pVtab;
-  int i;
-  for(i=0; i<pTab->nCol; i++){
-    sqlite3_free(pCur->azVal[i]);
-    pCur->azVal[i] = 0;
-    pCur->aLen[i] = 0;
-    pCur->azPtr[i] = 0;
-  }
-}
+static void srd_CursorRowReset(srdCursor *pCur) {}
 
 /*
 ** The xConnect and xCreate methods do the same thing, but they must be
@@ -275,9 +230,9 @@ static int srd_Create(
   void *pAux,
   int argc, const char *const*argv,
   sqlite3_vtab **ppVtab,
-  char **pzErr
-){
- return srd_Connect(db, pAux, argc, argv, ppVtab, pzErr);
+  char **pzErr)
+{
+    return srd_Connect(db, pAux, argc, argv, ppVtab, pzErr);
 }
 
 /*
@@ -285,8 +240,7 @@ static int srd_Create(
 */
 static int srd_Close(sqlite3_vtab_cursor *cur){
   srdCursor *pCur = (srdCursor*)cur;
-  srd_CursorRowReset(pCur);
-  srd_reader_close(&pCur->rdr);
+  srd_CursorRowReset(pCur);  
   sqlite3_free(cur);
   return SQLITE_OK;
 }
@@ -294,67 +248,63 @@ static int srd_Close(sqlite3_vtab_cursor *cur){
 /*
 ** Constructor for a new srdTable cursor object.
 */
-static int srd_Open(sqlite3_vtab *p, sqlite3_vtab_cursor **ppCursor){
-  srdTable *pTab = (srdTable*)p;
-  srdCursor *pCur;
-  size_t nByte;
-  nByte = sizeof(*pCur) + (sizeof(char*)+sizeof(int)+sizeof(char*))*pTab->nCol;
-  pCur = (srdCursor *)sqlite3_malloc64( nByte );
-  if( pCur==0 ) return SQLITE_NOMEM;
-  memset(pCur, 0, nByte);
-  pCur->azVal = (char**)&pCur[1];
-  pCur->aLen = (int*)&pCur->azVal[pTab->nCol];
-  pCur->azPtr = (char**)&pCur->aLen[pTab->nCol];
-  *ppCursor = &pCur->base;
+static int srd_Open(sqlite3_vtab *p, sqlite3_vtab_cursor **ppCursor)
+{
+    srdTable *pTab = (srdTable*)p;
+    srdCursor *pCur;
+    size_t nByte;
+    nByte = sizeof(*pCur) + (sizeof(char*)+sizeof(int)+sizeof(char*))*pTab->nCol;
+    pCur = (srdCursor *)sqlite3_malloc64( nByte );
+    if( pCur==0 ) {
+        return SQLITE_NOMEM;
+    }
+    memset(pCur, 0, nByte);
 
-  pCur->rdr.reader = pTab->reader;
+    *ppCursor = &pCur->base;
 
-  if( srd_reader_open(&pCur->rdr) ){
-    return SQLITE_ERROR;
-  } else {
+    pCur->reader = pTab->reader;
+
     sqlite3_free(pTab->base.zErrMsg);
     pTab->base.zErrMsg = NULL;
-  }
-  return SQLITE_OK;
+    
+    return SQLITE_OK;
 }
 
 /*
 ** Advance a srdCursor to its next row of input.
 ** Set the EOF marker if we reach the end of input.
 */
-static int srd_Next(sqlite3_vtab_cursor *cur){
-  srdCursor *pCur = (srdCursor*)cur;
+static int srd_Next(sqlite3_vtab_cursor *cur)
+{
+    srdCursor *pCur = (srdCursor*)cur;
 
-  if(pCur->rdr.reader->readRecord()) {
-    pCur->iRowid = -1;
-  } else {
-    pCur->iRowid++;
-  }
+    if(pCur->reader->readRecord()) {
+        pCur->iRowid = -1;
+    } else {
+        pCur->iRowid++;
+    }
 
-  return SQLITE_OK;
+    return SQLITE_OK;
 }
 
 /*
 ** Return values of columns for the row at which the srdCursor
 ** is currently pointing.
 */
-static int srd_Column(
-  sqlite3_vtab_cursor *cur,   /* The cursor */
-  sqlite3_context *ctx,       /* First argument to sqlite3_result_...() */
-  int i                       /* Which column to return */
-){
+static int srd_Column(sqlite3_vtab_cursor *cur, sqlite3_context *ctx, int col)
+{
   srdCursor *pCur = (srdCursor*)cur;
   srdTable *pTab = (srdTable*)cur->pVtab;
  
-  if( i>=0 && i<pTab->nCol){
+  if( col >= 0 && col < pTab->nCol){
     dike_sqlite3_result_text(ctx, 
-                              (const char*)pCur->rdr.reader->record->fields[i], 
-                              pCur->rdr.reader->record->len[i], 
-                              true, // Copy requiered
-                              pTab->cTypes[i]);
+                            (const char*)pCur->reader->record->fields[col], 
+                            pCur->reader->record->len[col], 
+                            true, // Copy requiered
+                            pTab->cTypes[col]);
 
-    //dike_sqlite3_result_text(ctx, (const char*)pCur->rdr.reader->record->fields[i], pCur->rdr.reader->record->len[i], pTab->cTypes[i]);
-    //sqlite3_result_text(ctx, (const char*)pCur->rdr.reader->record->fields[i], -1 , SQLITE_TRANSIENT);
+    //dike_sqlite3_result_text(ctx, (const char*)pCur->reader->record->fields[i], pCur->reader->record->len[i], pTab->cTypes[i]);
+    //sqlite3_result_text(ctx, (const char*)pCur->reader->record->fields[i], -1 , SQLITE_TRANSIENT);
   }
   return SQLITE_OK;
 }
@@ -363,9 +313,9 @@ static int srd_Column(
 ** Return the rowid for the current row.
 */
 static int srd_Rowid(sqlite3_vtab_cursor *cur, sqlite_int64 *pRowid){
-  srdCursor *pCur = (srdCursor*)cur;
-  *pRowid = pCur->iRowid;
-  return SQLITE_OK;
+    srdCursor *pCur = (srdCursor*)cur;
+    *pRowid = pCur->iRowid;
+    return SQLITE_OK;
 }
 
 /*
@@ -373,12 +323,12 @@ static int srd_Rowid(sqlite3_vtab_cursor *cur, sqlite_int64 *pRowid){
 ** row of output.
 */
 static int srd_Eof(sqlite3_vtab_cursor *cur){
-  srdCursor *pCur = (srdCursor*)cur;
-  if(pCur->iRowid < 0) {
-    return true;
-  }
-  
-  return false;
+    srdCursor *pCur = (srdCursor*)cur;
+    if(pCur->iRowid < 0) {
+        return true;
+    }
+    
+    return false;
 }
 
 /*
@@ -390,10 +340,10 @@ static int srd_Filter(
   int idxNum, const char *idxStr,
   int argc, sqlite3_value **argv)
 {
-  srdCursor *pCur = (srdCursor*)pVtabCursor;
-  srdTable *pTab = (srdTable*)pVtabCursor->pVtab;
-  pCur->iRowid = 0;
-  return srd_Next(pVtabCursor);
+    srdCursor *pCur = (srdCursor*)pVtabCursor;
+    srdTable *pTab = (srdTable*)pVtabCursor->pVtab;
+    pCur->iRowid = 0;
+    return srd_Next(pVtabCursor);
 }
 
 /*
@@ -402,36 +352,33 @@ static int srd_Filter(
 ** constraints lowers the estimated cost, which is fiction, but is useful
 ** for testing certain kinds of virtual table behavior.
 */
-static int srd_BestIndex(
-  sqlite3_vtab *tab,
-  sqlite3_index_info *pIdxInfo
-){
-  pIdxInfo->estimatedCost = 1000000;
-  return SQLITE_OK;
+static int srd_BestIndex( sqlite3_vtab *tab, sqlite3_index_info *pIdxInfo)
+{
+    pIdxInfo->estimatedCost = 1000000;
+    return SQLITE_OK;
 }
 
-
 static sqlite3_module StreamReaderModule = {
-  0,                     /* iVersion */
-  srd_Create,            /* xCreate */
-  srd_Connect,           /* xConnect */
-  srd_BestIndex,         /* xBestIndex */
-  srd_Disconnect,        /* xDisconnect */
-  srd_Disconnect,        /* xDestroy */
-  srd_Open,              /* xOpen - open a cursor */
-  srd_Close,             /* xClose - close a cursor */
-  srd_Filter,            /* xFilter - configure scan constraints */
-  srd_Next,              /* xNext - advance a cursor */
-  srd_Eof,               /* xEof - check for end of scan */
-  srd_Column,            /* xColumn - read data */
-  srd_Rowid,             /* xRowid - read data */
-  0,                     /* xUpdate */
-  0,                     /* xBegin */
-  0,                     /* xSync */
-  0,                     /* xCommit */
-  0,                     /* xRollback */
-  0,                     /* xFindMethod */
-  0,                     /* xRename */
+    0,                     /* iVersion */
+    srd_Create,            /* xCreate */
+    srd_Connect,           /* xConnect */
+    srd_BestIndex,         /* xBestIndex */
+    srd_Disconnect,        /* xDisconnect */
+    srd_Disconnect,        /* xDestroy */
+    srd_Open,              /* xOpen - open a cursor */
+    srd_Close,             /* xClose - close a cursor */
+    srd_Filter,            /* xFilter - configure scan constraints */
+    srd_Next,              /* xNext - advance a cursor */
+    srd_Eof,               /* xEof - check for end of scan */
+    srd_Column,            /* xColumn - read data */
+    srd_Rowid,             /* xRowid - read data */
+    0,                     /* xUpdate */
+    0,                     /* xBegin */
+    0,                     /* xSync */
+    0,                     /* xCommit */
+    0,                     /* xRollback */
+    0,                     /* xFindMethod */
+    0,                     /* xRename */
 };
 
 #endif /* !defined(SQLITE_OMIT_VIRTUALTABLE) */
@@ -441,22 +388,14 @@ static sqlite3_module StreamReaderModule = {
 ** SRD virtual table module is registered with the calling database
 ** connection.
 */
-
-int sqlite3_srd_init(
-  sqlite3 *db, 
-  char **pzErrMsg, 
-  const sqlite3_api_routines *pApi
-){
-  int rc;
+int sqlite3_srd_init( sqlite3 *db, char **errMsg, const sqlite3_api_routines *pApi)
+{
   SQLITE_EXTENSION_INIT2(pApi);
-  rc = sqlite3_create_module(db, "StreamReader", &StreamReaderModule, 0);
-  return rc;
+  return sqlite3_create_module(db, "StreamReader", &StreamReaderModule, 0);
 }
 
 int StreamReaderInit(sqlite3 *db, StreamReaderParam * param)
 {
-  int rc;
   SQLITE_EXTENSION_INIT2(NULL);
-  rc = sqlite3_create_module(db, "StreamReader", &StreamReaderModule, param);
-  return rc;
+  return sqlite3_create_module(db, "StreamReader", &StreamReaderModule, param);
 }
