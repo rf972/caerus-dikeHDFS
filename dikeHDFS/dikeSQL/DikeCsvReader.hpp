@@ -41,8 +41,9 @@ class DikeCsvReader: public DikeAsyncReader {
     DikeInSession * dikeInSession;
     DikeIO * input = NULL;
     uint8_t * memPool = 0;
+    uint64_t blockSize = 0; /* Limit reads to one HDFS block */
+    uint64_t blockOffset = 0; /* If not zero we need to seek for record */   
     
-
     DikeCsvReader(DikeSQLConfig & dikeSQLConfig) {        
         std::stringstream ss;
         ss.str(dikeSQLConfig["Request"]);
@@ -83,9 +84,6 @@ class DikeCsvReader: public DikeAsyncReader {
     int fDelim = ','; /* Field delimiter */
     int rDelim = '\n'; /* Record Delimiter */
     int qDelim = '\"'; /* Quotation Delimiter */
-
-    //uint64_t blockSize = 0; /* Limit reads to one HDFS block */
-    //uint64_t blockOffset = 0; /* If not zero we need to seek for record */   
  
     //DikeRecord * record = NULL; /* Single record */
 
@@ -123,7 +121,7 @@ class DikeCsvReader: public DikeAsyncReader {
         //std::stoull(uriParams[i].second)
         if(std::stoull(dikeSQLConfig["BlockOffset"]) > 0) {
             seekRecord();
-        } else if (dikeSQLConfig["Configuration.HeaderInfo"].compare("IGNORE") == 0) {
+        } else if (dikeSQLConfig["Configuration.HeaderInfo"].compare("IGNORE") == 0) { // USE , IGNORE or NONE
             seekRecord();
         }
     }
@@ -177,7 +175,7 @@ class DikeCsvReader: public DikeAsyncReader {
         return false;
     }
     
-    virtual int seekRecord() {
+    int seekRecord() {
         uint8_t * posPtr = buffer->posPtr;        
         bool underQuote = false;
         while(posPtr < buffer->endPtr) {
@@ -347,11 +345,11 @@ class DikeCsvReader: public DikeAsyncReader {
         return b;
     }
 
-    virtual std::thread startWorker() {
+    std::thread startWorker() {
         return std::thread([=] { Worker(); });
     }
 
-    virtual void Worker() {
+    void Worker() {
         pthread_t thread_id = pthread_self();
         pthread_setname_np(thread_id, "DikeCsvReader::Worker");
 

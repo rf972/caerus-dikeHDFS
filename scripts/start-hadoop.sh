@@ -28,6 +28,12 @@ echo "Starting Name Node ..."
 echo "Starting Data Node ..."
 "${HADOOP_HOME}/bin/hdfs" --daemon start datanode
 
+export LD_LIBRARY_PATH=$LD_LIBRARY_PATH:$HADOOP_HOME/lib/native
+export CLASSPATH=$(bin/hadoop classpath) 
+
+sleep 1
+/server/dikeHDFS &
+
 echo "HADOOP_READY"
 echo "HADOOP_READY" > /opt/volume/status/HADOOP_STATE
 

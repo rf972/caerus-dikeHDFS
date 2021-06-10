@@ -85,7 +85,7 @@ else
   done
 
   cat "${ROOT_DIR}/volume/status/HADOOP_STATE"
-  docker exec dikehdfs /server/dikeHDFS &
+  #docker exec dikehdfs /server/dikeHDFS &
 fi
 
 popd

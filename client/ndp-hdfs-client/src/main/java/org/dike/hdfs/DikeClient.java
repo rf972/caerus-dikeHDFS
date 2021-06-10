@@ -108,12 +108,11 @@ public class DikeClient
         XMLStreamWriter xmlw = xmlof.createXMLStreamWriter(strw);
         xmlw.writeStartDocument();
         xmlw.writeStartElement("Processor");
-        //xmlw.writeAttribute("Name","dikeSQL");
+        
         xmlw.writeStartElement("Name");
         xmlw.writeCharacters("dikeSQL");
         xmlw.writeEndElement(); // Name
-        //xmlw.writeAttribute("Version","0.1");
-
+        
         xmlw.writeStartElement("Configuration");
 
         xmlw.writeStartElement("Query");
@@ -126,8 +125,35 @@ public class DikeClient
         xmlw.writeEndElement(); // BlockSize
 
         xmlw.writeStartElement("HeaderInfo");
-        xmlw.writeCharacters("IGNORE");
+        xmlw.writeCharacters("IGNORE"); // USE , IGNORE or NONE
         xmlw.writeEndElement(); // HeaderInfo
+
+        xmlw.writeEndElement(); // Configuration
+        xmlw.writeEndElement(); // Processor
+        xmlw.writeEndDocument();
+        xmlw.close();
+
+        return strw.toString();
+    }
+
+    public static String getParquetReadParam(String name,
+                                      long blockSize) throws XMLStreamException 
+    {
+        XMLOutputFactory xmlof = XMLOutputFactory.newInstance();
+        StringWriter strw = new StringWriter();
+        XMLStreamWriter xmlw = xmlof.createXMLStreamWriter(strw);
+        xmlw.writeStartDocument();
+        xmlw.writeStartElement("Processor");
+        
+        xmlw.writeStartElement("Name");
+        xmlw.writeCharacters("dikeSQL.parquet");
+        xmlw.writeEndElement(); // Name
+        
+        xmlw.writeStartElement("Configuration");
+
+        xmlw.writeStartElement("Query");
+        xmlw.writeCData("SELECT * FROM S3Object");
+        xmlw.writeEndElement(); // Query
 
         xmlw.writeEndElement(); // Configuration
         xmlw.writeEndElement(); // Processor
@@ -206,7 +232,9 @@ public class DikeClient
             } else { // regular read
                 if(pushdown){
                     dikeFS = (NdpHdfsFileSystem)fs;
-                    readParam = getReadParam(fname, 0 /* ignore stream size */);
+                    //readParam = getReadParam(fname, 0 /* ignore stream size */);
+                    readParam = getParquetReadParam(fname, 0 /* ignore stream size */);
+                    
                     dataInputStream = dikeFS.open(fileToRead, 128 << 10, readParam);                    
                 } else {
                     dataInputStream = fs.open(fileToRead);

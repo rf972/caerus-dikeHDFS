@@ -24,13 +24,17 @@ target_include_directories(dikeHDFS PUBLIC
     ${CMAKE_SOURCE_DIR}/external/build-aws/include
     )
 
+SET(AWS_LIBS -laws-c-event-stream  -laws-checksums -laws-c-common -laws-c-io -laws-c-cal -ls2n -lssl -lcrypto -laws-c-common)
+SET(PARQUET_LIBS -larrow -lparquet)
+
 target_link_libraries(dikeHDFS PUBLIC 
-    -static-libgcc -static-libstdc++
+    -lstdc++
     Poco::Foundation
     Poco::Util
     Poco::Net
     libdikeSQL
     libdikeS3
     "-lpthread -lm"
-    "-L${CMAKE_SOURCE_DIR}/../build/Release/lib -laws-c-event-stream  -laws-checksums -laws-c-common -laws-c-io -laws-c-cal -ls2n -lssl -lcrypto -laws-c-common"
+    ${PARQUET_LIBS}
+    "-L${CMAKE_SOURCE_DIR}/../build/Release/lib  ${AWS_LIBS}"
     )

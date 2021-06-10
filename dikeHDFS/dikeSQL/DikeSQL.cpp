@@ -17,6 +17,7 @@
 #include "DikeUtil.hpp"
 
 #include "DikeCsvReader.hpp"
+#include "DikeParquetReader.hpp"
 
 //int DikeSQL::Run(DikeSQLParam * dikeSQLParam, DikeIO * input, DikeIO * output)
 int DikeSQL::Run(DikeSQLConfig & dikeSQLConfig, DikeIO * output)
@@ -33,17 +34,15 @@ int DikeSQL::Run(DikeSQLConfig & dikeSQLConfig, DikeIO * output)
         return(1);
     }
 
-#if 0
-    StreamReaderParam streamReaderParam;        
-    streamReaderParam.reader = (DikeAsyncReader *)new DikeCsvReader(input, dikeSQLParam->blockSize);
-    streamReaderParam.reader->blockSize = dikeSQLParam->blockSize;
-    streamReaderParam.reader->blockOffset = dikeSQLParam->blockOffset;
-    streamReaderParam.name = "S3Object";
-    streamReaderParam.schema = dikeSQLParam->schema;
-    streamReaderParam.headerInfo = GetHeaderInfo(dikeSQLParam->headerInfo);
-#endif
-    DikeCsvReader dikeCsvReader(dikeSQLConfig);
-    rc = StreamReaderInit(db, dikeCsvReader.getReader());
+    DikeAsyncReader * dikeReader;
+    if (dikeSQLConfig["Name"].compare("dikeSQL.parquet") == 0) {        
+        dikeReader = (DikeAsyncReader *)new DikeParquetReader(dikeSQLConfig);
+        std::cout << "Created parquet reader " << dikeReader << std::endl;
+    } else {
+        dikeReader = (DikeAsyncReader *)new DikeCsvReader(dikeSQLConfig);        
+    }
+
+    rc = StreamReaderInit(db, dikeReader);
     if(rc != SQLITE_OK) {
         std::cerr << "Can't load SRD extention: " << std::endl;        
         return 1;
@@ -90,6 +89,7 @@ int DikeSQL::Run(DikeSQLConfig & dikeSQLConfig, DikeIO * output)
 #endif
 
     delete dikeWriter;
+    delete dikeReader;
 
     //std::cout << "Message : " << sqlite3_errmsg(db) << std::endl;
 

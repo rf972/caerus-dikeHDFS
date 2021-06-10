@@ -168,7 +168,7 @@ public:
 
         string readParam = req.get("ReadParam");
         if(verbose) {
-        cout << DikeUtil().Blue();
+            cout << DikeUtil().Blue();
         }
 
         DikeSQL dikeSQL;
@@ -178,13 +178,6 @@ public:
         std::istringstream readParamStream(readParam.c_str());      
         std::istream& xmlStream(readParamStream);
         AbstractConfiguration *cfg = new XMLConfiguration(xmlStream);
-        if(verbose) {
-            cout << "Name: " << cfg->getString("Name") << endl;          
-            cout << "Query: " << cfg->getString("Configuration.Query") << endl;
-            cout << "BlockSize: " << cfg->getString("Configuration.BlockSize") << endl;
-            cout << DikeUtil().Reset() << endl;
-        }
-
         std::stringstream ss;
         req.write(ss);
 
@@ -209,6 +202,10 @@ public:
             std::string value = cfg->getString(name);        
             dikeSQLConfig[name] = value;
             cout << name + " = " + value << endl;
+        }
+
+        if(verbose) {
+            cout << DikeUtil().Reset() << endl;
         }
 
 #if 0
