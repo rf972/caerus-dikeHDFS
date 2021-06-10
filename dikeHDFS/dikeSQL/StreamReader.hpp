@@ -26,6 +26,7 @@ typedef enum sqlite_aff_e {
     SQLITE_AFF_REAL     = 0x45,  /* 'E' */
 } sqlite_aff_t;
 
+#if 0
 static header_info_t GetHeaderInfo(std::string & headerInfo) 
 {
     std::string str = headerInfo;
@@ -42,14 +43,17 @@ static header_info_t GetHeaderInfo(std::string & headerInfo)
     }
     return info;
 }
+#endif
 
+#if 0
 struct StreamReaderParam {
     DikeAsyncReader * reader;
     std::string name;
     std::string schema;
     header_info_t headerInfo;
 };
+#endif
 
-int StreamReaderInit(sqlite3 *db, StreamReaderParam * param);
+int StreamReaderInit(sqlite3 *db, DikeAsyncReader * dikeAsyncReader);
 
 #endif /* STREAM_READER_H */

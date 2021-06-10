@@ -15,6 +15,8 @@ struct DikeSQLParam {
     std::string headerInfo;
 };
 
+typedef std::map<std::string, std::string> DikeSQLConfig;
+
 class DikeSQL {    
     public:
     DikeSQL(){};
@@ -37,7 +39,8 @@ class DikeSQL {
 
     void Worker();
 
-    int Run(DikeSQLParam * dikeSQLParam, DikeIO * input, DikeIO * output);
+    //int Run(DikeSQLParam * dikeSQLParam, DikeIO * input, DikeIO * output);
+    int Run(DikeSQLConfig & dikeSQLConfig, DikeIO * output);
 };
 
 #endif /* DIKE_SQL_HPP */

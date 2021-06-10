@@ -171,7 +171,7 @@ static int srd_Connect( sqlite3 *db, void *pAux,
     srdTable *pTable = 0;     /* The srdTable object to construct */  
     int rc = SQLITE_OK;     /* Result code from this routine */  
     std::string schema;
-    StreamReaderParam * param = (StreamReaderParam*)pAux;
+    DikeAsyncReader * reader = (DikeAsyncReader*)pAux;
     
     pTable =(srdTable *) sqlite3_malloc( sizeof(srdTable) );
     *ppVtab = (sqlite3_vtab*)pTable;
@@ -182,13 +182,7 @@ static int srd_Connect( sqlite3 *db, void *pAux,
 
     memset(pTable, 0, sizeof(srdTable));  
   
-    if(param->reader->blockOffset > 0){
-      param->reader->seekRecord();
-    } else if (param->headerInfo != HEADER_INFO_NONE) {
-      param->reader->seekRecord();
-    }
-  
-    pTable->nCol = param->reader->getColumnCount();
+    pTable->nCol = reader->getColumnCount();
 
     schema = std::string("CREATE TABLE S3Object (");
     for(int i = 0; i < pTable->nCol; i++) {
@@ -200,10 +194,10 @@ static int srd_Connect( sqlite3 *db, void *pAux,
       }
     }
 
-    //std::cout << "Schema: " << schema << std::endl;
+    std::cout << "Schema: " << schema << std::endl;
   
-    param->reader->initRecord(pTable->nCol);
-    pTable->reader = param->reader;
+    reader->initRecord(pTable->nCol);
+    pTable->reader = reader;
   
     rc = sqlite3_declare_vtab(db, schema.c_str());
     if( rc ){
@@ -394,8 +388,8 @@ int sqlite3_srd_init( sqlite3 *db, char **errMsg, const sqlite3_api_routines *pA
   return sqlite3_create_module(db, "StreamReader", &StreamReaderModule, 0);
 }
 
-int StreamReaderInit(sqlite3 *db, StreamReaderParam * param)
+int StreamReaderInit(sqlite3 *db, DikeAsyncReader * dikeAsyncReader)
 {
   SQLITE_EXTENSION_INIT2(NULL);
-  return sqlite3_create_module(db, "StreamReader", &StreamReaderModule, param);
+  return sqlite3_create_module(db, "StreamReader", &StreamReaderModule, dikeAsyncReader);
 }
