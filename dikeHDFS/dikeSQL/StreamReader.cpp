@@ -32,7 +32,7 @@ static int srd_Rowid(sqlite3_vtab_cursor*,sqlite3_int64*);
 typedef struct srdTable {
   sqlite3_vtab base;              /* Base class.  Must be first */
   DikeAsyncReader * reader;  
-  unsigned char cTypes[64];       /* Column affinity */
+  //unsigned char cTypes[64];       /* Column affinity */
 } srdTable;
 
 /* A cursor for the virtual table */
@@ -82,7 +82,7 @@ static int srd_parse_skip(const char * str, int c, int * pos)
 
   return SQLITE_ERROR;
 }
-
+#if 0
 static int srd_parse_schema(const char * schema, srdTable *pTable)
 {
   int pos = 0;
@@ -160,6 +160,7 @@ static int srd_parse_schema(const char * schema, srdTable *pTable)
 
   return SQLITE_OK;
 }
+#endif
 
 static int srd_Connect( sqlite3 *db, void *pAux,
   int argc, const char *const*argv,

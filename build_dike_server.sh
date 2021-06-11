@@ -28,6 +28,8 @@ USER_ID=$(id -u "${USER_NAME}")
 # Set the home directory in the Docker container.
 DOCKER_HOME_DIR=${DOCKER_HOME_DIR:-/home/${USER_NAME}}
 
+HADOOP_HOME=/opt/hadoop/hadoop-${HADOOP_VERSION}
+
 #If this env variable is empty, docker will be started
 # in non interactive mode
 DOCKER_INTERACTIVE_RUN=${DOCKER_INTERACTIVE_RUN-"-i -t"}
@@ -60,7 +62,9 @@ docker run --rm=true $DOCKER_INTERACTIVE_RUN \
   -v "${ROOT_DIR}/dikeHDFS:${DOCKER_HOME_DIR}/dikeHDFS" \
   -w "${DOCKER_HOME_DIR}/dikeHDFS" \
   -v "${ROOT_DIR}/build/dikeHDFS:${DOCKER_HOME_DIR}/build" \
+  -e HADOOP_HOME=${HADOOP_HOME} \
   -u "${USER_ID}" \
+  --network dike-net \
   "hadoop-${HADOOP_VERSION}-ndp-${USER_NAME}" ${CMD}
 
 cp ${ROOT_DIR}/build/dikeHDFS/${BUILD_TYPE}/dikeHDFS ${ROOT_DIR}/server/

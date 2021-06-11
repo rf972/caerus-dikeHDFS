@@ -167,6 +167,10 @@ public class DikeClient
         xmlw.writeCData("SELECT * FROM S3Object");
         xmlw.writeEndElement(); // Query
 
+        xmlw.writeStartElement("RowGroupIndex");
+        xmlw.writeCData("1");
+        xmlw.writeEndElement(); // RowGroupIndex
+
         xmlw.writeEndElement(); // Configuration
         xmlw.writeEndElement(); // Processor
         xmlw.writeEndDocument();

@@ -50,22 +50,47 @@ class DikeParquetReader: public DikeAsyncReader {
     public:  
     std::string schema = "";
     int columnCount = 0;
+    std::shared_ptr<arrow::Table> table;
+    std::vector<std::shared_ptr<ChunkedArray>>& columns;
 
-    DikeParquetReader(DikeSQLConfig & dikeSQLConfig) {        
+    DikeParquetReader(DikeSQLConfig & dikeSQLConfig) {
+        arrow::io::HdfsConnectionConfig hdfsConnectionConfig;
+
+        std::stringstream ss;
+        ss.str(dikeSQLConfig["Request"]);
+        Poco::Net::HTTPRequest hdfs_req;
+        hdfs_req.read(ss);
+
+        Poco::URI uri = Poco::URI(hdfs_req.getURI());
+        Poco::URI::QueryParameters uriParams = uri.getQueryParameters();        
+        for(int i = 0; i < uriParams.size(); i++){
+            if(uriParams[i].first.compare("namenoderpcaddress") == 0){
+                std::string rpcAddress = uriParams[i].second;
+                auto pos = rpcAddress.find(':');
+                hdfsConnectionConfig.host = rpcAddress.substr(0, pos);
+                hdfsConnectionConfig.port = std::stoi(rpcAddress.substr(pos + 1, rpcAddress.length()));
+            } else if(uriParams[i].first.compare("user.name") == 0) {
+                hdfsConnectionConfig.user = uriParams[i].second;                
+            }
+            //std::cout <<  uriParams[i].first << " = " << uriParams[i].second << std::endl;    
+        }
+        std::string path = uri.getPath();
+        std::string fileName = path.substr(11, path.length()); // skip "/webhdfs/v1"
+        std::cout <<  " Path = " << path << std::endl;
+        std::cout <<  " fileName = " << fileName << std::endl;
+        std::cout <<  " Host = " << hdfsConnectionConfig.host << std::endl;                
+        std::cout <<  " Port = " << hdfsConnectionConfig.port << std::endl;
+        std::cout <<  " User = " << hdfsConnectionConfig.user << std::endl;
+
         arrow::Status st;    
-        std::shared_ptr<arrow::Table> table;
-
-        // https://gist.github.com/hurdad/06058a22ca2b56e25d63aaa6f3a9108f
-        arrow::io::HdfsConnectionConfig conf;
-        conf.host = "dikehdfs";	        
-        conf.port = 9000;
-        conf.user = "peter";
+        
+        int rowGroupIndex = std::stoi(dikeSQLConfig["Configuration.RowGroupIndex"]);
 
         std::shared_ptr<arrow::io::HadoopFileSystem> fs;
-        st = arrow::io::HadoopFileSystem::Connect(&conf, &fs);        
+        st = arrow::io::HadoopFileSystem::Connect(&hdfsConnectionConfig, &fs);        
 
         std::shared_ptr<arrow::io::HdfsReadableFile> inputFile;
-        st = fs->OpenReadable("/lineitem.parquet", &inputFile);        
+        st = fs->OpenReadable(fileName, &inputFile);        
 
         std::shared_ptr<parquet::FileMetaData> fileMetaData;    
         fileMetaData = parquet::ReadMetaData(inputFile);
@@ -90,12 +115,16 @@ class DikeParquetReader: public DikeAsyncReader {
             std::cout << "Handle Make (reader) error... "  << std::endl;
         }
 
-        st = arrow_reader->ReadRowGroup(1, &table);
+        //arrow_reader->set_num_threads(4);
+
+        st = arrow_reader->ReadRowGroup(rowGroupIndex, &table);
         if (!st.ok()) {
             std::cout << "Handle ReadRowGroup error... "  << std::endl;
         }
 
         std::cout << "Succesfully read RowGroup(1) " << table->num_rows() << " rows out of " << arrow_reader->num_row_groups() << " RowGroups" << std::endl;
+        columns = table.columns();
+
     }
 
     DikeAsyncReader * getReader() {
