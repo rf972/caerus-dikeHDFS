@@ -101,6 +101,18 @@ public class DikeClient
     }
 
     public static String getReadParam(String name,
+                                      long blockSize) throws XMLStreamException
+    {
+        if(name.endsWith(".csv")) {
+            return getCsvReadParam(name, blockSize);
+        } else if(name.endsWith(".parquet")) {
+            return getParquetReadParam(name, blockSize);
+        }
+        return null;
+    }
+ 
+
+    public static String getCsvReadParam(String name,
                                       long blockSize) throws XMLStreamException 
     {
         XMLOutputFactory xmlof = XMLOutputFactory.newInstance();
@@ -232,9 +244,7 @@ public class DikeClient
             } else { // regular read
                 if(pushdown){
                     dikeFS = (NdpHdfsFileSystem)fs;
-                    //readParam = getReadParam(fname, 0 /* ignore stream size */);
-                    readParam = getParquetReadParam(fname, 0 /* ignore stream size */);
-                    
+                    readParam = getReadParam(fname, 0 /* ignore stream size */);                                        
                     dataInputStream = dikeFS.open(fileToRead, 128 << 10, readParam);                    
                 } else {
                     dataInputStream = fs.open(fileToRead);
@@ -358,5 +368,6 @@ public class DikeClient
 
 // mvn package -o
 // java -classpath target/ndp-hdfs-client-1.0-jar-with-dependencies.jar org.dike.hdfs.DikeClient /lineitem.csv
+// java -classpath target/ndp-hdfs-client-1.0-jar-with-dependencies.jar org.dike.hdfs.DikeClient /lineitem.parquet
 // java -Xdebug -agentlib:jdwp=transport=dt_socket,server=y,suspend=y,address=*:8000 -Xmx1g -classpath target/dikeclient-1.0-jar-with-dependencies.jar org.dike.hdfs.DikeClient /lineitem.tbl
 // for i in $(seq 1 10); do echo $i && java -classpath target/dikeclient-1.0-jar-with-dependencies.jar org.dike.hdfs.DikeClient /lineitem.tbl; done

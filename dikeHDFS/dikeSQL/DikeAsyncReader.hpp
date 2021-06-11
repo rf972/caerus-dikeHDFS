@@ -28,13 +28,27 @@ class DikeRecord {
         free(fieldMemory[0]);
     }
 };
+/* This is a copy from sqlite3.c file */
+typedef enum sqlite_aff_e {
+    SQLITE_AFF_NONE         = 0x40,  /* '@' */
+    SQLITE_AFF_BLOB         = 0x41,  /* 'A' */
+    SQLITE_AFF_TEXT         = 0x42,  /* 'B' */
+    SQLITE_AFF_NUMERIC      = 0x43,  /* 'C' */
+    SQLITE_AFF_INTEGER      = 0x44,  /* 'D' */
+    SQLITE_AFF_REAL         = 0x45,  /* 'E' */
+
+    // Additinal qualifiers
+    SQLITE_AFF_TEXT_TERM    = 0x54,  /* 'T' - NULL terminated text */
+} sqlite_aff_t;
 
 class DikeAsyncReader {
     public:
-    DikeRecord * record = NULL; /* Single record */
-    virtual int initRecord(int nCol) = 0;        
+    DikeRecord * record = NULL; /* Single record */          
     virtual int getColumnCount() = 0;
     virtual int readRecord() = 0;
+    virtual const std::string &  getSchema() = 0;
+    virtual int getColumnValue(int col, void ** value, int * len, sqlite_aff_t * affinity) = 0;
+
 };
 
 #endif /* DIKE_ASYNC_READER_HPP */

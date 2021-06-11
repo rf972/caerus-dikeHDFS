@@ -48,7 +48,9 @@
 
 class DikeParquetReader: public DikeAsyncReader {
     public:  
-    
+    std::string schema = "";
+    int columnCount = 0;
+
     DikeParquetReader(DikeSQLConfig & dikeSQLConfig) {        
         arrow::Status st;    
         std::shared_ptr<arrow::Table> table;
@@ -69,14 +71,16 @@ class DikeParquetReader: public DikeAsyncReader {
         fileMetaData = parquet::ReadMetaData(inputFile);
 
         std::cout << "Succesfully read fileMetaData " << fileMetaData->num_rows() << " rows in " << fileMetaData->num_row_groups() << " RowGroups" << std::endl;
-        auto schema = fileMetaData->schema();
+        auto vt_schema = fileMetaData->schema();
+        columnCount = vt_schema->num_columns();
 
-        for(auto i = 0; i < schema->num_columns(); i++) {
-            auto col = (parquet::schema::PrimitiveNode*)schema->GetColumnRoot(i);
-            
-            std::cout << col->name() << ",";
-        }
-        std::cout << std::endl;
+        for(int i = 0; i < columnCount; i++) {
+            auto col = (parquet::schema::PrimitiveNode*)vt_schema->GetColumnRoot(i);                        
+            schema += col->name();
+            if( i < columnCount - 1){
+                schema += ",";
+            }
+        }        
 
         auto parquetFileReader = parquet::ParquetFileReader::Open(inputFile, parquet::default_reader_properties(), fileMetaData);
         
@@ -102,7 +106,7 @@ class DikeParquetReader: public DikeAsyncReader {
       
     }    
 
-    virtual int initRecord(int nCol) {
+    int initRecord(int nCol) {
         record = new DikeRecord(nCol);
         return (record != NULL);
     }
@@ -115,11 +119,22 @@ class DikeParquetReader: public DikeAsyncReader {
         return 16;
     }
 
+    virtual const std::string &  getSchema() {
+        return schema;
+    }
+
     virtual int readRecord() {
         if(isEOF()){
             return 1;
         }
     }
+
+    virtual int getColumnValue(int col, void ** value, int * len, sqlite_aff_t * affinity) {
+        *affinity = SQLITE_AFF_TEXT_TERM;
+        *value = record->fieldMemory[col];
+        *len = 0; // record->len[col];
+        return 0;
+    }    
 };
 
 #endif /* DIKE_PARQUET_READER_HPP */

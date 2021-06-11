@@ -43,7 +43,9 @@ class DikeCsvReader: public DikeAsyncReader {
     uint8_t * memPool = 0;
     uint64_t blockSize = 0; /* Limit reads to one HDFS block */
     uint64_t blockOffset = 0; /* If not zero we need to seek for record */   
-    
+    std::string schema;
+    int columnCount = 0;
+
     DikeCsvReader(DikeSQLConfig & dikeSQLConfig) {        
         std::stringstream ss;
         ss.str(dikeSQLConfig["Request"]);
@@ -69,10 +71,6 @@ class DikeCsvReader: public DikeAsyncReader {
             }
         }        
         dikeCsvReaderInit(dikeInSession, dikeSQLConfig);
-    }
-
-    DikeAsyncReader * getReader() {
-        return (DikeAsyncReader *)this; 
     }
 
     enum{
@@ -124,6 +122,10 @@ class DikeCsvReader: public DikeAsyncReader {
         } else if (dikeSQLConfig["Configuration.HeaderInfo"].compare("IGNORE") == 0) { // USE , IGNORE or NONE
             seekRecord();
         }
+
+        initColumnCount();
+        initScema();
+        initRecord();
     }
 
     ~DikeCsvReader(){
@@ -163,8 +165,8 @@ class DikeCsvReader: public DikeAsyncReader {
         //std::cout << "~DikeCsvReader Push count: " << pushCount << " Empty count: " << emptyCount << " bytesRead " << bytesRead << std::endl;        
     }    
 
-    virtual int initRecord(int nCol) {
-        record = new DikeRecord(nCol);
+    int initRecord() {
+        record = new DikeRecord(columnCount);
         return (record != NULL);
     }
 
@@ -196,7 +198,32 @@ class DikeCsvReader: public DikeAsyncReader {
         return 1;
     }
     
-    virtual int getColumnCount(){
+    virtual int getColumnCount() {
+        return columnCount;
+    }
+
+    virtual const std::string &  getSchema() {
+        return schema;
+    }
+
+    virtual int getColumnValue(int col, void ** value, int * len, sqlite_aff_t * affinity) {
+        *affinity = SQLITE_AFF_TEXT_TERM;
+        *value = record->fields[col];
+        *len = record->len[col];
+        return 0;
+    }
+
+    void initScema() {
+        schema = "";
+        for(int i = 0; i < columnCount; i++) {
+            schema += "_" +  std::to_string(i+1);
+            if (i < columnCount -1 ){
+                schema += ",";
+            }
+        }
+    }
+
+    void initColumnCount() {
         int nCol = 0;
         uint8_t * posPtr = buffer->posPtr;
         bool underQuote = false;
@@ -217,8 +244,7 @@ class DikeCsvReader: public DikeAsyncReader {
         }
 
        // std::cout << "DikeCsvReader detected " << nCol << " columns" << std::endl;
-
-        return nCol;
+        columnCount = nCol;
     }
 
     virtual int readRecord() {

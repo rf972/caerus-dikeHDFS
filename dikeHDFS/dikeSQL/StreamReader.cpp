@@ -6,6 +6,7 @@ SQLITE_EXTENSION_INIT1
 #include <ctype.h>
 #include <stdio.h>
 #include <unistd.h>
+#include <iostream>
 
 #include "StreamReader.hpp"
 #include "dikeSQLite3.h"
@@ -30,8 +31,7 @@ static int srd_Rowid(sqlite3_vtab_cursor*,sqlite3_int64*);
 /* An instance of the virtual table */
 typedef struct srdTable {
   sqlite3_vtab base;              /* Base class.  Must be first */
-  DikeAsyncReader * reader;
-  int nCol;                       /* Number of columns */
+  DikeAsyncReader * reader;  
   unsigned char cTypes[64];       /* Column affinity */
 } srdTable;
 
@@ -156,9 +156,7 @@ static int srd_parse_schema(const char * schema, srdTable *pTable)
     }
 
     col++;
-  } 
-
-  pTable->nCol = col;  
+  }   
 
   return SQLITE_OK;
 }
@@ -181,22 +179,10 @@ static int srd_Connect( sqlite3 *db, void *pAux,
     }
 
     memset(pTable, 0, sizeof(srdTable));  
-  
-    pTable->nCol = reader->getColumnCount();
 
-    schema = std::string("CREATE TABLE S3Object (");
-    for(int i = 0; i < pTable->nCol; i++) {
-      schema += "_" +  std::to_string(i+1);
-      if (i < pTable->nCol -1 ){
-        schema += ",";
-      } else {
-        schema += ")";
-      }
-    }
-
+    schema = std::string("CREATE TABLE S3Object (" + reader->getSchema() + ")");
     std::cout << "Schema: " << schema << std::endl;
-  
-    reader->initRecord(pTable->nCol);
+      
     pTable->reader = reader;
   
     rc = sqlite3_declare_vtab(db, schema.c_str());
@@ -244,23 +230,19 @@ static int srd_Close(sqlite3_vtab_cursor *cur){
 */
 static int srd_Open(sqlite3_vtab *p, sqlite3_vtab_cursor **ppCursor)
 {
-    srdTable *pTab = (srdTable*)p;
-    srdCursor *pCur;
-    size_t nByte;
-    nByte = sizeof(*pCur) + (sizeof(char*)+sizeof(int)+sizeof(char*))*pTab->nCol;
-    pCur = (srdCursor *)sqlite3_malloc64( nByte );
+    srdTable *pTab = (srdTable*)p;      
+    size_t nByte = sizeof(srdCursor);
+    srdCursor * pCur = (srdCursor *)sqlite3_malloc64(nByte);
     if( pCur==0 ) {
         return SQLITE_NOMEM;
     }
     memset(pCur, 0, nByte);
 
     *ppCursor = &pCur->base;
-
     pCur->reader = pTab->reader;
 
     sqlite3_free(pTab->base.zErrMsg);
-    pTab->base.zErrMsg = NULL;
-    
+    pTab->base.zErrMsg = NULL;    
     return SQLITE_OK;
 }
 
@@ -287,20 +269,19 @@ static int srd_Next(sqlite3_vtab_cursor *cur)
 */
 static int srd_Column(sqlite3_vtab_cursor *cur, sqlite3_context *ctx, int col)
 {
-  srdCursor *pCur = (srdCursor*)cur;
-  srdTable *pTab = (srdTable*)cur->pVtab;
+    srdCursor *pCur = (srdCursor*)cur;
+    void * value;
+    int len;
+    sqlite_aff_t affinity;
  
-  if( col >= 0 && col < pTab->nCol){
-    dike_sqlite3_result_text(ctx, 
-                            (const char*)pCur->reader->record->fields[col], 
-                            pCur->reader->record->len[col], 
-                            true, // Copy requiered
-                            pTab->cTypes[col]);
+    pCur->reader->getColumnValue(col, &value, &len, &affinity);
+    switch(affinity){
+        case SQLITE_AFF_TEXT_TERM:
+            dike_sqlite3_result_text(ctx, (const char*)value, len, true, SQLITE_AFF_TEXT_TERM);
+            break;
+    }
 
-    //dike_sqlite3_result_text(ctx, (const char*)pCur->reader->record->fields[i], pCur->reader->record->len[i], pTab->cTypes[i]);
-    //sqlite3_result_text(ctx, (const char*)pCur->reader->record->fields[i], -1 , SQLITE_TRANSIENT);
-  }
-  return SQLITE_OK;
+    return SQLITE_OK;
 }
 
 /*
