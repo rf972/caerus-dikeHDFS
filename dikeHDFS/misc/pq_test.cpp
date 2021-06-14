@@ -12,9 +12,6 @@
 #include <arrow/table.h>
 #include <arrow/filesystem/filesystem.h>
 
-
-
-
 int main(int argc, char ** argv)
 {
     arrow::Status st;    
@@ -61,37 +58,43 @@ int main(int argc, char ** argv)
     std::unique_ptr<parquet::ParquetFileReader> parquetFileReader = parquet::ParquetFileReader::Open(inputFile, parquet::default_reader_properties(), fileMetaData);
     std::shared_ptr<parquet::RowGroupReader> rowGroupReader = parquetFileReader->RowGroup(0);
     const parquet::RowGroupMetaData* rowGroupMetaData = rowGroupReader->metadata();
+    int colId;
+    for(colId = 0; colId < rowGroupMetaData->num_columns(); colId++){
+        auto col = (parquet::schema::PrimitiveNode*)schema->GetColumnRoot(colId);       
 
-    int colId = 0;
-    auto col = (parquet::schema::PrimitiveNode*)schema->GetColumnRoot(colId);
-    std::shared_ptr<parquet::ColumnReader> columnReader = rowGroupReader->Column(colId);    
-
-    parquet::Type::type physicalType = col->physical_type();
-    switch (physicalType) {
-        case parquet::Type::BOOLEAN:
-        case parquet::Type::INT32:
-          break;
-        
-        case parquet::Type::FLOAT:
-        case parquet::Type::DOUBLE:
-          break;
-        
-        case parquet::Type::FIXED_LEN_BYTE_ARRAY:
-        case parquet::Type::BYTE_ARRAY:        
-          break;
-        
-        case parquet::Type::INT96:
-          // This type exists to store timestamps in nanoseconds due to legacy
-          // reasons. We just interpret it as a timestamp in milliseconds.
-        case parquet::Type::INT64:
+        parquet::Type::type physicalType = col->physical_type();
+        switch (physicalType) {
+            case parquet::Type::BOOLEAN:
+            case parquet::Type::INT32:
+            break;
             
-            break;        
-        default:
-            std::cout << "Uknown type "  << parquet::TypeToString(physicalType) << std::endl;
-          break;      
-    }    
+            case parquet::Type::FLOAT:
+            case parquet::Type::DOUBLE:
+            break;
+            
+            case parquet::Type::FIXED_LEN_BYTE_ARRAY:
+            case parquet::Type::BYTE_ARRAY:        
+            break;
+            
+            case parquet::Type::INT96:
+            // This type exists to store timestamps in nanoseconds due to legacy
+            // reasons. We just interpret it as a timestamp in milliseconds.
+            case parquet::Type::INT64:
+                
+                break;        
+            default:
+                std::cout << "Uknown type "  << parquet::TypeToString(physicalType) << std::endl;
+            break;      
+        }    
 
-    std::cout << "Column 0 type is " << parquet::TypeToString(physicalType) << std::endl;
+        std::cout << "Column " << colId << " type is " << parquet::TypeToString(physicalType) << std::endl;
+    }
+
+    colId = 0;
+    auto col = (parquet::schema::PrimitiveNode*)schema->GetColumnRoot(colId);
+    parquet::Type::type physicalType = col->physical_type();
+    std::shared_ptr<parquet::ColumnReader> columnReader = rowGroupReader->Column(colId);
+    std::cout << "Column " << colId << " type is " << parquet::TypeToString(physicalType) << std::endl;
     parquet::Int64Reader* int64_reader = static_cast<parquet::Int64Reader*>(columnReader.get());
     int64_t values_read = 0;
     int64_t rows_read = 0;
@@ -109,22 +112,30 @@ int main(int argc, char ** argv)
 
     std::cout << "rowCount " << rowCount << " out of " << rowGroupMetaData->num_rows() <<std::endl;
 
-#if 0    
-    std::unique_ptr<parquet::arrow::FileReader>  arrow_reader;
-    st = parquet::arrow::FileReader::Make(::arrow::default_memory_pool(), std::move(parquetFileReader), &arrow_reader);
-    if (!st.ok()) {
-        std::cout << "Handle Make (reader) error... "  << std::endl;
+    colId = 15;
+    col = (parquet::schema::PrimitiveNode*)schema->GetColumnRoot(colId);
+    physicalType = col->physical_type();
+    columnReader = rowGroupReader->Column(colId);
+    parquet::ByteArrayReader* ba_reader = static_cast<parquet::ByteArrayReader*>(columnReader.get());
+    std::shared_ptr<parquet::ColumnReader> r =  (std::shared_ptr<parquet::ColumnReader>)ba_reader;
+
+    std::cout << "Column " << colId << " type is " << parquet::TypeToString(physicalType) << std::endl;
+    rowCount = 0;
+    while (ba_reader->HasNext()) {
+        parquet::ByteArray value;
+        // Read one value at a time. The number of rows read is returned. values_read
+        // contains the number of non-null rows
+        //rows_read = int64_reader->ReadBatch(1, &definition_level, &repetition_level, &value, &values_read);
+        rows_read = ba_reader->ReadBatch(1, NULL, NULL, &value, &values_read);
+        
+        if(rowCount < 5){
+            std::cout << std::string((const char *)value.ptr, value.len) << std::endl;
+            //std::cout << value.len << std::endl;
+        }
+        rowCount++;
     }
 
-    st = arrow_reader->ReadRowGroup(1, &table);
-    if (!st.ok()) {
-        std::cout << "Handle ReadRowGroup error... "  << std::endl;
-    }
-
-    std::cout << "Succesfully read RowGroup(1) " << table->num_rows() << " rows out of " << arrow_reader->num_row_groups() << " RowGroups" << std::endl;
-
-#endif
-    
+    std::cout << "rowCount " << rowCount << " out of " << rowGroupMetaData->num_rows() <<std::endl;    
     return 0;
 }
 

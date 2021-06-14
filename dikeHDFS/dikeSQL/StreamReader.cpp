@@ -49,119 +49,6 @@ static int srd_Disconnect(sqlite3_vtab *pVtab){
   return SQLITE_OK;
 }
 
-static int srd_parse_until(const char * str, const char *expr, int * pos)
-{
-  int p = *pos;  
-  int expr_len = strlen(expr);
-  int i;
-
-  while(str[p] != 0) {
-    for(i = 0; i < expr_len; i++){
-      if(str[p]==expr[i]){
-        *pos = p + 1; /* We returning "interesting" position */
-        return SQLITE_OK;  
-      }
-    }
-    p++;
-  }
-  
-  return SQLITE_ERROR;
-}
-
-static int srd_parse_skip(const char * str, int c, int * pos)
-{
-  int p = *pos;
-
-  while(str[p] != 0) {
-    if(str[p]!=c) {
-      *pos = p;
-      return SQLITE_OK;
-    }
-    p++;
-  }
-
-  return SQLITE_ERROR;
-}
-#if 0
-static int srd_parse_schema(const char * schema, srdTable *pTable)
-{
-  int pos = 0;
-  int len = strlen(schema);
-  int col = 0; /* column counter */
-  
-  /* parse until opening bracket */
-  if(srd_parse_until(schema, "(", &pos)){
-    return SQLITE_ERROR;
-  }
-
-  while(schema[pos-1] != ')') {
-    if(srd_parse_skip(schema, ' ', &pos)){
-      return SQLITE_ERROR;
-    }
-
-    if(schema[pos]=='"'){ /* If quote , parse until end of it */
-      pos++;
-      if(srd_parse_until(schema, "\"", &pos)){
-        return SQLITE_ERROR;
-      }
-     } else { /* parse until space */
-      if(srd_parse_skip(schema, ' ', &pos)){
-        return SQLITE_ERROR;
-      }
-    }
-
-    if(srd_parse_until(schema, "), ", &pos)){
-      return SQLITE_ERROR;
-    }
-    
-    /* if we found ',' or '\n' - we do not have data type */
-    if(schema[pos-1]==',' || schema[pos-1]==')') {
-      pTable->cTypes[col] = SQLITE_AFF_TEXT;
-      col++;
-      continue;
-    }
-
-    if(srd_parse_skip(schema, ' ', &pos)){
-      return SQLITE_ERROR;
-    }
-
-    /* Main logic */
-    switch(schema[pos]) {
-      case 'N':
-        if(schema[pos+1]=='U'){
-          pTable->cTypes[col] = SQLITE_AFF_NUMERIC;
-        } else{
-          pTable->cTypes[col] = SQLITE_AFF_NONE;
-        }
-        break;
-      case 'B':
-        pTable->cTypes[col] = SQLITE_AFF_BLOB;
-        break;
-      case 'T':
-        pTable->cTypes[col] = SQLITE_AFF_TEXT;
-        break;
-      case 'I':
-        pTable->cTypes[col] = SQLITE_AFF_INTEGER;
-        break;
-      case 'R':
-        pTable->cTypes[col] = SQLITE_AFF_REAL;
-        break;
-      default:
-        pTable->cTypes[col] = SQLITE_AFF_TEXT;
-        break;                        
-    }
-
-    if(srd_parse_until(schema, ",)" , &pos)){
-      return SQLITE_ERROR;
-    }
-
-    col++;
-  }   
-
-  return SQLITE_OK;
-}
-#endif
-
 static int srd_Connect( sqlite3 *db, void *pAux,
   int argc, const char *const*argv,
   sqlite3_vtab **ppVtab,
@@ -279,6 +166,12 @@ static int srd_Column(sqlite3_vtab_cursor *cur, sqlite3_context *ctx, int col)
     switch(affinity){
         case SQLITE_AFF_TEXT_TERM:
             dike_sqlite3_result_text(ctx, (const char*)value, len, true, SQLITE_AFF_TEXT_TERM);
+            break;
+        case SQLITE_AFF_INTEGER:
+            sqlite3_result_int64(ctx, *(int64_t*)value);
+            break;
+        case SQLITE_AFF_NUMERIC:
+            sqlite3_result_double(ctx, *(double*)value);
             break;
     }
 

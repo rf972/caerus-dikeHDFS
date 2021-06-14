@@ -6,6 +6,8 @@
 
 /* This is a copy from sqlite3.c file */
 typedef enum sqlite_aff_e {
+    SQLITE_AFF_INVALID      = 0x00,  
+
     SQLITE_AFF_NONE         = 0x40,  /* '@' */
     SQLITE_AFF_BLOB         = 0x41,  /* 'A' */
     SQLITE_AFF_TEXT         = 0x42,  /* 'B' */
@@ -14,7 +16,7 @@ typedef enum sqlite_aff_e {
     SQLITE_AFF_REAL         = 0x45,  /* 'E' */
 
     // Additinal qualifiers
-    SQLITE_AFF_TEXT_TERM    = 0x54,  /* 'T' - NULL terminated text */
+    SQLITE_AFF_TEXT_TERM    = 0x54,  /* 'T' - NULL terminated text */    
 } sqlite_aff_t;
 
 class DikeRecord {
@@ -27,7 +29,8 @@ class DikeRecord {
     uint8_t * fields[MAX_COLUMNS];
     uint8_t * fieldMemory[MAX_COLUMNS];
     int len[MAX_COLUMNS];    
-    sqlite_aff_t affinity[MAX_COLUMNS];
+    //sqlite_aff_t affinity[MAX_COLUMNS];
+    //int accessMap[MAX_COLUMNS];
     
     DikeRecord(int col) {
         nCol = col;
@@ -35,7 +38,8 @@ class DikeRecord {
         for(int i = 0; i < nCol; i++) {
             fields[i] = 0;
             fieldMemory[i] = buf + i * FIELED_SIZE;
-            len[i] = 0;            
+            len[i] = 0;
+            //accessMap[i] = 0;
         }
     }
     ~DikeRecord(){
@@ -44,13 +48,13 @@ class DikeRecord {
 };
 
 class DikeAsyncReader {
-    public:
-    DikeRecord * record = NULL; /* Single record */          
+    public:    
     virtual int getColumnCount() = 0;
     virtual int readRecord() = 0;
     virtual const std::string &  getSchema() = 0;
     virtual int getColumnValue(int col, void ** value, int * len, sqlite_aff_t * affinity) = 0;
 
+    DikeRecord * record = NULL; /* Single record */
 };
 
 #endif /* DIKE_ASYNC_READER_HPP */
