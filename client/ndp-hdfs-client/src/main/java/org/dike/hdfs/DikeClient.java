@@ -169,7 +169,7 @@ public class DikeClient
         xmlw.writeEndElement(); // Query
 
         xmlw.writeStartElement("RowGroupIndex");
-        xmlw.writeCData("1");
+        xmlw.writeCharacters("0");
         xmlw.writeEndElement(); // RowGroupIndex
 
         xmlw.writeEndElement(); // Configuration

@@ -290,6 +290,19 @@ class DikeParquetReader: public DikeAsyncReader {
                 //parquet::ByteArrayReader* ba_reader = static_cast<parquet::ByteArrayReader*>(columnReader[col].get());
                 parquet::ByteArray value;
                 rows_read = dikeColumnReader[col]->ReadBatch(1, NULL, NULL, &value, &values_read);
+                // TODO fix me (it does not belong here)
+                for(int i = 0; i < value.len; i++) {
+                    if(value.ptr[i] == ','){
+                        *affinity = SQLITE_AFF_TEXT_TERM;
+                        record->fieldMemory[col][0] = '\"';
+                        memcpy ( &record->fieldMemory[col][1], value.ptr, value.len);
+                        record->fieldMemory[col][value.len + 1] = '\"';
+                        record->fieldMemory[col][value.len + 2] = 0;
+                        *len = value.len + 3;
+                        *value_ptr = record->fieldMemory[col];
+                        return 0;                          
+                    }
+                }
 
                 *affinity = SQLITE_AFF_TEXT_TERM;
                 memcpy ( record->fieldMemory[col], value.ptr, value.len);
