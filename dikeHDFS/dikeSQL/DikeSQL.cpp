@@ -37,7 +37,7 @@ int DikeSQL::Run(DikeSQLConfig & dikeSQLConfig, DikeIO * output)
     DikeAsyncReader * dikeReader;
     if (dikeSQLConfig["Name"].compare("dikeSQL.parquet") == 0) {        
         dikeReader = (DikeAsyncReader *)new DikeParquetReader(dikeSQLConfig);
-        std::cout << "Created parquet reader " << dikeReader << std::endl;
+        //std::cout << "Created parquet reader " << dikeReader << std::endl;
     } else {
         dikeReader = (DikeAsyncReader *)new DikeCsvReader(dikeSQLConfig);        
     }

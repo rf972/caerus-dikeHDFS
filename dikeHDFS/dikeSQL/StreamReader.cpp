@@ -69,7 +69,7 @@ static int srd_Connect( sqlite3 *db, void *pAux,
     memset(pTable, 0, sizeof(srdTable));  
 
     schema = std::string("CREATE TABLE S3Object (" + reader->getSchema() + ")");
-    std::cout << "Schema: " << schema << std::endl;
+    //std::cout << "Schema: " << schema << std::endl;
       
     pTable->reader = reader;
   

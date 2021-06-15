@@ -201,7 +201,9 @@ public:
             std::string name = base + "." + (*it);
             std::string value = cfg->getString(name);        
             dikeSQLConfig[name] = value;
-            cout << name + " = " + value << endl;
+            if(verbose) {
+                cout << name + " = " + value << endl;
+            }
         }
 
         if(verbose) {

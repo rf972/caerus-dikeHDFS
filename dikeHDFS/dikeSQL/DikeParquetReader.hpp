@@ -62,7 +62,7 @@ class DikeColumnReader {
         this->columnReader = std::move(columnReader);
         this->physicalType = physicalType;
         this->column = column;
-        std::cout <<  "DikeColumnReader[" << column << "] type "  << parquet::TypeToString(physicalType) << std::endl;
+        //std::cout <<  "DikeColumnReader[" << column << "] type "  << parquet::TypeToString(physicalType) << std::endl;
 
         switch(physicalType){
             case parquet::Type::INT64:
@@ -99,7 +99,7 @@ class DikeColumnReader {
     }
 
     int64_t Skip(int64_t num_rows_to_skip) {
-        std::cout <<  "DikeColumnReader[" << column << "]->Skip type "  << parquet::TypeToString(physicalType) << std::endl;
+        //std::cout <<  "DikeColumnReader[" << column << "]->Skip type "  << parquet::TypeToString(physicalType) << std::endl;
         switch(physicalType){
             case parquet::Type::INT64:
                 return int64_reader->Skip(num_rows_to_skip);
@@ -164,7 +164,6 @@ class DikeParquetReader: public DikeAsyncReader {
         arrow::Status st;    
         
         int rowGroupIndex = std::stoi(dikeSQLConfig["Configuration.RowGroupIndex"]);
-
         
         st = arrow::io::HadoopFileSystem::Connect(&hdfsConnectionConfig, &fs);
         st = fs->OpenReadable(fileName, &inputFile);        
@@ -173,7 +172,7 @@ class DikeParquetReader: public DikeAsyncReader {
 
         //std::unique_ptr<RowGroupMetaData> rowGroupMetaData = fileMetaData.RowGroup(rowGroupIndex);
 
-        std::cout << "Succesfully read fileMetaData " << fileMetaData->num_rows() << " rows in " << fileMetaData->num_row_groups() << " RowGroups" << std::endl;
+        //std::cout << "Succesfully read fileMetaData " << fileMetaData->num_rows() << " rows in " << fileMetaData->num_row_groups() << " RowGroups" << std::endl;
         const parquet::SchemaDescriptor* schemaDescriptor = fileMetaData->schema();
 
         parquetFileReader = std::move(parquet::ParquetFileReader::Open(inputFile, parquet::default_reader_properties(), fileMetaData));
@@ -199,7 +198,7 @@ class DikeParquetReader: public DikeAsyncReader {
             dikeColumnReader[i] = new DikeColumnReader(i, physicalType[i], columnReader);
             accessMap[i] = 0;
         }
-        std::cout <<  " Ready to go columnCount " << columnCount << " rowCount " << rowCount << std::endl;
+        //std::cout <<  " Ready to go columnCount " << columnCount << " rowCount " << rowCount << std::endl;
     }
 
     DikeAsyncReader * getReader() {
