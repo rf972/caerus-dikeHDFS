@@ -1,5 +1,5 @@
-#ifndef DIKE_ASYNC_READER_HPP
-#define DIKE_ASYNC_READER_HPP
+#ifndef DIKE_CSV_READER_HPP
+#define DIKE_CSV_READER_HPP
 
 #include <iostream>
 #include <chrono> 
@@ -13,56 +13,77 @@
 #include <cassert>
 #include <semaphore.h>
 #include <unistd.h>
-
 #include <string.h>
+
+#include <Poco/Net/HTTPResponse.h>
+#include <Poco/Net/HTTPRequest.h>
+#include <Poco/Net/HTTPServerRequest.h>
+#include <Poco/Net/HTTPServerRequestImpl.h>
+
+#include <Poco/Net/HTTPServerResponse.h>
+#include <Poco/Net/HTTPServerResponseImpl.h>
+
+#include <Poco/Net/HTTPClientSession.h>
+#include <Poco/Net/HTTPServerSession.h>
+
+#include <Poco/URI.h>
 
 #include "DikeUtil.hpp"
 #include "DikeBuffer.hpp"
 #include "DikeIO.hpp"
+#include "DikeStream.hpp"
 
-class DikeRecord {
+#include "DikeAsyncReader.hpp"
+
+class DikeCsvReader: public DikeAsyncReader {
     public:
-    enum{
-        FIELED_SIZE  = 1024,
-        MAX_COLUMNS = 128
-    };
-    int nCol;
-    uint8_t * fields[MAX_COLUMNS];
-    uint8_t * fieldMemory[MAX_COLUMNS];
-    int len[MAX_COLUMNS];    
+    DikeHDFSSession * hdfs_session;
+    DikeInSession * dikeInSession;
+    DikeIO * input = NULL;
+    uint8_t * memPool = 0;
+    uint64_t blockSize = 0; /* Limit reads to one HDFS block */
+    uint64_t blockOffset = 0; /* If not zero we need to seek for record */   
+    std::string schema;
+    int columnCount = 0;
 
-    DikeRecord(int col) {
-        nCol = col;
-        uint8_t * buf = (uint8_t *)malloc(FIELED_SIZE * MAX_COLUMNS);
-        for(int i = 0; i < nCol; i++) {
-            fields[i] = 0;
-            fieldMemory[i] = buf + i * FIELED_SIZE;
-            len[i] = 0;            
-        }
-    }
-    ~DikeRecord(){
-        free(fieldMemory[0]);
-    }
-};
+    DikeCsvReader(DikeSQLConfig & dikeSQLConfig) {        
+        std::stringstream ss;
+        ss.str(dikeSQLConfig["Request"]);
+        Poco::Net::HTTPRequest hdfs_req;
+        hdfs_req.read(ss);
 
-class DikeAsyncReader{
-    public:
+        std::string host = hdfs_req.getHost();    
+        host = host.substr(0, host.find(':'));
+        hdfs_req.setHost(host, std::stoi(dikeSQLConfig["dfs.datanode.http-port"]));
+        hdfs_session = new DikeHDFSSession(host, std::stoi(dikeSQLConfig["dfs.datanode.http-port"]));
+        hdfs_session->sendRequest(hdfs_req);
+
+        HTTPResponse hdfs_resp;
+        hdfs_session->readResponseHeader(hdfs_resp);
+        dikeInSession = new DikeInSession(hdfs_session);
+
+        Poco::URI uri = Poco::URI(hdfs_req.getURI());
+        Poco::URI::QueryParameters uriParams = uri.getQueryParameters();
+        dikeSQLConfig["BlockOffset"] = "0";
+        for(int i = 0; i < uriParams.size(); i++){        
+            if(uriParams[i].first == "offset"){
+               dikeSQLConfig["BlockOffset"] = uriParams[i].second;
+            }
+        }        
+        dikeCsvReaderInit(dikeInSession, dikeSQLConfig);
+    }
+
     enum{
         QUEUE_SIZE  = 4,
         BUFFER_SIZE = (128 << 10)
     };
-
-    DikeIO * input = NULL;
-
-    uint64_t blockSize = 0; /* Limit reads to one HDFS block */
-    uint64_t blockOffset = 0; /* If not zero we need to seek for record */   
-    uint8_t * memPool = 0;
+   
     int bytesRead = 0; /* How many bytes did we read so far */
     int fDelim = ','; /* Field delimiter */
     int rDelim = '\n'; /* Record Delimiter */
     int qDelim = '\"'; /* Quotation Delimiter */
-
-    DikeRecord * record = NULL; /* Single record */
+ 
+    //DikeRecord * record = NULL; /* Single record */
 
     std::queue<DikeBuffer * > work_q;
     std::queue<DikeBuffer * > free_q;
@@ -77,9 +98,9 @@ class DikeAsyncReader{
     int emptyCount = 0;
     uint64_t recordCount = 0;
 
-    DikeAsyncReader(DikeIO * input, uint64_t blockSize){
+    void dikeCsvReaderInit(DikeIO * input, DikeSQLConfig & dikeSQLConfig){
         this->input = input;        
-        this->blockSize = blockSize;
+        this->blockSize = std::stoull(dikeSQLConfig["Configuration.BlockSize"]);
         
         memPool = (uint8_t *)malloc(QUEUE_SIZE * BUFFER_SIZE);
         for(int i = 0; i < QUEUE_SIZE; i++){
@@ -94,11 +115,22 @@ class DikeAsyncReader{
         isRunning = true;
         workerThread = startWorker(); // This will start reading immediatelly
         buffer = getBuffer();
+
+        //std::stoull(uriParams[i].second)
+        if(std::stoull(dikeSQLConfig["BlockOffset"]) > 0) {
+            seekRecord();
+        } else if (dikeSQLConfig["Configuration.HeaderInfo"].compare("IGNORE") == 0) { // USE , IGNORE or NONE
+            seekRecord();
+        }
+
+        initColumnCount();
+        initScema();
+        initRecord();
     }
 
-    ~DikeAsyncReader(){
+    ~DikeCsvReader(){
         isRunning = false;
-        //std::cout << "~DikeAsyncReader" << std::endl;
+        //std::cout << "~DikeCsvReader" << std::endl;
         sem_post(&free_sem);
         workerThread.join();
         sem_destroy(&work_sem);
@@ -127,11 +159,14 @@ class DikeAsyncReader{
         if(memPool){
             free(memPool);
         }
-        //std::cout << "~DikeAsyncReader Push count: " << pushCount << " Empty count: " << emptyCount << " bytesRead " << bytesRead << std::endl;        
+
+        delete dikeInSession;
+        delete hdfs_session;
+        //std::cout << "~DikeCsvReader Push count: " << pushCount << " Empty count: " << emptyCount << " bytesRead " << bytesRead << std::endl;        
     }    
 
-    int initRecord(int nCol){
-        record = new DikeRecord(nCol);
+    int initRecord() {
+        record = new DikeRecord(columnCount);
         return (record != NULL);
     }
 
@@ -159,11 +194,36 @@ class DikeAsyncReader{
             posPtr++;
         }        
 
-        std::cout << "DikeAsyncReader failed seek " << std::endl;
+        std::cout << "DikeCsvReader failed seek " << std::endl;
         return 1;
     }
     
-    int getColumnCount(){
+    virtual int getColumnCount() {
+        return columnCount;
+    }
+
+    virtual const std::string &  getSchema() {
+        return schema;
+    }
+
+    virtual int getColumnValue(int col, void ** value, int * len, sqlite_aff_t * affinity) {
+        *affinity = SQLITE_AFF_TEXT_TERM;
+        *value = record->fields[col];
+        *len = record->len[col];
+        return 0;
+    }
+
+    void initScema() {
+        schema = "";
+        for(int i = 0; i < columnCount; i++) {
+            schema += "_" +  std::to_string(i+1);
+            if (i < columnCount -1 ){
+                schema += ",";
+            }
+        }
+    }
+
+    void initColumnCount() {
         int nCol = 0;
         uint8_t * posPtr = buffer->posPtr;
         bool underQuote = false;
@@ -183,14 +243,13 @@ class DikeAsyncReader{
             posPtr++;
         }
 
-       // std::cout << "DikeAsyncReader detected " << nCol << " columns" << std::endl;
-
-        return nCol;
+       // std::cout << "DikeCsvReader detected " << nCol << " columns" << std::endl;
+        columnCount = nCol;
     }
 
-    int readRecord() {
+    virtual int readRecord() {
         if(isEOF()){
-            //std::cout << "DikeAsyncReader EOF at " << bytesRead << std::endl;
+            //std::cout << "DikeCsvReader EOF at " << bytesRead << std::endl;
             return 1;
         }
         releaseBuffers();
@@ -199,7 +258,7 @@ class DikeAsyncReader{
         for(int i = 0; i < record->nCol; i++) {
             record->fields[i] = NULL;
             if(readField(i)){
-                //std::cout << "DikeAsyncReader EOF at " << bytesRead << std::endl;
+                //std::cout << "DikeCsvReader EOF at " << bytesRead << std::endl;
                 return 1;
             }
         }
@@ -270,7 +329,7 @@ class DikeAsyncReader{
             fieldPtr++;
         }
         
-        //std::cout << "DikeAsyncReader End of data 2 at  " << bytesRead << std::endl;
+        //std::cout << "DikeCsvReader End of data 2 at  " << bytesRead << std::endl;
         return 1;
     }
 
@@ -308,7 +367,7 @@ class DikeAsyncReader{
         DikeBuffer * b = work_q.front();
         work_q.pop();
         q_lock.unlock();
-        //std::cout << "DikeAsyncReader buffer " << b->id << " retrieved " << std::endl;
+        //std::cout << "DikeCsvReader buffer " << b->id << " retrieved " << std::endl;
         return b;
     }
 
@@ -318,22 +377,22 @@ class DikeAsyncReader{
 
     void Worker() {
         pthread_t thread_id = pthread_self();
-        pthread_setname_np(thread_id, "DikeAsyncReader::Worker");
+        pthread_setname_np(thread_id, "DikeCsvReader::Worker");
 
         while(1){
             sem_wait(&free_sem);
             if(isEOF()){
-                //std::cout << "DikeAsyncReader EOF exiting worker thread" << std::endl;
+                //std::cout << "DikeCsvReader EOF exiting worker thread" << std::endl;
                 return;                
             }
             if(!isRunning){
-                //std::cout << "DikeAsyncReader not running is set exiting " << std::endl;
+                //std::cout << "DikeCsvReader not running is set exiting " << std::endl;
                 return;
             }
 
             q_lock.lock();
             if(free_q.empty()){
-                std::cout << "DikeAsyncReader exiting worker thread" << std::endl;
+                std::cout << "DikeCsvReader exiting worker thread" << std::endl;
                 q_lock.unlock();
                 return;
             }
@@ -348,7 +407,7 @@ class DikeAsyncReader{
             if(n < BUFFER_SIZE && n > 0){
                 memset((char*)&b->startPtr[n], 0, BUFFER_SIZE - n);
             }
-            //std::cout << "DikeAsyncReader buffer " << b->id << " ready " << std::endl;
+            //std::cout << "DikeCsvReader buffer " << b->id << " ready " << std::endl;
             q_lock.lock();
             work_q.push(b);            
             q_lock.unlock();
@@ -357,4 +416,4 @@ class DikeAsyncReader{
     }
 };
 
-#endif /* DIKE_ASYNC_READER_HPP */
+#endif /* DIKE_CSV_READER_HPP */

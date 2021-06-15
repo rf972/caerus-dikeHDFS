@@ -7,24 +7,21 @@
 
 #include "DikeAsyncWriter.hpp"
 
-struct DikeSQLParam {    
-    std::string query;
-    std::string schema;
-    uint64_t    blockOffset;
-    uint64_t    blockSize;
-    std::string headerInfo;
-};
+typedef std::map<std::string, std::string> DikeSQLConfig;
 
 class DikeSQL {    
     public:
     DikeSQL(){};
 
     ~DikeSQL() {
-        if(workerThread.joinable()){
+        if(workerThread.joinable()) {
             workerThread.join();
         }
     }
 
+    int Run(DikeSQLConfig & dikeSQLConfig, DikeIO * output);
+
+    private:
     DikeAyncWriter * dikeWriter = NULL;
     std::thread workerThread;
     sqlite3_stmt *sqlRes = NULL;
@@ -35,9 +32,7 @@ class DikeSQL {
         return std::thread([=] { Worker(); });
     }
 
-    void Worker();
-
-    int Run(DikeSQLParam * dikeSQLParam, DikeIO * input, DikeIO * output);
+    void Worker();    
 };
 
 #endif /* DIKE_SQL_HPP */

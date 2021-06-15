@@ -59,6 +59,7 @@ fi
 
 DOCKER_RUN="docker run --rm=true ${DOCKER_IT} \
   -v ${ROOT_DIR}/data:/data \
+  -v "${ROOT_DIR}/dikeHDFS:${DOCKER_HOME_DIR}/dikeHDFS" \
   -v ${ROOT_DIR}/volume/namenode:/opt/volume/namenode \
   -v ${ROOT_DIR}/volume/datanode0:/opt/volume/datanode \
   -v ${ROOT_DIR}/volume/status:/opt/volume/status \
@@ -85,7 +86,7 @@ else
   done
 
   cat "${ROOT_DIR}/volume/status/HADOOP_STATE"
-  docker exec dikehdfs /server/dikeHDFS &
+  #docker exec dikehdfs /server/dikeHDFS &
 fi
 
 popd

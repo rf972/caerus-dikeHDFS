@@ -16,12 +16,15 @@
 #include "DikeSQL.hpp"
 #include "DikeUtil.hpp"
 
+#include "DikeCsvReader.hpp"
+#include "DikeParquetReader.hpp"
 
-int DikeSQL::Run(DikeSQLParam * dikeSQLParam, DikeIO * input, DikeIO * output)
+//int DikeSQL::Run(DikeSQLParam * dikeSQLParam, DikeIO * input, DikeIO * output)
+int DikeSQL::Run(DikeSQLConfig & dikeSQLConfig, DikeIO * output)
 {
     sqlite3 *db;    
     int rc;
-    char  * errmsg;    
+    char * errmsg;
     
     sqlite3_config(SQLITE_CONFIG_MEMSTATUS, 0); // Disable memory statistics
 
@@ -31,22 +34,21 @@ int DikeSQL::Run(DikeSQLParam * dikeSQLParam, DikeIO * input, DikeIO * output)
         return(1);
     }
 
-    StreamReaderParam streamReaderParam;        
-    streamReaderParam.reader = new DikeAsyncReader(input, dikeSQLParam->blockSize);
-    streamReaderParam.reader->blockSize = dikeSQLParam->blockSize;
-    streamReaderParam.reader->blockOffset = dikeSQLParam->blockOffset;
-    streamReaderParam.name = "S3Object";
-    streamReaderParam.schema = dikeSQLParam->schema;
-    streamReaderParam.headerInfo = GetHeaderInfo(dikeSQLParam->headerInfo);
+    DikeAsyncReader * dikeReader;
+    if (dikeSQLConfig["Name"].compare("dikeSQL.parquet") == 0) {        
+        dikeReader = (DikeAsyncReader *)new DikeParquetReader(dikeSQLConfig);
+        //std::cout << "Created parquet reader " << dikeReader << std::endl;
+    } else {
+        dikeReader = (DikeAsyncReader *)new DikeCsvReader(dikeSQLConfig);        
+    }
 
-    rc = StreamReaderInit(db, &streamReaderParam);
+    rc = StreamReaderInit(db, dikeReader);
     if(rc != SQLITE_OK) {
-        std::cerr << "Can't load SRD extention: " << errmsg << std::endl;
-        sqlite3_free(errmsg);
+        std::cerr << "Can't load SRD extention: " << std::endl;        
         return 1;
     }
    
-    std::string sqlCreateVirtualTable = std::string("CREATE VIRTUAL TABLE ") +  streamReaderParam.name + " USING StreamReader();";    
+    std::string sqlCreateVirtualTable = "CREATE VIRTUAL TABLE S3Object USING StreamReader();";
 
     std::chrono::high_resolution_clock::time_point t1 =  std::chrono::high_resolution_clock::now();
 
@@ -60,7 +62,7 @@ int DikeSQL::Run(DikeSQLParam * dikeSQLParam, DikeIO * input, DikeIO * output)
 
     std::chrono::high_resolution_clock::time_point t2 =  std::chrono::high_resolution_clock::now();
     
-    rc = sqlite3_prepare_v2(db, dikeSQLParam->query.c_str(), -1, &sqlRes, 0);        
+    rc = sqlite3_prepare_v2(db, dikeSQLConfig["Configuration.Query"].c_str(), -1, &sqlRes, 0);        
     if (rc != SQLITE_OK) {
         std::cerr << "Can't execute query: " << sqlite3_errmsg(db) << std::endl;        
         sqlite3_close(db);
@@ -87,7 +89,7 @@ int DikeSQL::Run(DikeSQLParam * dikeSQLParam, DikeIO * input, DikeIO * output)
 #endif
 
     delete dikeWriter;
-    delete streamReaderParam.reader;
+    delete dikeReader;
 
     //std::cout << "Message : " << sqlite3_errmsg(db) << std::endl;
 
@@ -127,6 +129,7 @@ void DikeSQL::Worker()
     }
 
     dikeWriter->close();
+
     //std::cout << "DikeSQL::Worker exiting " << std::endl;
     //std::cout << "DikeSQL::Worker sqlite3_rc " << sqlite3_rc << std::endl;
     //std::cout << "DikeSQL::Worker writer_rc " << writer_rc << std::endl;

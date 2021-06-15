@@ -101,6 +101,18 @@ public class DikeClient
     }
 
     public static String getReadParam(String name,
+                                      long blockSize) throws XMLStreamException
+    {
+        if(name.endsWith(".csv")) {
+            return getCsvReadParam(name, blockSize);
+        } else if(name.endsWith(".parquet")) {
+            return getParquetReadParam(name, blockSize);
+        }
+        return null;
+    }
+ 
+
+    public static String getCsvReadParam(String name,
                                       long blockSize) throws XMLStreamException 
     {
         XMLOutputFactory xmlof = XMLOutputFactory.newInstance();
@@ -108,65 +120,57 @@ public class DikeClient
         XMLStreamWriter xmlw = xmlof.createXMLStreamWriter(strw);
         xmlw.writeStartDocument();
         xmlw.writeStartElement("Processor");
-        //xmlw.writeAttribute("Name","dikeSQL");
+        
         xmlw.writeStartElement("Name");
         xmlw.writeCharacters("dikeSQL");
         xmlw.writeEndElement(); // Name
-        //xmlw.writeAttribute("Version","0.1");
-
+        
         xmlw.writeStartElement("Configuration");
-        xmlw.writeStartElement("Schema");
-
-        if (name.contains("customer")) {
-            xmlw.writeCharacters("c_custkey LONG, c_name STRING, c_address STRING, c_nationkey LONG, c_phone STRING, c_acctbal NUMERIC, c_mktsegment STRING, c_comment STRING");
-        } else if (name.contains("lineitem")) {
-            xmlw.writeCharacters("l_orderkey INTEGER,l_partkey INTEGER,l_suppkey INTEGER,l_linenumber INTEGER,l_quantity NUMERIC,l_extendedprice NUMERIC,l_discount NUMERIC,l_tax NUMERIC,l_returnflag,l_linestatus,l_shipdate,l_commitdate,l_receiptdate,l_shipinstruct,l_shipmode,l_comment");
-        } else if (name.contains("nation")) {
-            xmlw.writeCharacters("n_nationkey LONG, n_name STRING, n_regionkey LONG, n_comment STRING");
-        } else if (name.contains("order")) {
-            xmlw.writeCharacters("o_orderkey LONG, o_custkey LONG, o_orderstatus STRING, o_totalprice NUMERIC, o_orderdate STRING, o_orderpriority STRING, o_clerk STRING, o_shippriority LONG, o_comment STRING");
-        } else if (name.contains("partsupp")) {
-            xmlw.writeCharacters("ps_partkey LONG, ps_suppkey LONG, ps_availqty LONG, ps_supplycost NUMERIC, ps_comment STRING");
-        } else if (name.contains("part")) {
-            xmlw.writeCharacters("p_partkey INTEGER,p_name, p_mfgr, p_brand, p_type, p_size INTEGER, p_container, p_retailprice NUMERIC, p_comment");
-        } else if (name.contains("region")) {
-            xmlw.writeCharacters("r_regionkey LONG, r_name STRING, r_comment STRING");
-        } else if (name.contains("supplier")) {
-            xmlw.writeCharacters("s_suppkey LONG, s_name STRING, s_address STRING, s_nationkey LONG, s_phone STRING, s_acctbal NUMERIC, s_comment STRING");
-        } else if (name.contains("ints")) {
-            xmlw.writeCharacters("i INTEGER, j INTEGER, k INTEGER");
-        } else {
-            System.out.println("\nCan't find schema for -- " + name);
-            System.exit(1);
-        }
-        xmlw.writeEndElement(); // Schema
 
         xmlw.writeStartElement("Query");
         //xmlw.writeCData("SELECT * FROM S3Object");
         xmlw.writeCData("SELECT s._1, s._2, _16 FROM S3Object s");
-
-        //xmlw.writeCData("SELECT CAST(_1 as INTEGER),_2,CAST(_4 as INTEGER) FROM S3Object s");
-
-        //System.out.println("This case should have results of: 15|5|10|7.5");
-        //xmlw.writeCData("SELECT  SUM(\"j\"), MIN(\"j\"), MAX(\"j\"), AVG(\"j\") FROM S3Object s WHERE i IS NOT NULL AND s.\"i\" > 4");        
-        //xmlw.writeCData("SELECT  MIN(j) FROM S3Object WHERE i IS NOT NULL AND i > 4");
-
-        //xmlw.writeCData("SELECT  * FROM S3Object WHERE i IS NOT NULL AND i > 4");        
-
-        //xmlw.writeCData("SELECT * FROM S3Object LIMIT 3 OFFSET 0");
-        //xmlw.writeCData("SELECT COUNT(*) FROM S3Object");
-
-        // TPCH query
-        //xmlw.writeCData("SELECT  SUM(\"l_extendedprice\" * \"l_discount\") FROM S3Object s WHERE l_shipdate IS NOT NULL AND s.\"l_shipdate\" >= '1994-01-01' AND s.\"l_shipdate\" < '1995-01-01' AND s.\"l_discount\" >= 0.05 AND s.\"l_discount\" <= 0.07 AND s.\"l_quantity\" < 24.0");
-
-        //xmlw.writeCData("SELECT  SUM(\"l_extendedprice\" * \"l_discount\") FROM S3Object s WHERE l_shipdate IS NOT NULL AND s.\"l_shipdate\" >= '1994-01-01' AND s.\"l_shipdate\" < '1995-01-01' AND s.\"l_discount\" >= 0.05  AND s.\"l_discount\" <= 0.07");
-        //xmlw.writeCData("SELECT  \"l_extendedprice\" , \"l_discount\" FROM S3Object s WHERE l_shipdate IS NOT NULL AND s.\"l_shipdate\" >= '1994-01-01' AND s.\"l_shipdate\" < '1995-01-01' AND s.\"l_discount\" >= 0.05  AND s.\"l_discount\" <= 0.07");
-
         xmlw.writeEndElement(); // Query
 
         xmlw.writeStartElement("BlockSize");
         xmlw.writeCharacters(String.valueOf(blockSize));
         xmlw.writeEndElement(); // BlockSize
+
+        xmlw.writeStartElement("HeaderInfo");
+        xmlw.writeCharacters("IGNORE"); // USE , IGNORE or NONE
+        xmlw.writeEndElement(); // HeaderInfo
+
+        xmlw.writeEndElement(); // Configuration
+        xmlw.writeEndElement(); // Processor
+        xmlw.writeEndDocument();
+        xmlw.close();
+
+        return strw.toString();
+    }
+
+    public static String getParquetReadParam(String name,
+                                      long blockSize) throws XMLStreamException 
+    {
+        XMLOutputFactory xmlof = XMLOutputFactory.newInstance();
+        StringWriter strw = new StringWriter();
+        XMLStreamWriter xmlw = xmlof.createXMLStreamWriter(strw);
+        xmlw.writeStartDocument();
+        xmlw.writeStartElement("Processor");
+        
+        xmlw.writeStartElement("Name");
+        xmlw.writeCharacters("dikeSQL.parquet");
+        xmlw.writeEndElement(); // Name
+        
+        xmlw.writeStartElement("Configuration");
+
+        xmlw.writeStartElement("Query");
+        //xmlw.writeCData("SELECT * FROM S3Object");
+        xmlw.writeCData("SELECT l_orderkey, l_linenumber, l_quantity, l_shipdate, l_comment  FROM S3Object");
+        xmlw.writeEndElement(); // Query
+
+        xmlw.writeStartElement("RowGroupIndex");
+        xmlw.writeCData("1");
+        xmlw.writeEndElement(); // RowGroupIndex
 
         xmlw.writeEndElement(); // Configuration
         xmlw.writeEndElement(); // Processor
@@ -245,7 +249,7 @@ public class DikeClient
             } else { // regular read
                 if(pushdown){
                     dikeFS = (NdpHdfsFileSystem)fs;
-                    readParam = getReadParam(fname, 0 /* ignore stream size */);
+                    readParam = getReadParam(fname, 0 /* ignore stream size */);                                        
                     dataInputStream = dikeFS.open(fileToRead, 128 << 10, readParam);                    
                 } else {
                     dataInputStream = fs.open(fileToRead);
@@ -369,5 +373,6 @@ public class DikeClient
 
 // mvn package -o
 // java -classpath target/ndp-hdfs-client-1.0-jar-with-dependencies.jar org.dike.hdfs.DikeClient /lineitem.csv
+// java -classpath target/ndp-hdfs-client-1.0-jar-with-dependencies.jar org.dike.hdfs.DikeClient /lineitem.parquet
 // java -Xdebug -agentlib:jdwp=transport=dt_socket,server=y,suspend=y,address=*:8000 -Xmx1g -classpath target/dikeclient-1.0-jar-with-dependencies.jar org.dike.hdfs.DikeClient /lineitem.tbl
 // for i in $(seq 1 10); do echo $i && java -classpath target/dikeclient-1.0-jar-with-dependencies.jar org.dike.hdfs.DikeClient /lineitem.tbl; done
