@@ -165,7 +165,17 @@ public class DikeClient
 
         xmlw.writeStartElement("Query");
         //xmlw.writeCData("SELECT * FROM S3Object");
-        xmlw.writeCData("SELECT l_orderkey, l_linenumber, l_quantity, l_shipdate, l_comment  FROM S3Object");
+        //xmlw.writeCData("SELECT l_orderkey, l_linenumber, l_quantity, l_shipdate, l_comment  FROM S3Object");
+        //xmlw.writeCData("SELECT SUM(CAST(l_extendedprice as NUMERIC) * CAST(l_discount as NUMERIC)) FROM S3Object s WHERE l_shipdate IS NOT NULL AND l_shipdate >= '1994-01-01' AND l_shipdate < '1996-02-01' AND CAST(l_quantity as NUMERIC) < 50.0");
+
+        String query = "SELECT l_extendedprice, l_discount, l_shipdate, l_quantity  FROM S3Object s WHERE l_shipdate IS NOT NULL AND l_shipdate >= '1994-01-01' AND l_shipdate < '1996-02-01' AND CAST(l_quantity as NUMERIC) < 50.0";
+        String dikeQuery = System.getenv("DIKE_QUERY");
+        if(dikeQuery != null){
+            query = dikeQuery;
+        }
+
+        xmlw.writeCData(query);
+
         xmlw.writeEndElement(); // Query
 
         xmlw.writeStartElement("RowGroupIndex");
@@ -227,7 +237,7 @@ public class DikeClient
                     String record = br.readLine();
                     int counter = 0;
                     while (record != null && record.length() > 0 ) {
-                        if(counter < 5) {
+                        if(counter < 10) {
                             System.out.println(record);
                         }
 /*                        
@@ -258,7 +268,7 @@ public class DikeClient
                 String record;
                 record = br.readLine();
                 while (record != null){
-                    if(totalRecords < 5) {
+                    if(totalRecords < 10) {
                         System.out.println(record);
                     }
 
@@ -372,6 +382,7 @@ public class DikeClient
 }
 
 // mvn package -o
+// export DIKE_QUERY="SELECT l_extendedprice, l_discount, l_shipdate, l_quantity  FROM S3Object s "
 // java -classpath target/ndp-hdfs-client-1.0-jar-with-dependencies.jar org.dike.hdfs.DikeClient /lineitem.csv
 // java -classpath target/ndp-hdfs-client-1.0-jar-with-dependencies.jar org.dike.hdfs.DikeClient /lineitem.parquet
 // java -Xdebug -agentlib:jdwp=transport=dt_socket,server=y,suspend=y,address=*:8000 -Xmx1g -classpath target/dikeclient-1.0-jar-with-dependencies.jar org.dike.hdfs.DikeClient /lineitem.tbl
