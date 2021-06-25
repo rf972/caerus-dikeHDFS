@@ -54,6 +54,8 @@ class DikeAsyncReader {
     virtual const std::string &  getSchema() = 0;
     virtual int getColumnValue(int col, void ** value, int * len, sqlite_aff_t * affinity) = 0;
 
+    virtual ~DikeAsyncReader() {};
+
     DikeRecord * record = NULL; /* Single record */
 };
 

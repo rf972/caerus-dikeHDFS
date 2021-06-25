@@ -242,7 +242,7 @@ public class NdpHdfsFileSystem extends WebHdfsFileSystem {
                 }
             };
 
-            HttpURLConnection conn = urlRunner.run();
+            HttpURLConnection conn = urlRunner.run();            
             String location = conn.getHeaderField("Location");
             if (location != null) {
                 resolvedUrl = removeOffsetParam(new URL(location));
@@ -541,6 +541,10 @@ public class NdpHdfsFileSystem extends WebHdfsFileSystem {
             conn.setRequestProperty(EZ_HEADER, "true");
             conn.setRequestProperty("ReadParam",readParam);
             conn.setDoOutput(doOutput);
+
+            conn.setConnectTimeout(60 * 60 * 1000);
+            conn.setReadTimeout(60 * 60 * 1000);
+
             conn.connect();
             return conn;
         }
@@ -550,7 +554,7 @@ public class NdpHdfsFileSystem extends WebHdfsFileSystem {
                 checkRetry = !redirected;
                 final URL url = getUrl();
                 try {
-                    final HttpURLConnection conn = connect(url);
+                    final HttpURLConnection conn = connect(url);                    
                     return getResponse(conn);
                 } catch (AccessControlException ace) {
                     throw ace;

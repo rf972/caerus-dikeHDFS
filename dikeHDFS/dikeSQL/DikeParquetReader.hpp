@@ -14,6 +14,7 @@
 #include <semaphore.h>
 #include <unistd.h>
 #include <string.h>
+#include <map>
 
 #include <Poco/Net/HTTPResponse.h>
 #include <Poco/Net/HTTPRequest.h>
@@ -27,6 +28,7 @@
 #include <Poco/Net/HTTPServerSession.h>
 
 #include <Poco/URI.h>
+#include "Poco/Thread.h"
 
 #include <parquet/arrow/reader.h>
 #include <parquet/metadata.h>  // IWYU pragma: keep
@@ -80,7 +82,8 @@ class DikeColumnReader {
     }
 
     ~DikeColumnReader() {
-
+        // std::cout <<  "~DikeColumnReader[" << column << "]" << std::endl;
+        // Should we take care of columnReader here ?
     }
 
     int64_t Read(int64_t row, int16_t* def_levels, int16_t* rep_levels, int64_t * values, int64_t* values_read) {
@@ -144,9 +147,10 @@ class DikeParquetReader: public DikeAsyncReader {
     int rowIdx = -1; // Current row cursor is pointing to
     DikeColumnReader ** dikeColumnReader;    
     parquet::Type::type * physicalType;
-    int * accessMap;
 
     std::shared_ptr<arrow::io::HadoopFileSystem> fs;
+    static std::map<int, std::shared_ptr<arrow::io::HadoopFileSystem> > hadoopFileSystemMap;
+
     std::shared_ptr<arrow::io::HdfsReadableFile> inputFile;
 
     std::shared_ptr<parquet::FileMetaData> fileMetaData;
@@ -176,25 +180,24 @@ class DikeParquetReader: public DikeAsyncReader {
         }
         std::string path = uri.getPath();
         std::string fileName = path.substr(11, path.length()); // skip "/webhdfs/v1"
-#if 0        
-        std::cout <<  " Path = " << path << std::endl;
-        std::cout <<  " fileName = " << fileName << std::endl;
-        std::cout <<  " Host = " << hdfsConnectionConfig.host << std::endl;                
-        std::cout <<  " Port = " << hdfsConnectionConfig.port << std::endl;
-        std::cout <<  " User = " << hdfsConnectionConfig.user << std::endl;
-#endif
-        arrow::Status st;    
-        
         int rowGroupIndex = std::stoi(dikeSQLConfig["Configuration.RowGroupIndex"]);
+
+        Poco::Thread * current = Poco::Thread::current();
+        int threadId = current->id();        
         
-        st = arrow::io::HadoopFileSystem::Connect(&hdfsConnectionConfig, &fs);
+        arrow::Status st;
+        if (hadoopFileSystemMap.count(threadId)) {
+            fs = hadoopFileSystemMap[threadId];
+            //std::cout << " DikeParquetReader id " << threadId << " reuse FS connection "<< std::endl;
+        } else {
+            st = arrow::io::HadoopFileSystem::Connect(&hdfsConnectionConfig, &fs);
+            hadoopFileSystemMap[threadId] = fs;
+            //std::cout << " DikeParquetReader id " << threadId << " create FS connection "<< std::endl;
+        }
+                                        
         st = fs->OpenReadable(fileName, &inputFile);        
             
         fileMetaData = std::move(parquet::ReadMetaData(inputFile));
-
-        //std::unique_ptr<RowGroupMetaData> rowGroupMetaData = fileMetaData.RowGroup(rowGroupIndex);
-
-        //std::cout << "Succesfully read fileMetaData " << fileMetaData->num_rows() << " rows in " << fileMetaData->num_row_groups() << " RowGroups" << std::endl;
         const parquet::SchemaDescriptor* schemaDescriptor = fileMetaData->schema();
 
         parquetFileReader = std::move(parquet::ParquetFileReader::Open(inputFile, parquet::default_reader_properties(), fileMetaData));
@@ -206,7 +209,6 @@ class DikeParquetReader: public DikeAsyncReader {
 
         dikeColumnReader = new DikeColumnReader * [columnCount];        
         physicalType = new parquet::Type::type[columnCount];
-        accessMap = new int [columnCount];
         
         for(int i = 0; i < columnCount; i++) {
             auto col = (parquet::schema::PrimitiveNode*)schemaDescriptor->GetColumnRoot(i);            
@@ -218,7 +220,6 @@ class DikeParquetReader: public DikeAsyncReader {
             physicalType[i] = col->physical_type();            
             std::shared_ptr<parquet::ColumnReader> columnReader = rowGroupReader->Column(i);
             dikeColumnReader[i] = new DikeColumnReader(i, physicalType[i], columnReader);
-            accessMap[i] = 0;
         }
         //std::cout <<  " Ready to go columnCount " << columnCount << " rowCount " << rowCount << std::endl;
     }
@@ -227,14 +228,18 @@ class DikeParquetReader: public DikeAsyncReader {
         return (DikeAsyncReader *)this; 
     }
 
-    ~DikeParquetReader() {        
+    virtual ~DikeParquetReader() {        
+        Poco::Thread * current = Poco::Thread::current();
+        //std::cout << "~DikeParquetReader id " << current->id() << std::endl;
+
         delete record;
         for(int i = 0; i < columnCount; i++) {
             delete dikeColumnReader[i];                   
         }
-        delete dikeColumnReader;         
-        delete physicalType;
-        delete accessMap;
+        delete [] dikeColumnReader;         
+        delete [] physicalType;
+        inputFile->Close();
+        //fs->Disconnect();
     }    
 
     int initRecord(int nCol) {
@@ -261,18 +266,7 @@ class DikeParquetReader: public DikeAsyncReader {
     virtual int readRecord() {
         if(isEOF()){
             return 1;
-        }
-        
-#if 0        
-        if(rowIdx > 0){
-            for (int i  = 0; i < columnCount; i++){
-                if(accessMap[i] == 0) {
-                    dikeColumnReader[i]->Skip(1);
-                }
-                accessMap[i] = 0;
-            }
-        }
-#endif  
+        }        
         
         rowIdx++;
         //std::cout <<  "readRecord " << rowIdx << std::endl;
@@ -367,5 +361,7 @@ class DikeParquetReader: public DikeAsyncReader {
         return 0;
     }    
 };
+
+std::map<int, std::shared_ptr<arrow::io::HadoopFileSystem> > DikeParquetReader::hadoopFileSystemMap;
 
 #endif /* DIKE_PARQUET_READER_HPP */
