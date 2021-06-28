@@ -20,6 +20,7 @@
 #include <Poco/Util/AbstractConfiguration.h>
 #include <Poco/Util/XMLConfiguration.h>
 
+#include <Poco/AutoPtr.h>
 
 #include <Poco/StreamCopier.h>
 #include <Poco/URI.h>
@@ -174,65 +175,62 @@ public:
         DikeSQL dikeSQL;
         DikeSQLConfig dikeSQLConfig;
 
-    try {
         std::istringstream readParamStream(readParam.c_str());      
         std::istream& xmlStream(readParamStream);
-        AbstractConfiguration *cfg = new XMLConfiguration(xmlStream);
-        std::stringstream ss;
-        req.write(ss);
+        //XMLConfiguration * cfg = new XMLConfiguration(xmlStream);
+        Poco::AutoPtr<AbstractConfiguration> cfg(new XMLConfiguration(xmlStream));
 
-        dikeSQLConfig["Name"] = cfg->getString("Name");
-        dikeSQLConfig["Request"] = ss.str();
-        dikeSQLConfig["dfs.datanode.http-port"] = dikeConfig["dfs.datanode.http-port"];
+        try {
+            std::stringstream ss;
+            req.write(ss);
 
-        Poco::URI uri = Poco::URI(req.getURI());
-        Poco::URI::QueryParameters uriParams = uri.getQueryParameters();
-        dikeSQLConfig["BlockOffset"] = "0";
-        for(int i = 0; i < uriParams.size(); i++){        
-            if(uriParams[i].first == "offset"){
-                //dikeSQLParam.blockOffset = std::stoull(uriParams[i].second);
-                dikeSQLConfig["BlockOffset"] = uriParams[i].second;
+            dikeSQLConfig["Name"] = cfg->getString("Name");
+            dikeSQLConfig["Request"] = ss.str();
+            dikeSQLConfig["dfs.datanode.http-port"] = dikeConfig["dfs.datanode.http-port"];
+
+            Poco::URI uri = Poco::URI(req.getURI());
+            Poco::URI::QueryParameters uriParams = uri.getQueryParameters();
+            dikeSQLConfig["BlockOffset"] = "0";
+            for(int i = 0; i < uriParams.size(); i++){        
+                if(uriParams[i].first == "offset"){
+                    //dikeSQLParam.blockOffset = std::stoull(uriParams[i].second);
+                    dikeSQLConfig["BlockOffset"] = uriParams[i].second;
+                }
             }
-        }
-        std::string base = "Configuration";
-        AbstractConfiguration::Keys keys;
-        cfg->keys(base, keys);
-        for (AbstractConfiguration::Keys::const_iterator it = keys.begin(); it != keys.end(); ++it) {
-            std::string name = base + "." + (*it);
-            std::string value = cfg->getString(name);        
-            dikeSQLConfig[name] = value;
+            std::string base = "Configuration";
+            AbstractConfiguration::Keys keys;
+            cfg->keys(base, keys);
+            for (AbstractConfiguration::Keys::const_iterator it = keys.begin(); it != keys.end(); ++it) {
+                std::string name = base + "." + (*it);
+                std::string value = cfg->getString(name);        
+                dikeSQLConfig[name] = value;
+                if(verbose) {
+                    cout << name + " = " + value << endl;
+                }
+            }
+            
             if(verbose) {
-                cout << name + " = " + value << endl;
+                cout << DikeUtil().Reset() << endl;
             }
-        }
 
-        if(verbose) {
+            ostream& toClient = resp.send();
+            toClient.flush();
+
+            Poco::Net::HTTPServerRequestImpl & req_impl = (Poco::Net::HTTPServerRequestImpl &)req;          
+            Poco::Net::StreamSocket toClientSocket = req_impl.detachSocket();
+                    
+            //DikeInSession input(&hdfs_session);
+            DikeOut output(&toClientSocket);
+            //dikeSQL.Run(&dikeSQLParam, &input, &output);       
+            dikeSQL.Run(dikeSQLConfig, &output);       
+        } catch (Poco::NotFoundException&) {
+            cout << DikeUtil().Red() << "Exeption while parsing readParam" << endl;
             cout << DikeUtil().Reset() << endl;
-        }
-
-#if 0
-        dikeSQLParam.query = cfg->getString("Configuration.Query");
-        dikeSQLParam.blockSize = cfg->getUInt64("Configuration.BlockSize");
-        dikeSQLParam.headerInfo = cfg->getString("Configuration.HeaderInfo", "IGNORE");
-#endif
-
-        ostream& toClient = resp.send();
-        toClient.flush();
-
-        Poco::Net::HTTPServerRequestImpl & req_impl = (Poco::Net::HTTPServerRequestImpl &)req;          
-        Poco::Net::StreamSocket toClientSocket = req_impl.detachSocket();
-                
-        //DikeInSession input(&hdfs_session);
-        DikeOut output(&toClientSocket);
-        //dikeSQL.Run(&dikeSQLParam, &input, &output);       
-        dikeSQL.Run(dikeSQLConfig, &output);       
-
-      } catch (Poco::NotFoundException&) {
-        cout << DikeUtil().Red() << "Exeption while parsing readParam" << endl;
-        cout << DikeUtil().Reset() << endl;
-      }      
+        }       
     }
 
+    
+    
     //hdfs_session.close();
     if(verbose) {
       resp.write(cout);

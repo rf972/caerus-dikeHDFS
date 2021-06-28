@@ -128,7 +128,7 @@ class DikeCsvReader: public DikeAsyncReader {
         initRecord();
     }
 
-    ~DikeCsvReader(){
+    virtual ~DikeCsvReader(){
         isRunning = false;
         //std::cout << "~DikeCsvReader" << std::endl;
         sem_post(&free_sem);

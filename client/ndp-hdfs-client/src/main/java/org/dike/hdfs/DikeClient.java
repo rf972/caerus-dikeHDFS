@@ -382,8 +382,10 @@ public class DikeClient
 }
 
 // mvn package -o
-// export DIKE_QUERY="SELECT l_extendedprice, l_discount, l_shipdate, l_quantity  FROM S3Object s "
-// java -classpath target/ndp-hdfs-client-1.0-jar-with-dependencies.jar org.dike.hdfs.DikeClient /lineitem.csv
+// export DIKE_QUERY="SELECT l_extendedprice, l_discount, l_shipdate, l_quantity  FROM S3Object"
 // java -classpath target/ndp-hdfs-client-1.0-jar-with-dependencies.jar org.dike.hdfs.DikeClient /lineitem.parquet
+
+// java -classpath target/ndp-hdfs-client-1.0-jar-with-dependencies.jar org.dike.hdfs.DikeClient /lineitem.csv
+// 
 // java -Xdebug -agentlib:jdwp=transport=dt_socket,server=y,suspend=y,address=*:8000 -Xmx1g -classpath target/dikeclient-1.0-jar-with-dependencies.jar org.dike.hdfs.DikeClient /lineitem.tbl
 // for i in $(seq 1 10); do echo $i && java -classpath target/dikeclient-1.0-jar-with-dependencies.jar org.dike.hdfs.DikeClient /lineitem.tbl; done

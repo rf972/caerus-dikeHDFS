@@ -86,6 +86,7 @@ RUN apt-get -q update \
         openssh-server \
         net-tools \
         gdb \
+        valgrind \
         ca-certificates lsb-release wget 
 
 #    && apt-get clean \
