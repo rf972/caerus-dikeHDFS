@@ -167,6 +167,10 @@ static int srd_Column(sqlite3_vtab_cursor *cur, sqlite3_context *ctx, int col)
         case SQLITE_AFF_TEXT_TERM:
             dike_sqlite3_result_text(ctx, (const char*)value, len, true, SQLITE_AFF_TEXT_TERM);
             break;
+        case SQLITE_AFF_TEXT:
+            //dike_sqlite3_result_text(ctx, (const char*)value, len, true, SQLITE_AFF_TEXT_TERM);
+            sqlite3_result_text(ctx, (const char*)value, len, SQLITE_TRANSIENT);
+            break;
         case SQLITE_AFF_INTEGER:
             sqlite3_result_int64(ctx, *(int64_t*)value);
             break;

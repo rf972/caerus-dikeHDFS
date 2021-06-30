@@ -129,7 +129,13 @@ public class DikeClient
 
         xmlw.writeStartElement("Query");
         //xmlw.writeCData("SELECT * FROM S3Object");
-        xmlw.writeCData("SELECT s._1, s._2, _16 FROM S3Object s");
+        // xmlw.writeCData("SELECT s._1, s._2, _16 FROM S3Object s");
+        String query = "SELECT s._1, s._2, _16 FROM S3Object";
+        String dikeQuery = System.getenv("DIKE_QUERY");
+        if(dikeQuery != null){
+            query = dikeQuery;
+        }
+        xmlw.writeCData(query);
         xmlw.writeEndElement(); // Query
 
         xmlw.writeStartElement("BlockSize");
@@ -181,6 +187,10 @@ public class DikeClient
         xmlw.writeStartElement("RowGroupIndex");
         xmlw.writeCharacters("0");
         xmlw.writeEndElement(); // RowGroupIndex
+
+        xmlw.writeStartElement("LastAccessTime");
+        xmlw.writeCharacters("1624464464409");
+        xmlw.writeEndElement(); // LastAccessTime
 
         xmlw.writeEndElement(); // Configuration
         xmlw.writeEndElement(); // Processor
@@ -384,6 +394,11 @@ public class DikeClient
 // mvn package -o
 // export DIKE_QUERY="SELECT l_extendedprice, l_discount, l_shipdate, l_quantity  FROM S3Object"
 // java -classpath target/ndp-hdfs-client-1.0-jar-with-dependencies.jar org.dike.hdfs.DikeClient /lineitem.parquet
+
+// Q1 test
+// export DIKE_QUERY="SELECT CAST(l_quantity as NUMERIC),CAST(l_extendedprice as NUMERIC),CAST(l_discount as NUMERIC),CAST(l_tax as NUMERIC),l_returnflag,l_linestatus FROM S3Object s WHERE l_shipdate IS NOT NULL AND l_shipdate <= '1998-09-02'"
+// export DIKE_QUERY="SELECT l_quantity,l_extendedprice,l_discount,l_tax,l_returnflag,l_linestatus FROM S3Object WHERE l_shipdate IS NOT NULL AND l_shipdate <= '1998-09-02'"
+// java -classpath target/ndp-hdfs-client-1.0-jar-with-dependencies.jar org.dike.hdfs.DikeClient /lineitem.snappy.parquet
 
 // java -classpath target/ndp-hdfs-client-1.0-jar-with-dependencies.jar org.dike.hdfs.DikeClient /lineitem.csv
 // 
