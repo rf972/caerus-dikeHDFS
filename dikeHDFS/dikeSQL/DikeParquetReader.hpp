@@ -149,6 +149,7 @@ class DikeColumnReader {
         // We done with buffer
         *value = double_values[buffer_row];
         buffer_row++;
+        current_row ++;
         if(buffer_row >= BUFFER_SIZE){
             buffer_row = 0;
         }
@@ -199,6 +200,7 @@ class DikeColumnReader {
         // We done with buffer
         *value = ba_values[buffer_row];
         buffer_row++;
+        current_row ++;
         if(buffer_row >= BUFFER_SIZE){
             buffer_row = 0;
         }
