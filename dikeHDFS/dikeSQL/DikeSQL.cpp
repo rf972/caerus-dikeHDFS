@@ -104,6 +104,7 @@ void DikeSQL::Worker()
     int sqlite3_rc;
     int writer_rc;
     const char * res[128];
+    std::string resString[128];
     int data_count;
     int total_bytes;
 
@@ -119,6 +120,14 @@ void DikeSQL::Worker()
             record_counter++;            
             data_count = dike_sqlite3_get_data(sqlRes, res, 128, &total_bytes);
             if(total_bytes > 0){
+                for(int i = 0; i < data_count; i++) {
+                    if (SQLITE3_TEXT == sqlite3_column_type(sqlRes, i)){ // It is a text
+                        if((res[i][0] != '\"') && (NULL != strstr(res[i], ","))) { // Delimiter inside output
+                            resString[i] = std::string("\"") + std::string(res[i]) + std::string("\"");
+                            res[i] = resString[i].c_str();
+                        }
+                    }
+                }
                 writer_rc = dikeWriter->write(res, data_count, ',', '\n', total_bytes);
             }
             sqlite3_rc = sqlite3_step(sqlRes);

@@ -56,6 +56,7 @@ int dike_sqlite3_result_text(
     return SQLITE_OK;
 }
 
+// This will form data for CSV
 int dike_sqlite3_get_data(sqlite3_stmt *pStmt, const char ** res, int res_size, int * total_bytes)
 {
   Vdbe *pVm = (Vdbe *)pStmt;

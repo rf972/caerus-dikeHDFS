@@ -54,6 +54,7 @@ class DikeColumnReader {
     public:
     int column;
     int64_t current_row;
+    int64_t buffer_row;
     parquet::Type::type physicalType;
     std::shared_ptr<parquet::ColumnReader> columnReader;
 
@@ -61,11 +62,21 @@ class DikeColumnReader {
     parquet::DoubleReader* double_reader = NULL;
     parquet::ByteArrayReader* ba_reader = NULL;
 
+    enum {
+        BUFFER_SIZE = 1024,
+    };
+
+    //parquet::ByteArray ba_value;
+    int64_t * int64_values = NULL;
+    double *  double_values = NULL;
+    parquet::ByteArray * ba_values = NULL;
+
     DikeColumnReader(int column, parquet::Type::type physicalType, std::shared_ptr<parquet::ColumnReader> columnReader) {
         this->columnReader = std::move(columnReader);
         this->physicalType = physicalType;
         this->column = column;
         this->current_row = 0;
+        this->buffer_row = 0;
         //std::cout <<  "DikeColumnReader[" << column << "] type "  << parquet::TypeToString(physicalType) << std::endl;
 
         switch(physicalType){
@@ -84,6 +95,17 @@ class DikeColumnReader {
     ~DikeColumnReader() {
         // std::cout <<  "~DikeColumnReader[" << column << "]" << std::endl;
         // Should we take care of columnReader here ?
+        if (int64_values != NULL) {
+            delete [] int64_values;
+        }
+
+        if (double_values != NULL) {
+            delete [] double_values;
+        }
+
+        if (ba_values != NULL) {
+            delete [] ba_values;
+        }
     }
 
     int64_t Read(int64_t row, int16_t* def_levels, int16_t* rep_levels, int64_t * values, int64_t* values_read) {
@@ -98,6 +120,42 @@ class DikeColumnReader {
         return rows_read;
     }
 
+    int64_t GetValue(int64_t row, double * value) {
+        if (double_values == NULL) {
+            double_values = new double [BUFFER_SIZE];
+        }
+        int64_t skip_rows = row - current_row;
+        if(skip_rows > 0) {
+            current_row += skip_rows;
+            if(buffer_row > 0) {  // We have a buffer
+                buffer_row += skip_rows;
+                if(buffer_row >= BUFFER_SIZE) { // Check if skip within the buffer
+                    skip_rows = buffer_row - BUFFER_SIZE;
+                    buffer_row = 0;
+                    double_reader->Skip(skip_rows);
+                }
+            } else { // We do not have a buffer, just skip
+                double_reader->Skip(skip_rows);
+            }
+        }
+
+        // We done with skip logic
+        if(buffer_row == 0) {  // We do not have a buffer, read it
+            int64_t values_read;
+            // We may need to handle out of buond read
+            int64_t rows_read = double_reader->ReadBatch(BUFFER_SIZE, 0, 0, double_values, &values_read);
+        }
+
+        // We done with buffer
+        *value = double_values[buffer_row];
+        buffer_row++;
+        if(buffer_row >= BUFFER_SIZE){
+            buffer_row = 0;
+        }
+        return 1;
+    }
+
+#if 0    
     int64_t Read(int64_t row, int16_t* def_levels, int16_t* rep_levels, double * values, int64_t* values_read) {
         //std::cout <<  "DikeColumnReader[" << column << "]->Read row "  << row << std::endl;        
         int64_t skip_rows = row - current_row;
@@ -109,7 +167,44 @@ class DikeColumnReader {
         current_row += rows_read;
         return rows_read;        
     }
+#endif
 
+
+    int64_t GetValue(int64_t row, parquet::ByteArray * value) {
+        if (ba_values == NULL) {
+            ba_values = new parquet::ByteArray [BUFFER_SIZE];
+        }
+        int64_t skip_rows = row - current_row;
+        if(skip_rows > 0) {
+            current_row += skip_rows;
+            if(buffer_row > 0) {  // We have a buffer
+                buffer_row += skip_rows;
+                if(buffer_row >= BUFFER_SIZE) { // Check if skip within the buffer
+                    skip_rows = buffer_row - BUFFER_SIZE;
+                    buffer_row = 0;
+                    ba_reader->Skip(skip_rows);
+                }
+            } else { // We do not have a buffer, just skip
+                ba_reader->Skip(skip_rows);
+            }
+        }
+
+        // We done with skip logic
+        if(buffer_row == 0) {  // We do not have a buffer, read it
+            int64_t values_read;
+            // We may need to handle out of buond read
+            int64_t rows_read = ba_reader->ReadBatch(BUFFER_SIZE, 0, 0, ba_values, &values_read);
+        }
+
+        // We done with buffer
+        *value = ba_values[buffer_row];
+        buffer_row++;
+        if(buffer_row >= BUFFER_SIZE){
+            buffer_row = 0;
+        }
+        return 1;
+    }
+#if 0    
     int64_t Read(int64_t row, int16_t* def_levels, int16_t* rep_levels, parquet::ByteArray * values, int64_t* values_read) {
         //std::cout <<  "DikeColumnReader[" << column << "]->Read row "  << row << std::endl;        
         int64_t skip_rows = row - current_row;
@@ -117,11 +212,14 @@ class DikeColumnReader {
             ba_reader->Skip(skip_rows);
             current_row += skip_rows;
         }
-        int64_t rows_read = ba_reader->ReadBatch(1, def_levels, rep_levels, values, values_read);
+        //int64_t rows_read = ba_reader->ReadBatch(1, def_levels, rep_levels, values, values_read);
+        int64_t rows_read = ba_reader->ReadBatch(1, def_levels, rep_levels, &ba_value, values_read);
+        *values = ba_value;
         current_row += rows_read;
         return rows_read;        
          
     }
+#endif
 
     int64_t Skip(int64_t num_rows_to_skip) {
         //std::cout <<  "DikeColumnReader[" << column << "]->Skip type "  << parquet::TypeToString(physicalType) << std::endl;
@@ -149,11 +247,14 @@ class DikeParquetReader: public DikeAsyncReader {
     parquet::Type::type * physicalType;
 
     std::shared_ptr<arrow::io::HadoopFileSystem> fs;
-    static std::map<int, std::shared_ptr<arrow::io::HadoopFileSystem> > hadoopFileSystemMap;
+    static std::map< int, std::shared_ptr<arrow::io::HadoopFileSystem> > hadoopFileSystemMap;
 
     std::shared_ptr<arrow::io::HdfsReadableFile> inputFile;
 
     std::shared_ptr<parquet::FileMetaData> fileMetaData;
+    static std::map< std::string, std::shared_ptr<parquet::FileMetaData> > fileMetaDataMap;
+    static std::map< std::string, std::string > fileLastAccessTimeMap;
+
     std::unique_ptr<parquet::ParquetFileReader> parquetFileReader;
     std::shared_ptr<parquet::RowGroupReader> rowGroupReader;   
 
@@ -196,8 +297,24 @@ class DikeParquetReader: public DikeAsyncReader {
         }
                                         
         st = fs->OpenReadable(fileName, &inputFile);        
-            
-        fileMetaData = std::move(parquet::ReadMetaData(inputFile));
+        
+        if (fileMetaDataMap.count(fileName)) {
+            if (0 == fileLastAccessTimeMap[fileName].compare(dikeSQLConfig["Configuration.LastAccessTime"])){
+                fileMetaData = fileMetaDataMap[fileName];
+                //std::cout << " DikeParquetReader " << fileName << " reuse fileMetaData "<< std::endl;
+            } else {
+                fileMetaData = std::move(parquet::ReadMetaData(inputFile));
+                fileMetaDataMap[fileName] = fileMetaData;
+                fileLastAccessTimeMap[fileName] = dikeSQLConfig["Configuration.LastAccessTime"];
+                //std::cout << " DikeParquetReader " << fileName << " read fileMetaData "<< std::endl;
+            }            
+        } else {
+            fileMetaData = std::move(parquet::ReadMetaData(inputFile));
+            fileMetaDataMap[fileName] = fileMetaData;
+            fileLastAccessTimeMap[fileName] = dikeSQLConfig["Configuration.LastAccessTime"];
+            //std::cout << " DikeParquetReader " << fileName << " read fileMetaData "<< std::endl;
+        }
+        
         const parquet::SchemaDescriptor* schemaDescriptor = fileMetaData->schema();
 
         parquetFileReader = std::move(parquet::ParquetFileReader::Open(inputFile, parquet::default_reader_properties(), fileMetaData));
@@ -272,6 +389,7 @@ class DikeParquetReader: public DikeAsyncReader {
         //std::cout <<  "readRecord " << rowIdx << std::endl;
         for (int col  = 0; col < columnCount; col++){
             record->len[col] = 0;
+            record->fields[col] = 0;
         }
         return 0;
     }
@@ -286,7 +404,8 @@ class DikeParquetReader: public DikeAsyncReader {
                 affinity = SQLITE_AFF_NUMERIC;
                 break;
             case parquet::Type::BYTE_ARRAY:
-                affinity = SQLITE_AFF_TEXT_TERM;
+                //affinity = SQLITE_AFF_TEXT_TERM;
+                affinity = SQLITE_AFF_TEXT;
                 break;
         }
         return  affinity;               
@@ -298,7 +417,7 @@ class DikeParquetReader: public DikeAsyncReader {
  
         *affinity = getAffinity(col);
         if(record->len[col] > 0){
-            *value_ptr = record->fieldMemory[col];
+            *value_ptr = record->fields[col];
             *len = record->len[col];            
             return 0;
         }
@@ -317,51 +436,44 @@ class DikeParquetReader: public DikeAsyncReader {
                 *len = sizeof(int64_t);
                 memcpy ( record->fieldMemory[col], &value, sizeof(int64_t));
                 //std::cout <<  "rows_read " << rows_read << " values_read " << values_read << std::endl;
+                record->fields[col] = record->fieldMemory[col];
             }
             break;
             case parquet::Type::DOUBLE:
             {
                 //parquet::DoubleReader* double_reader = static_cast<parquet::DoubleReader*>(columnReader[col].get());
+#if 0                
                 double value;
                 rows_read = dikeColumnReader[col]->Read(rowIdx, nullptr, nullptr, &value, &values_read);
-
                 // *affinity = SQLITE_AFF_NUMERIC;
                 *len = sizeof(double);
-                memcpy ( record->fieldMemory[col], &value, *len);                
+                memcpy ( record->fieldMemory[col], &value, *len);
+                record->fields[col] = record->fieldMemory[col];
+#endif                
+                dikeColumnReader[col]->GetValue(rowIdx, (double *) record->fieldMemory[col]);
+                record->fields[col] = record->fieldMemory[col];
+                *len = sizeof(double);
             }     
             break;
             case parquet::Type::BYTE_ARRAY:
             {
-                //parquet::ByteArrayReader* ba_reader = static_cast<parquet::ByteArrayReader*>(columnReader[col].get());
+                //parquet::ByteArrayReader* ba_reader = static_cast<parquet::ByteArrayReader*>(columnReader[col].get());                
                 parquet::ByteArray value;
-                rows_read = dikeColumnReader[col]->Read(rowIdx, NULL, NULL, &value, &values_read);
-                // TODO fix me (it does not belong here)
-                for(int i = 0; i < value.len; i++) {
-                    if(value.ptr[i] == ','){
-                        *affinity = SQLITE_AFF_TEXT_TERM;
-                        record->fieldMemory[col][0] = '\"';
-                        memcpy ( &record->fieldMemory[col][1], value.ptr, value.len);
-                        record->fieldMemory[col][value.len + 1] = '\"';
-                        record->fieldMemory[col][value.len + 2] = 0;
-                        *len = value.len + 3;
-                        *value_ptr = record->fieldMemory[col];
-                        return 0;                          
-                    }
-                }
-
-                // *affinity = SQLITE_AFF_TEXT_TERM;
-                memcpy ( record->fieldMemory[col], value.ptr, value.len);
-                record->fieldMemory[col][value.len] = 0;
-                *len = value.len + 1;
+                // rows_read = dikeColumnReader[col]->Read(rowIdx, NULL, NULL, &value, &values_read);
+                dikeColumnReader[col]->GetValue(rowIdx, &value);
+                record->fields[col] = (uint8_t *) value.ptr;
+                *len = value.len;
             }
             break;
         }
-        *value_ptr = record->fieldMemory[col];
-        record->len[col] = *len;
+        *value_ptr = record->fields[col];
+        record->len[col] = *len; // this is for caching 
         return 0;
     }    
 };
 
 std::map<int, std::shared_ptr<arrow::io::HadoopFileSystem> > DikeParquetReader::hadoopFileSystemMap;
+std::map< std::string, std::shared_ptr<parquet::FileMetaData> >  DikeParquetReader::fileMetaDataMap;
+std::map< std::string, std::string > DikeParquetReader::fileLastAccessTimeMap;
 
 #endif /* DIKE_PARQUET_READER_HPP */
