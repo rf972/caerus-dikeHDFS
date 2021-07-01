@@ -50,6 +50,8 @@
 #include "DikeSQL.hpp"
 #include "DikeAsyncReader.hpp"
 
+//#define SAFE_MODE 1
+
 class DikeColumnReader {
     public:
     int column;
@@ -63,13 +65,17 @@ class DikeColumnReader {
     parquet::ByteArrayReader* ba_reader = NULL;
 
     enum {
-        BUFFER_SIZE = 1024,
+        BUFFER_SIZE = 2048,
+        //BUFFER_SIZE = 10,
     };
 
-    //parquet::ByteArray ba_value;
+    parquet::ByteArray ba_value;
+
+    // This is used for caching
     int64_t * int64_values = NULL;
     double *  double_values = NULL;
     parquet::ByteArray * ba_values = NULL;
+    int64_t values_size = 0;
 
     DikeColumnReader(int column, parquet::Type::type physicalType, std::shared_ptr<parquet::ColumnReader> columnReader) {
         this->columnReader = std::move(columnReader);
@@ -108,6 +114,44 @@ class DikeColumnReader {
         }
     }
 
+
+    int64_t GetValue(int64_t row, int64_t * value) {
+        if (int64_values == NULL) {
+            int64_values = new int64_t [BUFFER_SIZE];
+        }
+        int64_t skip_rows = row - current_row;
+        if(skip_rows > 0) {
+            current_row += skip_rows;
+            if(buffer_row > 0) {  // We have a buffer
+                buffer_row += skip_rows;
+                if(buffer_row >= values_size) { // Check if skip within the buffer
+                    skip_rows = buffer_row - values_size;
+                    buffer_row = 0;
+                    int64_reader->Skip(skip_rows);
+                }
+            } else { // We do not have a buffer, just skip
+                int64_reader->Skip(skip_rows);
+            }
+        }
+
+        // We done with skip logic
+        if(buffer_row == 0) {  // We do not have a buffer, read it
+            int64_t values_read;
+            // We may need to handle out of buond read
+            int64_t rows_read = int64_reader->ReadBatch(BUFFER_SIZE, 0, 0, int64_values, &values_read);
+            values_size = rows_read;
+        }
+
+        // We done with buffer
+        *value = int64_values[buffer_row];
+        buffer_row++;
+        current_row ++;
+        if(buffer_row >= values_size){
+            buffer_row = 0;
+        }
+        return 1;
+    }
+
     int64_t Read(int64_t row, int16_t* def_levels, int16_t* rep_levels, int64_t * values, int64_t* values_read) {
         //std::cout <<  "DikeColumnReader[" << column << "]->Read row "  << row << std::endl;                
         int64_t skip_rows = row - current_row;
@@ -129,8 +173,8 @@ class DikeColumnReader {
             current_row += skip_rows;
             if(buffer_row > 0) {  // We have a buffer
                 buffer_row += skip_rows;
-                if(buffer_row >= BUFFER_SIZE) { // Check if skip within the buffer
-                    skip_rows = buffer_row - BUFFER_SIZE;
+                if(buffer_row >= values_size) { // Check if skip within the buffer
+                    skip_rows = buffer_row - values_size;
                     buffer_row = 0;
                     double_reader->Skip(skip_rows);
                 }
@@ -144,19 +188,20 @@ class DikeColumnReader {
             int64_t values_read;
             // We may need to handle out of buond read
             int64_t rows_read = double_reader->ReadBatch(BUFFER_SIZE, 0, 0, double_values, &values_read);
+            values_size = rows_read;
         }
 
         // We done with buffer
         *value = double_values[buffer_row];
         buffer_row++;
         current_row ++;
-        if(buffer_row >= BUFFER_SIZE){
+        if(buffer_row >= values_size){
             buffer_row = 0;
         }
         return 1;
     }
 
-#if 0    
+//#ifdef SAFE_MODE
     int64_t Read(int64_t row, int16_t* def_levels, int16_t* rep_levels, double * values, int64_t* values_read) {
         //std::cout <<  "DikeColumnReader[" << column << "]->Read row "  << row << std::endl;        
         int64_t skip_rows = row - current_row;
@@ -168,7 +213,7 @@ class DikeColumnReader {
         current_row += rows_read;
         return rows_read;        
     }
-#endif
+//#endif
 
 
     int64_t GetValue(int64_t row, parquet::ByteArray * value) {
@@ -180,8 +225,8 @@ class DikeColumnReader {
             current_row += skip_rows;
             if(buffer_row > 0) {  // We have a buffer
                 buffer_row += skip_rows;
-                if(buffer_row >= BUFFER_SIZE) { // Check if skip within the buffer
-                    skip_rows = buffer_row - BUFFER_SIZE;
+                if(buffer_row >= values_size) { // Check if skip within the buffer
+                    skip_rows = buffer_row - values_size;
                     buffer_row = 0;
                     ba_reader->Skip(skip_rows);
                 }
@@ -195,18 +240,20 @@ class DikeColumnReader {
             int64_t values_read;
             // We may need to handle out of buond read
             int64_t rows_read = ba_reader->ReadBatch(BUFFER_SIZE, 0, 0, ba_values, &values_read);
+            values_size = rows_read;
         }
 
         // We done with buffer
         *value = ba_values[buffer_row];
         buffer_row++;
         current_row ++;
-        if(buffer_row >= BUFFER_SIZE){
+        if(buffer_row >= values_size){
             buffer_row = 0;
         }
         return 1;
     }
-#if 0    
+
+#ifdef SAFE_MODE
     int64_t Read(int64_t row, int16_t* def_levels, int16_t* rep_levels, parquet::ByteArray * values, int64_t* values_read) {
         //std::cout <<  "DikeColumnReader[" << column << "]->Read row "  << row << std::endl;        
         int64_t skip_rows = row - current_row;
@@ -430,30 +477,37 @@ class DikeParquetReader: public DikeAsyncReader {
         switch(physicalType[col]){
             case parquet::Type::INT64:
             {
+#ifdef SAFE_MODE                
                 //parquet::Int64Reader* int64_reader = static_cast<parquet::Int64Reader*>(columnReader[col].get());
                 int64_t value;
                 rows_read = dikeColumnReader[col]->Read(rowIdx, NULL, NULL, &value, &values_read);
 
-                // *affinity = SQLITE_AFF_INTEGER;
-                *len = sizeof(int64_t);
+                // *affinity = SQLITE_AFF_INTEGER;                
                 memcpy ( record->fieldMemory[col], &value, sizeof(int64_t));
                 //std::cout <<  "rows_read " << rows_read << " values_read " << values_read << std::endl;
-                record->fields[col] = record->fieldMemory[col];
+                record->fields[col] = record->fieldMemory[col];                
+#else
+                dikeColumnReader[col]->GetValue(rowIdx, (int64_t *) record->fieldMemory[col]);
+                record->fields[col] = record->fieldMemory[col];        
+#endif
+                *len = sizeof(int64_t);
             }
+            
             break;
             case parquet::Type::DOUBLE:
             {
                 //parquet::DoubleReader* double_reader = static_cast<parquet::DoubleReader*>(columnReader[col].get());
-#if 0                
+#ifdef SAFE_MODE
                 double value;
                 rows_read = dikeColumnReader[col]->Read(rowIdx, nullptr, nullptr, &value, &values_read);
                 // *affinity = SQLITE_AFF_NUMERIC;
                 *len = sizeof(double);
                 memcpy ( record->fieldMemory[col], &value, *len);
                 record->fields[col] = record->fieldMemory[col];
-#endif                
+#else                
                 dikeColumnReader[col]->GetValue(rowIdx, (double *) record->fieldMemory[col]);
-                record->fields[col] = record->fieldMemory[col];
+                record->fields[col] = record->fieldMemory[col];                
+#endif                
                 *len = sizeof(double);
             }     
             break;
@@ -461,10 +515,18 @@ class DikeParquetReader: public DikeAsyncReader {
             {
                 //parquet::ByteArrayReader* ba_reader = static_cast<parquet::ByteArrayReader*>(columnReader[col].get());                
                 parquet::ByteArray value;
-                // rows_read = dikeColumnReader[col]->Read(rowIdx, NULL, NULL, &value, &values_read);
+#ifdef SAFE_MODE                
+                rows_read = dikeColumnReader[col]->Read(rowIdx, NULL, NULL, &value, &values_read);
+                memcpy ( record->fieldMemory[col], value.ptr, value.len);
+                record->fieldMemory[col][value.len] = 0;
+                record->fields[col] = record->fieldMemory[col];
+                *len = value.len;
+
+#else                
                 dikeColumnReader[col]->GetValue(rowIdx, &value);
                 record->fields[col] = (uint8_t *) value.ptr;
                 *len = value.len;
+#endif
             }
             break;
         }

@@ -216,6 +216,13 @@ public class DikeClient
         int totalRecords = 0;
         String readParam = null;
         Map<String,Statistics> stats;
+        int traceRecordCount = 10;
+
+        String traceRecordCountEnv = System.getenv("DIKE_TRACE_RECORD_COUNT");
+        if(traceRecordCountEnv != null){
+            traceRecordCount = Integer.parseInt(traceRecordCountEnv);
+        }
+
 
         long start_time = System.currentTimeMillis();
 
@@ -278,7 +285,7 @@ public class DikeClient
                 String record;
                 record = br.readLine();
                 while (record != null){
-                    if(totalRecords < 10) {
+                    if(totalRecords < traceRecordCount) {
                         System.out.println(record);
                     }
 
@@ -396,12 +403,37 @@ public class DikeClient
 // java -classpath target/ndp-hdfs-client-1.0-jar-with-dependencies.jar org.dike.hdfs.DikeClient /lineitem.parquet
 
 // Q1 test
+// export DIKE_TRACE_RECORD_COUNT=7000000
 // export DIKE_QUERY="SELECT CAST(l_quantity as NUMERIC),CAST(l_extendedprice as NUMERIC),CAST(l_discount as NUMERIC),CAST(l_tax as NUMERIC),l_returnflag,l_linestatus FROM S3Object s WHERE l_shipdate IS NOT NULL AND l_shipdate <= '1998-09-02'"
 // export DIKE_QUERY="SELECT l_quantity,l_extendedprice,l_discount,l_tax,l_returnflag,l_linestatus, l_shipdate FROM S3Object WHERE l_shipdate IS NOT NULL AND l_shipdate <= '1998-09-02' LIMIT 1000"
 // export DIKE_QUERY="SELECT _5, _6, _7, _8, _9, _10, _11 FROM S3Object WHERE _11 IS NOT NULL AND _11 <= '1998-09-02' LIMIT 1000"
+
+// export DIKE_QUERY="SELECT MIN(l_shipdate) FROM S3Object"
+
 // java -classpath target/ndp-hdfs-client-1.0-jar-with-dependencies.jar org.dike.hdfs.DikeClient /lineitem.snappy.parquet
 
 // java -classpath target/ndp-hdfs-client-1.0-jar-with-dependencies.jar org.dike.hdfs.DikeClient /lineitem.csv
 // 
 // java -Xdebug -agentlib:jdwp=transport=dt_socket,server=y,suspend=y,address=*:8000 -Xmx1g -classpath target/dikeclient-1.0-jar-with-dependencies.jar org.dike.hdfs.DikeClient /lineitem.tbl
 // for i in $(seq 1 10); do echo $i && java -classpath target/dikeclient-1.0-jar-with-dependencies.jar org.dike.hdfs.DikeClient /lineitem.tbl; done
+
+
+
+/*
+  required int64 field_id=1 l_orderkey;
+  required int64 field_id=2 l_partkey;
+  required int64 field_id=3 l_suppkey;
+  required int64 field_id=4 l_linenumber;
+  required double field_id=5 l_quantity;
+  required double field_id=6 l_extendedprice;
+  required double field_id=7 l_discount;
+  required double field_id=8 l_tax;
+  optional binary field_id=9 l_returnflag (String);
+  optional binary field_id=10 l_linestatus (String);
+  optional binary field_id=11 l_shipdate (String);
+  optional binary field_id=12 l_commitdate (String);
+  optional binary field_id=13 l_receiptdate (String);
+  optional binary field_id=14 l_shipinstruct (String);
+  optional binary field_id=15 l_shipmode (String);
+  optional binary field_id=16 l_comment (String);
+*/
