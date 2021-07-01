@@ -53,6 +53,7 @@ mkdir -p ${ROOT_DIR}/build/.gnupg
 CMD="/bin/bash"
 
 docker run --rm=true -it \
+  -v "${ROOT_DIR}/data:/data" \
   -v "${ROOT_DIR}/client:${DOCKER_HOME_DIR}/client" \
   -v "${ROOT_DIR}/config:${DOCKER_HOME_DIR}/config" \
   -w "${DOCKER_HOME_DIR}/client" \
