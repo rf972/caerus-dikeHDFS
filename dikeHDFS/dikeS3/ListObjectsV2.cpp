@@ -178,7 +178,7 @@ void ListObjectsV2::handleRequest(HTTPServerRequest &req, HTTPServerResponse &re
             writer.endElement("", "", XMLString("Key"));
 
             writer.startElement("", "", XMLString("LastModified"));
-            writer.characters(XMLString(Poco::DateTimeFormatter::format(ldt,"%Y-%n-%fT%H:%M:%S.%iZ")));                
+            writer.characters(XMLString(Poco::DateTimeFormatter::format(ldt,"%Y-%n-%eT%H:%M:%S.%iZ")));
             //writer.characters(XMLString("2020-10-27T17:44:12.056Z"));                
             writer.endElement("", "", XMLString("LastModified"));
 
