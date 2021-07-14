@@ -72,7 +72,7 @@ class NameNodeHandler : public DikeHTTPRequestHandler {
     std::istream& fromHDFS = session.receiveResponse(hdfs_resp);
     (HTTPResponse &)resp = hdfs_resp;    
     
-    if(req.has("ReadParam") && resp.has("Location")) {
+    if(/* req.has("ReadParam") && */ resp.has("Location")) {
       //cout << DikeUtil().Blue() << resp.get("Location") << DikeUtil().Reset() << endl;      
       Poco::URI uri = Poco::URI(resp.get("Location"));      
       uri.setPort(std::stoi(dikeConfig["dike.dfs.ndp.http-port"]));
@@ -120,7 +120,15 @@ public:
         //hdfs_session.readResponseHeader(hdfs_resp);
         
         std::istream& fromHDFS = hdfs_session.receiveResponse(hdfs_resp);
-        (HTTPResponse &)resp = hdfs_resp;        
+        (HTTPResponse &)resp = hdfs_resp;
+        resp.setStatus(Poco::Net::HTTPResponse::HTTP_OK);
+        resp.setContentLength(Poco::Net::HTTPMessage::UNKNOWN_CONTENT_LENGTH);
+        resp.setContentType("application/octet-stream");
+        resp.setChunkedTransferEncoding(false);    
+        resp.setKeepAlive(false);
+        resp.set("Access-Control-Allow-Methods", "GET");
+        resp.set("Access-Control-Allow-Origin", "*");
+
         ostream& toClient = resp.send();
         Poco::StreamCopier::copyStream(fromHDFS, toClient, 8192);
         if(verbose) {      
@@ -129,34 +137,6 @@ public:
         }
         return;
     }
-
-#if 0
-    DikeSQLParam dikeSQLParam;    
-    Poco::URI uri = Poco::URI(hdfs_req.getURI());
-    Poco::URI::QueryParameters uriParams = uri.getQueryParameters();
-    dikeSQLParam.blockOffset = 0;
-    for(int i = 0; i < uriParams.size(); i++){        
-      if(uriParams[i].first == "offset"){
-        if(verbose) {
-          cout << uriParams[i].first << ": " << uriParams[i].second << endl;
-        }
-        dikeSQLParam.blockOffset = std::stoull(uriParams[i].second);
-      }
-    }
-
-    if(verbose) {
-      hdfs_req.write(cout);
-    }
-
-    DikeHDFSSession hdfs_session(host, std::stoi(dikeConfig["dfs.datanode.http-port"]));
-    hdfs_session.sendRequest(hdfs_req);
-
-    HTTPResponse hdfs_resp;
-    hdfs_session.readResponseHeader(hdfs_resp);
-
-    (HTTPResponse &)resp = hdfs_resp;
-    //cout << "From HDFS we got \"" << hdfs_resp.getTransferEncoding() << "\" TransferEncoding" << endl;
-#endif
 
     if(req.has("ReadParam")) {
         resp.setStatus(Poco::Net::HTTPResponse::HTTP_OK);
@@ -183,6 +163,8 @@ public:
         try {
             std::stringstream ss;
             req.write(ss);
+            
+            dikeSQLConfig["system.verbose"] = std::to_string(verbose);
 
             dikeSQLConfig["Name"] = cfg->getString("Name");
             dikeSQLConfig["Request"] = ss.str();
@@ -215,13 +197,14 @@ public:
 
             ostream& toClient = resp.send();
             toClient.flush();
-
+#if 0
             Poco::Net::HTTPServerRequestImpl & req_impl = (Poco::Net::HTTPServerRequestImpl &)req;          
-            Poco::Net::StreamSocket toClientSocket = req_impl.detachSocket();
-                    
-            //DikeInSession input(&hdfs_session);
+            Poco::Net::StreamSocket toClientSocket = req_impl.detachSocket();                                
             DikeOut output(&toClientSocket);
-            //dikeSQL.Run(&dikeSQLParam, &input, &output);       
+#else
+            DikeOut output(&toClient);
+#endif
+            
             dikeSQL.Run(dikeSQLConfig, &output);       
         } catch (Poco::NotFoundException&) {
             cout << DikeUtil().Red() << "Exeption while parsing readParam" << endl;
