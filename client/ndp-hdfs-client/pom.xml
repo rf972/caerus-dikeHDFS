@@ -24,6 +24,16 @@
       <artifactId>ndp-hdfs</artifactId>
       <version>1.0</version>
     </dependency>
+        <dependency>
+        <groupId>org.apache.avro</groupId>
+        <artifactId>avro</artifactId>
+        <version>1.10.2</version>
+        </dependency> 
+        <dependency>
+            <groupId>org.apache.parquet</groupId>
+            <artifactId>parquet-avro</artifactId>
+            <version>1.12.0</version>
+        </dependency>
   </dependencies>
 
   <build>

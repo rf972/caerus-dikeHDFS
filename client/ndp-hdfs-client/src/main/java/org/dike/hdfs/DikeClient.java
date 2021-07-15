@@ -18,10 +18,14 @@ package org.dike.hdfs;
 
 import java.io.File;
 import java.io.FileInputStream;
+import java.io.FileOutputStream;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.BufferedReader;
 import java.io.InputStreamReader;
+import java.io.ByteArrayOutputStream;
+import java.io.ByteArrayInputStream;
+
 
 import java.nio.ByteBuffer;
 import java.nio.charset.StandardCharsets;
@@ -43,6 +47,8 @@ import org.apache.hadoop.fs.FileSystem.Statistics;
 import org.apache.hadoop.fs.StorageStatistics;
 import org.apache.hadoop.fs.FSDataInputStream;
 import org.apache.hadoop.fs.BlockLocation;
+import org.apache.hadoop.fs.PositionedReadable;
+import org.apache.hadoop.fs.Seekable;
 
 import org.apache.hadoop.hdfs.HdfsConfiguration;
 import org.apache.hadoop.hdfs.DistributedFileSystem;
@@ -52,6 +58,18 @@ import org.apache.hadoop.hdfs.protocol.LocatedBlock;
 import org.apache.hadoop.hdfs.protocol.LocatedBlocks;
 
 import org.apache.hadoop.io.IOUtils;
+
+import org.apache.parquet.hadoop.ParquetFileReader;
+import org.apache.parquet.hadoop.metadata.FileMetaData;
+import org.apache.parquet.hadoop.metadata.ParquetMetadata;
+import org.apache.parquet.hadoop.metadata.BlockMetaData;
+import org.apache.parquet.hadoop.metadata.ColumnChunkMetaData;
+
+import org.apache.parquet.schema.MessageType;
+
+//import org.apache.avro.file.SeekableByteArrayInput;
+import org.apache.parquet.io.InputFile;
+import org.apache.parquet.io.SeekableInputStream;
 
 import org.apache.log4j.Logger;
 import org.apache.log4j.Level;
@@ -87,17 +105,16 @@ public class DikeClient
         Path dikehdfsPath = new Path("ndphdfs://dikehdfs:9860/");
         Path hdfsPath = new Path("hdfs://dikehdfs:9000/");
 
-        perfTest(dikehdfsPath, fname, conf, true/*pushdown*/, false/*partitionned*/);
+        if(fname.endsWith(".csv")) {
+            perfTest(dikehdfsPath, fname, conf, true/*pushdown*/, false/*partitionned*/);
+        } else {            
+            //parquetTest(dikehdfsPath, fname, conf, false/*pushdown*/, false/*partitionned*/);
+            parquetTest(dikehdfsPath, fname, conf, true/*pushdown*/, false/*partitionned*/);
+        }
         //perfTest(dikehdfsPath, fname, conf, true /*pushdown*/, true/*partitionned*/);
         
         //perfTest(dikehdfsPath, fname, conf, false/*pushdown*/, false/*partitionned*/);        
         //Validate(dikehdfsPath, fname, conf);
-
-        if(false){
-            for(int i = 0; i < 10 ; i++){
-                perfTest(dikehdfsPath, fname, conf, false/*pushdown*/, false/*partitionned*/); 
-            }
-        }
     }
 
     public static String getReadParam(String name,
@@ -395,7 +412,166 @@ public class DikeClient
         //System.out.println(fs.getScheme());
         System.out.format("BytesRead %d\n", stats.get(fs1.getScheme()).getBytesRead());
         System.out.format("Received %d records (%d bytes) in %.3f sec\n", totalRecords, totalDataSize, (end_time - start_time) / 1000.0);
-    }    
+    }
+
+    public static void parquetTest(Path fsPath, String fname, Configuration conf, Boolean pushdown, Boolean partitionned)
+    {
+        InputStream input = null;
+        Path fileToRead = new Path(fname);
+        FileSystem fs = null;        
+        NdpHdfsFileSystem dikeFS = null;
+        ByteBuffer bb = ByteBuffer.allocate(1024);
+        long totalDataSize = 0;
+        int totalRecords = 0;
+        String readParam = null;
+        Map<String,Statistics> stats;
+        int traceRecordCount = 10;
+
+        String traceRecordCountEnv = System.getenv("DIKE_TRACE_RECORD_COUNT");
+        if(traceRecordCountEnv != null){
+            traceRecordCount = Integer.parseInt(traceRecordCountEnv);
+        }
+
+        long start_time = System.currentTimeMillis();
+
+        try {
+            fs = FileSystem.get(fsPath.toUri(), conf);
+            stats = fs.getStatistics();
+            System.out.println("Scheme " + fs.getScheme());
+            stats.get(fs.getScheme()).reset();
+
+            System.out.println("\nConnected to -- " + fsPath.toString());
+            start_time = System.currentTimeMillis();                        
+            
+            FSDataInputStream dataInputStream = null;
+
+            // regular read
+            if(pushdown){
+                dikeFS = (NdpHdfsFileSystem)fs;
+                readParam = getReadParam(fname, 0 /* ignore stream size */);                                        
+                dataInputStream = dikeFS.open(fileToRead, 128 << 10, readParam);                    
+            } else {
+                dataInputStream = fs.open(fileToRead);
+            }
+
+            //BufferedReader br = new BufferedReader(new InputStreamReader(dataInputStream,StandardCharsets.UTF_8));
+            byte buffer[] = new byte[8192];
+            //ByteBuffer buffer = ByteBuffer.allocate(2048);
+            ByteArrayOutputStream bos  = new ByteArrayOutputStream(1 << 20);
+            int rc;
+            do {                
+                rc = dataInputStream.read(buffer, 0, 8192);
+                if (rc > 0) {
+                    bos.write(buffer, 0, rc);
+                }
+            } while(rc >= 0);
+            
+            byte [] fileData = bos.toByteArray();
+            //String hex = javax.xml.bind.DatatypeConverter.printHexBinary(fileData);
+            //System.out.println(hex);
+
+            totalDataSize = fileData.length;
+
+            class MySeekableInputStream extends SeekableInputStream {
+                public byte[] buffer;
+                public long pos = 0;
+
+                public MySeekableInputStream(byte[] buf) {
+                    buffer = buf;
+                }
+
+                @Override
+                public long getPos() throws IOException {
+                    System.out.println("MySeekableInputStream::getPos ");
+                    return pos;
+                }
+
+                @Override
+                public void seek(long newPos) throws IOException {
+                    System.out.println("MySeekableInputStream::seek " + newPos);
+                    pos = newPos;
+                }
+
+                @Override
+                public int read() throws IOException {
+                    System.out.println("MySeekableInputStream::read 485");
+                    int b =  buffer[(int)pos];
+                    pos++;
+                    return (b & 0xff);
+                }
+
+                @Override
+                public  void readFully(byte[] bytes) throws IOException {
+                    System.out.println("MySeekableInputStream::readFully 490");
+                    System.arraycopy(buffer, 0, bytes, 0, bytes.length);
+                }
+
+                @Override
+                public void readFully(byte[] bytes, int start, int len) throws IOException{
+                    throw new IOException();
+                }
+
+                @Override
+                public void readFully(ByteBuffer buf) throws IOException {
+                    //readFully(f, buf.array(), buf.arrayOffset() + buf.position(), buf.remaining());
+                    System.out.println("MySeekableInputStream::readFully 507");
+                    System.arraycopy(buffer, (int)pos, buf.array(), buf.arrayOffset() + buf.position(), buf.remaining());
+                    buf.position(buf.limit());                    
+                }
+
+                @Override
+                public int read(ByteBuffer buf) throws IOException {
+                    //throw new IOException();
+                    System.out.println("MySeekableInputStream::read 506");
+                    return 0;
+                }
+            }
+
+            class MyInputFile implements InputFile {
+                public byte [] fileData;
+                public MyInputFile (byte [] fileData) {
+                   this.fileData = fileData;
+                }
+                public long getLength() throws IOException {
+                    System.out.println("MyInputFile::getLength " + fileData.length);
+                    return fileData.length;                    
+                }
+                public SeekableInputStream newStream() throws IOException {
+                    return new MySeekableInputStream(fileData);
+                }
+            }
+            
+            MyInputFile myInputFile = new MyInputFile(fileData);
+            ParquetFileReader reader = ParquetFileReader.open(myInputFile);
+            FileMetaData fileMetaData = reader.getFileMetaData();
+            MessageType	schema = fileMetaData.getSchema();
+            
+            ParquetMetadata parquetMetadata = reader.getFooter();
+            //System.out.println("parquetMetadata : " + ParquetMetadata.toPrettyJSON(parquetMetadata));
+            System.out.println("RecordCount : " +  reader.getRecordCount());
+            List<BlockMetaData>	blocks = parquetMetadata.getBlocks();
+            for (BlockMetaData block : blocks) {
+                List<ColumnChunkMetaData> columns = block.getColumns() ;
+                for (ColumnChunkMetaData colum : columns) {
+                    System.out.println(colum.toString());
+                }                
+            }
+
+        } catch (Exception ex) {
+            System.out.println("Error occurred: ");
+            ex.printStackTrace();
+            long end_time = System.currentTimeMillis();            
+            System.out.format("Received %d records (%d bytes) in %.3f sec\n", totalRecords, totalDataSize, (end_time - start_time) / 1000.0);             
+            return;
+        }
+
+        long end_time = System.currentTimeMillis();
+        
+        //System.out.println(fs.getScheme());
+        System.out.format("BytesRead %d\n", stats.get(fs.getScheme()).getBytesRead());
+        System.out.format("Received %d records (%d bytes) in %.3f sec\n", totalRecords, totalDataSize, (end_time - start_time) / 1000.0);
+    }
+
 }
 
 // mvn package -o
@@ -405,12 +581,20 @@ public class DikeClient
 // Q1 test
 // export DIKE_TRACE_RECORD_COUNT=7000000
 // export DIKE_QUERY="SELECT CAST(l_quantity as NUMERIC),CAST(l_extendedprice as NUMERIC),CAST(l_discount as NUMERIC),CAST(l_tax as NUMERIC),l_returnflag,l_linestatus FROM S3Object s WHERE l_shipdate IS NOT NULL AND l_shipdate <= '1998-09-02'"
-// export DIKE_QUERY="SELECT l_quantity,l_extendedprice,l_discount,l_tax,l_returnflag,l_linestatus, l_shipdate FROM S3Object WHERE l_shipdate IS NOT NULL AND l_shipdate <= '1998-09-02' LIMIT 1000"
+// export DIKE_QUERY="SELECT l_quantity,l_extendedprice,l_discount,l_tax,l_returnflag,l_linestatus, l_shipdate FROM S3Object WHERE l_shipdate IS NOT NULL AND l_shipdate <= '1998-09-02'"
 // export DIKE_QUERY="SELECT _5, _6, _7, _8, _9, _10, _11 FROM S3Object WHERE _11 IS NOT NULL AND _11 <= '1998-09-02' LIMIT 1000"
-
+// export DIKE_QUERY="SELECT count(*) FROM S3Object WHERE l_shipdate IS NOT NULL AND l_shipdate <= '1998-09-02'"
 // export DIKE_QUERY="SELECT MIN(l_shipdate) FROM S3Object"
 
-// java -classpath target/ndp-hdfs-client-1.0-jar-with-dependencies.jar org.dike.hdfs.DikeClient /lineitem.snappy.parquet
+// 1.2 sec
+// export DIKE_QUERY="SELECT count(*) FROM S3Object WHERE l_shipdate IS NOT NULL AND l_shipdate <= '1998-09-02'"
+
+// 1.5 sec
+// export DIKE_QUERY="SELECT min(l_quantity) FROM S3Object WHERE l_shipdate IS NOT NULL AND l_shipdate <= '1998-09-02'"
+
+// 3.796 sec
+// export DIKE_QUERY="SELECT min(l_quantity), min(l_extendedprice), min(l_discount), min(l_tax),min(l_returnflag), min(l_linestatus), l_shipdate FROM S3Object WHERE l_shipdate IS NOT NULL AND l_shipdate <= '1998-09-02'"
+// java -classpath target/ndp-hdfs-client-1.0-jar-with-dependencies.jar org.dike.hdfs.DikeClient /lineitem_srg.parquet
 
 // java -classpath target/ndp-hdfs-client-1.0-jar-with-dependencies.jar org.dike.hdfs.DikeClient /lineitem.csv
 // 

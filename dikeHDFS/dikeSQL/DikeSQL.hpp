@@ -22,7 +22,7 @@ class DikeSQL {
     int Run(DikeSQLConfig & dikeSQLConfig, DikeIO * output);
 
     private:
-    DikeAyncWriter * dikeWriter = NULL;
+    DikeAsyncWriter * dikeWriter = NULL;
     std::thread workerThread;
     sqlite3_stmt *sqlRes = NULL;
     uint64_t record_counter = 0;

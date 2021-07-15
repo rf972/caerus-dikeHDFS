@@ -19,6 +19,9 @@
 #include "DikeCsvReader.hpp"
 #include "DikeParquetReader.hpp"
 
+#include "DikeCsvWriter.hpp"
+#include "DikeParquetWriter.hpp"
+
 //int DikeSQL::Run(DikeSQLParam * dikeSQLParam, DikeIO * input, DikeIO * output)
 int DikeSQL::Run(DikeSQLConfig & dikeSQLConfig, DikeIO * output)
 {
@@ -37,9 +40,11 @@ int DikeSQL::Run(DikeSQLConfig & dikeSQLConfig, DikeIO * output)
     DikeAsyncReader * dikeReader;
     if (dikeSQLConfig["Name"].compare("dikeSQL.parquet") == 0) {        
         dikeReader = (DikeAsyncReader *)new DikeParquetReader(dikeSQLConfig);
+        dikeWriter = new DikeParquetWriter(output);
         //std::cout << "Created parquet reader " << dikeReader << std::endl;
     } else {
-        dikeReader = (DikeAsyncReader *)new DikeCsvReader(dikeSQLConfig);        
+        dikeReader = (DikeAsyncReader *)new DikeCsvReader(dikeSQLConfig);
+        dikeWriter = new DikeCsvWriter(output);
     }
 
     rc = StreamReaderInit(db, dikeReader);
@@ -67,9 +72,7 @@ int DikeSQL::Run(DikeSQLConfig & dikeSQLConfig, DikeIO * output)
         std::cerr << "Can't execute query: " << sqlite3_errmsg(db) << std::endl;        
         sqlite3_close(db);
         return 1;
-    }                
-     
-    dikeWriter = new DikeAyncWriter(output);
+    }         
     
     isRunning = true;
     workerThread = startWorker();
@@ -79,14 +82,14 @@ int DikeSQL::Run(DikeSQLConfig & dikeSQLConfig, DikeIO * output)
         workerThread.join();
     }
 
-#if 0
-    std::chrono::high_resolution_clock::time_point t3 =  std::chrono::high_resolution_clock::now();
-    std::chrono::duration<double, std::milli> create_time = t2 - t1;
-    std::chrono::duration<double, std::milli> select_time = t3 - t2;
-    std::cout << "Records " << record_counter;
-    std::cout << " create_time " << create_time.count()/ 1000 << " sec" ;
-    std::cout << " select_time " << select_time.count()/ 1000 << " sec" << std::endl;
-#endif
+    if (std::stoi(dikeSQLConfig["system.verbose"]) > 0) {
+        std::chrono::high_resolution_clock::time_point t3 =  std::chrono::high_resolution_clock::now();
+        std::chrono::duration<double, std::milli> create_time = t2 - t1;
+        std::chrono::duration<double, std::milli> select_time = t3 - t2;
+        std::cout << "Records " << record_counter;
+        std::cout << " create_time " << create_time.count()/ 1000 << " sec" ;
+        std::cout << " select_time " << select_time.count()/ 1000 << " sec" << std::endl;
+    }
 
     delete dikeWriter;
     delete dikeReader;
@@ -102,48 +105,18 @@ int DikeSQL::Run(DikeSQLConfig & dikeSQLConfig, DikeIO * output)
 void DikeSQL::Worker()
 {
     int sqlite3_rc;
-    int writer_rc;
-    const char * res[128];
-    std::string resString[128];
-    int data_count;
-    int total_bytes;
-
-    //std::thread::id thread_id = std::this_thread::get_id();
+    int writer_rc = 1;    
     pthread_t thread_id = pthread_self();
     pthread_setname_np(thread_id, "DikeSQL::Worker");
-
-    //outStream.exceptions ( std::ostream::failbit | std::ostream::badbit );
-    try {
-        sqlite3_rc = sqlite3_step(sqlRes);
-        writer_rc = 1;
-        while (isRunning && SQLITE_ROW == sqlite3_rc && writer_rc) {
-            record_counter++;            
-            data_count = dike_sqlite3_get_data(sqlRes, res, 128, &total_bytes);
-            if(total_bytes > 0){
-                for(int i = 0; i < data_count; i++) {
-                    if (SQLITE3_TEXT == sqlite3_column_type(sqlRes, i)){ // It is a text
-                        if((res[i][0] != '\"') && (NULL != strstr(res[i], ","))) { // Delimiter inside output
-                            resString[i] = std::string("\"") + std::string(res[i]) + std::string("\"");
-                            res[i] = resString[i].c_str();
-                        }
-                    }
-                }
-                writer_rc = dikeWriter->write(res, data_count, ',', '\n', total_bytes);
-            }
-            sqlite3_rc = sqlite3_step(sqlRes);
+    
+    try {    
+        while (isRunning && SQLITE_ROW == sqlite3_step(sqlRes) && writer_rc) {
+            record_counter++;
+            writer_rc = dikeWriter->write(sqlRes);            
         }
-        //dikeWriter->write('\n');        
     } catch (...) {
         std::cout << "Caught exception " << std::endl;
     }
 
     dikeWriter->close();
-
-    //std::cout << "DikeSQL::Worker exiting " << std::endl;
-    //std::cout << "DikeSQL::Worker sqlite3_rc " << sqlite3_rc << std::endl;
-    //std::cout << "DikeSQL::Worker writer_rc " << writer_rc << std::endl;
-    //std::cout << "DikeSQL::Worker isRunning " << isRunning << std::endl;
 }
-
-// cmake --build ./build/Debug
-// ./build/Debug/dikeSQL/testDikeSQL ../../dike/spark/build/tpch-data/lineitem.tbl

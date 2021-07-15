@@ -10,6 +10,8 @@
 #include "Poco/Net/StreamSocket.h"
 #include "Poco/Net/HTTPHeaderStream.h"
 
+#include "Poco/BinaryWriter.h"
+
 #include <iostream>
 
 #include "DikeIO.hpp"
@@ -85,9 +87,14 @@ class DikeInSession : public DikeIO {
 class DikeOut : public DikeIO {
   public:
   Poco::Net::StreamSocket * outSocket = NULL;
+  std::ostream * outStream;
 
-  DikeOut(Poco::Net::StreamSocket * outSocket){
+  DikeOut(Poco::Net::StreamSocket * outSocket): outStream(nullptr){
     this->outSocket = outSocket;
+  }
+
+  DikeOut(std::ostream* outStream) {
+     this->outStream = outStream;
   }
 
   ~DikeOut(){ }
@@ -98,21 +105,26 @@ class DikeOut : public DikeIO {
   virtual int write(const char * buf, uint32_t size) {
     int len = size;
     int n = 0;
-    if(outSocket) {
-      try {
-        while(len > 0) {
-            int i = outSocket->sendBytes(&buf[n], len, 0);
-            n += i;
-            len -= i;
-            if(i <= 0){
-              return n;
+    try {
+        if(outSocket) {      
+            while(len > 0) {
+                int i = outSocket->sendBytes(&buf[n], len, 0);
+                n += i;
+                len -= i;
+                if(i <= 0){
+                return n;
+                }
             }
+            return n; 
+        } 
+        if(outStream) {
+            outStream->write(buf, size);
+            return size;
         }
-        return n; 
-      } catch (...) {
+    } catch (...) {
         std::cout << "DikeOut: Caught exception " << std::endl;
-      }
     }
+
     return -1;
   }
 };

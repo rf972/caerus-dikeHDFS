@@ -14,11 +14,12 @@
 #include <semaphore.h>
 #include <unistd.h>
 
+#include <sqlite3.h>
 #include "DikeUtil.hpp"
 #include "DikeIO.hpp"
 #include "DikeBuffer.hpp"
-
-class DikeAyncWriter{
+      
+class DikeAsyncWriter {
     public:
     enum{
         QUEUE_SIZE  = 4,
@@ -38,9 +39,9 @@ class DikeAyncWriter{
     int emptyCount = 0;
     int recordCount = 0;
 
-    DikeAyncWriter(DikeIO * output){
+    DikeAsyncWriter(DikeIO * output) {
+        //std::cout << "DikeAsyncWriter::DikeAsyncWriter " << std::endl;
         this->output = output;
-
         sem_init(&work_sem, 0, 0);
         sem_init(&free_sem, 0, QUEUE_SIZE);        
         for(int i = 0; i < QUEUE_SIZE; i++){
@@ -54,7 +55,8 @@ class DikeAyncWriter{
         //workerThread = startWorker();
     }
 
-    ~DikeAyncWriter(){
+    virtual ~DikeAsyncWriter(){
+        //std::cout << "~DikeAsyncWriter " << std::endl;
         isRunning = false;
         sem_destroy(&work_sem);
 
@@ -67,7 +69,8 @@ class DikeAyncWriter{
         }
     }    
 
-    void close(){
+    virtual void close(){
+        //std::cout << "DikeAsyncWriter::close " << std::endl;
         flush();
         isRunning = false;
         sem_post(&work_sem);
@@ -75,6 +78,7 @@ class DikeAyncWriter{
 
     DikeBuffer * getBuffer() {
         if(buffer != NULL) {
+            //std::cout << "DikeAsyncWriter::getBuffer " << buffer->getSize() << std::endl;
             q_lock.lock();
             pushCount ++;
             if(work_q.empty()){
@@ -95,46 +99,15 @@ class DikeAyncWriter{
         return b;
     }
 
-    int write(const char **res, int data_count, char delim, char term, int total_bytes) {
-        if(!isRunning){
-            return 0;
-        }        
-
-        // We need to terminate each field, so we do (+ data_count)
-        int rc = buffer->write(res, data_count, delim, term, total_bytes + data_count);        
-        if(rc) {           
-            return rc;
-        }
-        buffer = getBuffer();
-        rc = buffer->write(res, data_count, delim, term, total_bytes + data_count);
-
-        if(!rc) {           
-            std::cout << "DikeAyncWriter::write failed" << std::endl;
-            std::cout << "total_bytes " << total_bytes << std::endl;
-            std::cout << "buffer size " << buffer->getSize() << std::endl;
-        }
-
-        return rc;
-    }
-
-    int write(char term){
-        if(!isRunning) {
-            return 0;
-        }        
-
-        int rc = buffer->write(term);       
-        if(rc) {
-            return rc;
-        }
-        buffer = getBuffer();
-        rc = buffer->write(term);        
-        return rc;
-    }
+    //virtual int write(const char **res, int data_count, char delim, char term, int total_bytes) = 0;
+    //virtual int write(char term) = 0;
+    virtual int write(sqlite3_stmt *sqlRes) = 0;
 
     void flush(){
         if(!isRunning){
             return;
         }
+        //std::cout << "DikeAsyncWriter::flush " << std::endl;
 
         buffer = getBuffer();
         /* Busy wait for work_q to be empty */
@@ -170,12 +143,12 @@ class DikeAyncWriter{
                 int len = b->getSize();
                 int n = 0;
                 if(len > 0 && isRunning) {                    
-                    //std::cout << "DikeAyncWriter:Worker bufferId " << b->id << " len " << len << std::endl; 
+                    //std::cout << "DikeAsyncWriter:Worker bufferId " << b->id << " len " << len << std::endl; 
                     //b->validateBeforeWrite();
                     recordCount++;
                     n = output->write((char*)b->startPtr, len);
                     if(n < len) {
-                        std::cout << "DikeAyncWriter Client disconnected " << std::endl;                    
+                        std::cout << "DikeAsyncWriter Client disconnected " << std::endl;                    
                         isRunning = false;                   
                     }
                 }
