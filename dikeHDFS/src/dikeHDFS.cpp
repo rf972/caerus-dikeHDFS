@@ -72,7 +72,7 @@ class NameNodeHandler : public DikeHTTPRequestHandler {
     std::istream& fromHDFS = session.receiveResponse(hdfs_resp);
     (HTTPResponse &)resp = hdfs_resp;    
     
-    if(/* req.has("ReadParam") && */ resp.has("Location")) {
+    if(req.has("ReadParam") && resp.has("Location")) {
       //cout << DikeUtil().Blue() << resp.get("Location") << DikeUtil().Reset() << endl;      
       Poco::URI uri = Poco::URI(resp.get("Location"));      
       uri.setPort(std::stoi(dikeConfig["dike.dfs.ndp.http-port"]));

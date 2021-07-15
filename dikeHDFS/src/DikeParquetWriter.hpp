@@ -28,7 +28,7 @@ class DikeOutputStream : public ::arrow::io::OutputStream /* ::arrow::io::FileOu
     bool is_closed = false;
 
     DikeOutputStream(DikeAsyncWriter * dikeAsyncWriter)  {
-      this->dikeAsyncWriter = dikeAsyncWriter;
+        this->dikeAsyncWriter = dikeAsyncWriter;
     }
 
     virtual ~DikeOutputStream() {}
@@ -36,22 +36,6 @@ class DikeOutputStream : public ::arrow::io::OutputStream /* ::arrow::io::FileOu
     virtual arrow::Status Write(const void* data, int64_t nbytes) override {  
         //std::cout << "DikeOutputStream::Write " << nbytes << std::endl;
         dikeAsyncWriter->output->write((const char*)data, nbytes);
-#if 0                        
-        int64_t rc = dikeAsyncWriter->buffer->write(data, nbytes);
-        if(rc) {
-            dikeAsyncWriter->buffer = dikeAsyncWriter->getBuffer();
-            pos += nbytes;
-            return arrow::Status::OK();
-        }
-        std::cout << "DikeOutputStream::Write need new buffer" << std::endl;
-        dikeAsyncWriter->buffer = dikeAsyncWriter->getBuffer();
-        rc = dikeAsyncWriter->buffer->write(data, nbytes);
-        if(!rc) {           
-            std::cout << "DikeOutputStream::Write failed" << std::endl;
-            return arrow::Status::Invalid("DikeOutputStream::Write failed");
-        }
-#endif
-
         pos += nbytes;
         return arrow::Status::OK(); 
     }
@@ -122,15 +106,15 @@ class DikeParquetWriter : public DikeAsyncWriter {
             const char * column_name = sqlite3_column_name(sqlRes, i);            
             switch(data_type) {
                 case SQLITE_INTEGER:
-                    std::cout << "DikeParquetWriter::InitWriter  " << i << " " << column_name << " SQLITE_INTEGER" << std::endl;
+                    //std::cout << "DikeParquetWriter::InitWriter  " << i << " " << column_name << " SQLITE_INTEGER" << std::endl;
                     fields.push_back(schema::PrimitiveNode::Make(column_name, Repetition::REQUIRED, Type::INT64));
                 break;
                 case SQLITE_FLOAT:
-                    std::cout << "DikeParquetWriter::InitWriter  " << i << " " << column_name << " SQLITE_FLOAT" << std::endl;
+                    //std::cout << "DikeParquetWriter::InitWriter  " << i << " " << column_name << " SQLITE_FLOAT" << std::endl;
                     fields.push_back(schema::PrimitiveNode::Make(column_name, Repetition::REQUIRED, Type::DOUBLE));
                 break;
                 case SQLITE3_TEXT:
-                    std::cout << "DikeParquetWriter::InitWriter  " << i << " " << column_name << " SQLITE3_TEXT" << std::endl;
+                    //std::cout << "DikeParquetWriter::InitWriter  " << i << " " << column_name << " SQLITE3_TEXT" << std::endl;
                     fields.push_back(schema::PrimitiveNode::Make(column_name, Repetition::REQUIRED, Type::BYTE_ARRAY));
                 break;                        
             }
@@ -171,7 +155,7 @@ class DikeParquetWriter : public DikeAsyncWriter {
             switch(data_type) {
                 case SQLITE_INTEGER:
                 {
-                    std::cout << "DikeParquetWriter::write  " << i << " SQLITE_INTEGER " << std::endl;
+                    //std::cout << "DikeParquetWriter::write  " << i << " SQLITE_INTEGER " << std::endl;
                     int64_t int64_value = sqlite3_column_int64(sqlRes, i);
                     static_cast<parquet::Int64Writer*>(cl_writers[i])->WriteBatch(1, nullptr, nullptr, &int64_value);
                 }
@@ -196,14 +180,6 @@ class DikeParquetWriter : public DikeAsyncWriter {
         }
 
         row_count++;
-        if(0 & row_count % 10000 == 0){
-            // std::cout << "DikeParquetWriter::write  " << " Time to flush ... " << std::endl;
-            rg_writer->Close();
-            rg_writer = file_writer->AppendBufferedRowGroup();
-            for(int i = 0; i < data_count; i++) {
-                cl_writers[i] = rg_writer->column(i);
-            }
-        }
         return 1;
     }
 };

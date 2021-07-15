@@ -40,7 +40,7 @@ class DikeAsyncWriter {
     int recordCount = 0;
 
     DikeAsyncWriter(DikeIO * output) {
-        std::cout << "DikeAsyncWriter::DikeAsyncWriter " << std::endl;
+        //std::cout << "DikeAsyncWriter::DikeAsyncWriter " << std::endl;
         this->output = output;
         sem_init(&work_sem, 0, 0);
         sem_init(&free_sem, 0, QUEUE_SIZE);        
@@ -56,7 +56,7 @@ class DikeAsyncWriter {
     }
 
     virtual ~DikeAsyncWriter(){
-        std::cout << "~DikeAsyncWriter " << std::endl;
+        //std::cout << "~DikeAsyncWriter " << std::endl;
         isRunning = false;
         sem_destroy(&work_sem);
 
@@ -70,7 +70,7 @@ class DikeAsyncWriter {
     }    
 
     virtual void close(){
-        std::cout << "DikeAsyncWriter::close " << std::endl;
+        //std::cout << "DikeAsyncWriter::close " << std::endl;
         flush();
         isRunning = false;
         sem_post(&work_sem);
@@ -78,7 +78,7 @@ class DikeAsyncWriter {
 
     DikeBuffer * getBuffer() {
         if(buffer != NULL) {
-            std::cout << "DikeAsyncWriter::getBuffer " << buffer->getSize() << std::endl;
+            //std::cout << "DikeAsyncWriter::getBuffer " << buffer->getSize() << std::endl;
             q_lock.lock();
             pushCount ++;
             if(work_q.empty()){
@@ -107,7 +107,7 @@ class DikeAsyncWriter {
         if(!isRunning){
             return;
         }
-        std::cout << "DikeAsyncWriter::flush " << std::endl;
+        //std::cout << "DikeAsyncWriter::flush " << std::endl;
 
         buffer = getBuffer();
         /* Busy wait for work_q to be empty */
@@ -143,7 +143,7 @@ class DikeAsyncWriter {
                 int len = b->getSize();
                 int n = 0;
                 if(len > 0 && isRunning) {                    
-                    std::cout << "DikeAsyncWriter:Worker bufferId " << b->id << " len " << len << std::endl; 
+                    //std::cout << "DikeAsyncWriter:Worker bufferId " << b->id << " len " << len << std::endl; 
                     //b->validateBeforeWrite();
                     recordCount++;
                     n = output->write((char*)b->startPtr, len);

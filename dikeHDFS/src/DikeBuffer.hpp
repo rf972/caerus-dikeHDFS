@@ -82,7 +82,7 @@ class DikeBuffer{
     int64_t write(const void* data, int64_t nbytes) {
         //std::cout << "DikeBuffer::write " << nbytes << " size " << getSize() << std::endl;
         if(endPtr - posPtr < nbytes + 1){
-            std::cout << "DikeBuffer::write need new buffer" << (endPtr - posPtr) << std::endl;
+            //std::cout << "DikeBuffer::write need new buffer" << (endPtr - posPtr) << std::endl;
             return 0;
         }        
         memcpy(posPtr, data, nbytes);
