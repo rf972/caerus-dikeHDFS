@@ -156,8 +156,7 @@ public:
         DikeSQLConfig dikeSQLConfig;
 
         std::istringstream readParamStream(readParam.c_str());      
-        std::istream& xmlStream(readParamStream);
-        //XMLConfiguration * cfg = new XMLConfiguration(xmlStream);
+        std::istream& xmlStream(readParamStream);        
         Poco::AutoPtr<AbstractConfiguration> cfg(new XMLConfiguration(xmlStream));
 
         try {
@@ -197,7 +196,7 @@ public:
 
             ostream& toClient = resp.send();
             toClient.flush();
-#if 0
+#if 1
             Poco::Net::HTTPServerRequestImpl & req_impl = (Poco::Net::HTTPServerRequestImpl &)req;          
             Poco::Net::StreamSocket toClientSocket = req_impl.detachSocket();                                
             DikeOut output(&toClientSocket);
