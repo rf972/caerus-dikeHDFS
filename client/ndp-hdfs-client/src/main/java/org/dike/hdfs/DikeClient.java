@@ -25,7 +25,9 @@ import java.io.BufferedReader;
 import java.io.InputStreamReader;
 import java.io.ByteArrayOutputStream;
 import java.io.ByteArrayInputStream;
-
+import java.io.DataInputStream;
+import java.io.BufferedInputStream;
+import java.io.EOFException;
 
 import java.nio.ByteBuffer;
 import java.nio.charset.StandardCharsets;
@@ -37,6 +39,7 @@ import java.util.Properties;
 import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
+import java.util.Base64;
 
 import javax.security.auth.login.LoginException;
 
@@ -414,6 +417,7 @@ public class DikeClient
         System.out.format("Received %d records (%d bytes) in %.3f sec\n", totalRecords, totalDataSize, (end_time - start_time) / 1000.0);
     }
 
+
     public static void parquetTest(Path fsPath, String fname, Configuration conf, Boolean pushdown, Boolean partitionned)
     {
         InputStream input = null;
@@ -455,8 +459,76 @@ public class DikeClient
             }
 
             //BufferedReader br = new BufferedReader(new InputStreamReader(dataInputStream,StandardCharsets.UTF_8));
+  
+            DataInputStream dis = new DataInputStream(new BufferedInputStream(dataInputStream, 64*1024 ));
+
+            int dataTypes[];
+            long nCols = dis.readLong();
+            System.out.println("nCols : " + String.valueOf(nCols));
+            dataTypes = new int [(int)nCols];
+            for( int i = 0 ; i < nCols; i++){
+                dataTypes[i] = (int)dis.readLong();
+                System.out.println(String.valueOf(i) + " : " + String.valueOf(dataTypes[i]));
+            }
+
+            final int TYPE_INT64 = 1;
+            final int TYPE_DOUBLE = 2;
+            final int TYPE_BYTE_ARRAY = 3;
+            byte buffer[] = new byte[256];
+            String record = "";
+
+            while(true) {
+                try {
+                    record = "";
+                    for( int i = 0 ; i < nCols; i++) {
+                        switch(dataTypes[i]) {
+                            case TYPE_INT64:
+                            long int64_data = dis.readLong();
+                            if(totalRecords < traceRecordCount) {
+                                record += String.valueOf(int64_data) + ",";
+                            }
+                            break;
+                            case TYPE_DOUBLE:
+                            double double_data = dis.readDouble();
+                            if(totalRecords < traceRecordCount) {
+                                record += String.valueOf(double_data) + ",";
+                            }
+                            break;
+                            case TYPE_BYTE_ARRAY:
+                            /*
+                            for(int j = 0 ; j < 256; j++) {
+                                buffer[j] = (byte)dis.readUnsignedByte();
+                                if(buffer[j] == 0) {
+                                    break;
+                                }
+                            }
+                            */
+                            String s = dis.readUTF();
+                            if(totalRecords < traceRecordCount) {
+                                //String s = new String(buffer, StandardCharsets.UTF_8);
+                                record += s + ",";
+                            }
+                            break;
+                        }
+                    } 
+                    if(totalRecords < traceRecordCount) {
+                        System.out.println(record);
+                    }
+                    totalRecords++;
+                } catch (Exception ex) {
+                    System.out.println(ex);
+                    break;
+                }
+            }
+/*            
+            int rc;
+            do {                
+                rc = dataInputStream.skipBytes(8192);
+            } while(rc > 0);
+*/
+            
+/*            
             byte buffer[] = new byte[8192];
-            //ByteBuffer buffer = ByteBuffer.allocate(2048);
             ByteArrayOutputStream bos  = new ByteArrayOutputStream(1 << 20);
             int rc;
             do {                
@@ -467,10 +539,10 @@ public class DikeClient
             } while(rc >= 0);
             
             byte [] fileData = bos.toByteArray();
+            totalDataSize = fileData.length;            
             //String hex = javax.xml.bind.DatatypeConverter.printHexBinary(fileData);
             //System.out.println(hex);
-
-            totalDataSize = fileData.length;
+*/            
 
             class MySeekableInputStream extends SeekableInputStream {
                 public byte[] buffer;
@@ -540,7 +612,7 @@ public class DikeClient
                     return new MySeekableInputStream(fileData);
                 }
             }
-            
+            /*
             MyInputFile myInputFile = new MyInputFile(fileData);
             ParquetFileReader reader = ParquetFileReader.open(myInputFile);
             FileMetaData fileMetaData = reader.getFileMetaData();
@@ -556,6 +628,7 @@ public class DikeClient
                     System.out.println(colum.toString());
                 }                
             }
+            */
 
         } catch (Exception ex) {
             System.out.println("Error occurred: ");
