@@ -660,6 +660,7 @@ public class DikeClient
         String readParam = null;
         Map<String,Statistics> stats;
         int traceRecordCount = 10;
+        final int BUFFER_SIZE = 128 * 1024;
 
         String traceRecordCountEnv = System.getenv("DIKE_TRACE_RECORD_COUNT");
         if(traceRecordCountEnv != null){
@@ -679,9 +680,9 @@ public class DikeClient
 
             dikeFS = (NdpHdfsFileSystem)fs;
             readParam = getReadParam(fname, 0 /* ignore stream size */);                                        
-            FSDataInputStream dataInputStream = dikeFS.open(fileToRead, 128 << 10, readParam);                    
+            FSDataInputStream dataInputStream = dikeFS.open(fileToRead, BUFFER_SIZE, readParam);                    
   
-            DataInputStream dis = new DataInputStream(new BufferedInputStream(dataInputStream, 64*1024 ));
+            DataInputStream dis = new DataInputStream(new BufferedInputStream(dataInputStream, BUFFER_SIZE ));
 
             int dataTypes[];
             long nCols = dis.readLong();
@@ -748,19 +749,13 @@ public class DikeClient
                     String value = null;
                     switch(data_type) {
                         case TYPE_INT64:
-                            value = String.valueOf(longBuffer.get(index));
+                            value = String.valueOf(byteBuffer.getLong(index * 8));
                         break;
                         case TYPE_DOUBLE:
-                            value = String.valueOf(doubleBuffer.get(index));                            
+                            value = String.valueOf(byteBuffer.getDouble(index * 8));                            
                         break;
                         case TYPE_BYTE_ARRAY:                            
-                            int len = 0;
-                            if(index +1 < record_count){
-                                len = index_buffer[index +1] - index_buffer[index];
-                            } else {
-                                len = text_size - index_buffer[index];
-                            }
-
+                            int len = byteBuffer.get(index) & 0xFF;
                             value = new String(text_buffer, index_buffer[index], len, StandardCharsets.UTF_8);
                         break;
                     }
