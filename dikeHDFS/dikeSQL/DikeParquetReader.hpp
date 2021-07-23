@@ -423,6 +423,7 @@ class DikeParquetReader: public DikeAsyncReader {
         if(verbose) {
             std::chrono::duration<double, std::milli> create_time = t2 - t1;
             std::cout << "DikeAsyncReader constructor took " << create_time.count()/ 1000 << " sec" << std::endl;
+            std::cout << "DikeAsyncReader rowCount " << rowCount << std::endl;
         }
     }
 
