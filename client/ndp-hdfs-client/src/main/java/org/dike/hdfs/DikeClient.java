@@ -30,6 +30,8 @@ import java.io.BufferedInputStream;
 import java.io.EOFException;
 
 import java.nio.ByteBuffer;
+import java.nio.LongBuffer;
+import java.nio.DoubleBuffer;
 import java.nio.charset.StandardCharsets;
 
 import java.net.URISyntaxException;
@@ -112,7 +114,9 @@ public class DikeClient
             perfTest(dikehdfsPath, fname, conf, true/*pushdown*/, false/*partitionned*/);
         } else {            
             //parquetTest(dikehdfsPath, fname, conf, false/*pushdown*/, false/*partitionned*/);
-            parquetTest(dikehdfsPath, fname, conf, true/*pushdown*/, false/*partitionned*/);
+            //parquetTest(dikehdfsPath, fname, conf, true/*pushdown*/, false/*partitionned*/);
+            
+            binaryColumnTest(dikehdfsPath, fname, conf, true/*pushdown*/, false/*partitionned*/);
         }
         //perfTest(dikehdfsPath, fname, conf, true /*pushdown*/, true/*partitionned*/);
         
@@ -644,6 +648,173 @@ public class DikeClient
         System.out.format("BytesRead %d\n", stats.get(fs.getScheme()).getBytesRead());
         System.out.format("Received %d records (%d bytes) in %.3f sec\n", totalRecords, totalDataSize, (end_time - start_time) / 1000.0);
     }
+
+    public static void binaryColumnTest(Path fsPath, String fname, Configuration conf, Boolean pushdown, Boolean partitionned)
+    {
+        InputStream input = null;
+        Path fileToRead = new Path(fname);
+        FileSystem fs = null;        
+        NdpHdfsFileSystem dikeFS = null;        
+        long totalDataSize = 0;
+        int totalRecords = 0;
+        String readParam = null;
+        Map<String,Statistics> stats;
+        int traceRecordCount = 10;
+
+        String traceRecordCountEnv = System.getenv("DIKE_TRACE_RECORD_COUNT");
+        if(traceRecordCountEnv != null){
+            traceRecordCount = Integer.parseInt(traceRecordCountEnv);
+        }
+
+        long start_time = System.currentTimeMillis();
+
+        try {
+            fs = FileSystem.get(fsPath.toUri(), conf);
+            stats = fs.getStatistics();
+            System.out.println("Scheme " + fs.getScheme());
+            stats.get(fs.getScheme()).reset();
+
+            System.out.println("\nConnected to -- " + fsPath.toString());
+            start_time = System.currentTimeMillis();                                                
+
+            dikeFS = (NdpHdfsFileSystem)fs;
+            readParam = getReadParam(fname, 0 /* ignore stream size */);                                        
+            FSDataInputStream dataInputStream = dikeFS.open(fileToRead, 128 << 10, readParam);                    
+  
+            DataInputStream dis = new DataInputStream(new BufferedInputStream(dataInputStream, 64*1024 ));
+
+            int dataTypes[];
+            long nCols = dis.readLong();
+            System.out.println("nCols : " + String.valueOf(nCols));
+            dataTypes = new int [(int)nCols];
+            for( int i = 0 ; i < nCols; i++){
+                dataTypes[i] = (int)dis.readLong();
+                System.out.println(String.valueOf(i) + " : " + String.valueOf(dataTypes[i]));
+            }
+
+            final int BATCH_SIZE = 4096;
+            final int TYPE_INT64 = 1;
+            final int TYPE_DOUBLE = 2;
+            final int TYPE_BYTE_ARRAY = 3;
+  
+            class ColumVector {                
+                ByteBuffer   byteBuffer = null;
+                LongBuffer   longBuffer = null;
+                DoubleBuffer doubleBuffer = null;
+                byte text_buffer[] = null;
+                int text_size;
+                int index_buffer [] = null;
+                int data_type;
+                int record_count;
+                public ColumVector(int data_type){
+                    this.data_type = data_type;
+                    switch(data_type) {
+                        case TYPE_INT64:
+                            byteBuffer = ByteBuffer.allocate(BATCH_SIZE * 8);
+                            longBuffer = byteBuffer.asLongBuffer();
+                        break;
+                        case TYPE_DOUBLE:
+                            byteBuffer = ByteBuffer.allocate(BATCH_SIZE * 8);
+                            doubleBuffer = byteBuffer.asDoubleBuffer();
+                        break;
+                        case TYPE_BYTE_ARRAY:
+                            byteBuffer = ByteBuffer.allocate(BATCH_SIZE);
+                            text_buffer = new byte[BATCH_SIZE * 64];
+                            index_buffer = new int[BATCH_SIZE];
+                        break;
+                    }
+                }
+
+                public void readColumn(DataInputStream dis) throws IOException {
+                    long nbytes = dis.readLong();
+                    record_count = (int) (nbytes / 8);
+                    dis.readFully(byteBuffer.array(), 0, (int)nbytes);
+
+                    if(data_type == TYPE_BYTE_ARRAY){
+                        record_count = (int) (nbytes);
+                        int idx = 0;
+                        for(int i = 0; i < record_count; i++){
+                            index_buffer[i] = idx;
+                            idx += byteBuffer.get(i) & 0xFF;
+                        }
+                        // Read actual text size                            
+                        nbytes = dis.readLong();
+                        text_size = (int)nbytes;
+                        dis.readFully(text_buffer, 0, (int)nbytes);
+                    }
+                }
+
+                public String getString(int index) {
+                    String value = null;
+                    switch(data_type) {
+                        case TYPE_INT64:
+                            value = String.valueOf(longBuffer.get(index));
+                        break;
+                        case TYPE_DOUBLE:
+                            value = String.valueOf(doubleBuffer.get(index));                            
+                        break;
+                        case TYPE_BYTE_ARRAY:                            
+                            int len = 0;
+                            if(index +1 < record_count){
+                                len = index_buffer[index +1] - index_buffer[index];
+                            } else {
+                                len = text_size - index_buffer[index];
+                            }
+
+                            value = new String(text_buffer, index_buffer[index], len, StandardCharsets.UTF_8);
+                        break;
+                    }
+                    return value;
+                }
+            };            
+            
+            ColumVector [] columVector = new ColumVector [(int)nCols];
+            int record_count = 0;
+
+            for( int i = 0 ; i < nCols; i++) {
+                columVector[i] = new ColumVector(dataTypes[i]);
+            }
+
+            while(true) {
+                try {
+                    for( int i = 0 ; i < nCols; i++) {
+                        columVector[i].readColumn(dis);
+                    }
+                                      
+                    if(totalRecords < traceRecordCount) {                        
+                        for(int idx = 0; idx < traceRecordCount; idx++){
+                            String record = "";
+                            for( int i = 0 ; i < nCols; i++) {
+                                record += columVector[i].getString(idx) + ",";
+                            }
+                            System.out.println(record);
+                        }                        
+                    }
+
+                    
+                    totalRecords += columVector[0].record_count;                    
+                }catch (Exception ex) {
+                    System.out.println(ex);
+                    break;
+                }
+            }
+        } catch (Exception ex) {
+            System.out.println("Error occurred: ");
+            ex.printStackTrace();
+            long end_time = System.currentTimeMillis();            
+            System.out.format("Received %d records (%d bytes) in %.3f sec\n", totalRecords, totalDataSize, (end_time - start_time) / 1000.0);             
+            return;
+        }
+
+        long end_time = System.currentTimeMillis();
+        
+        //System.out.println(fs.getScheme());
+        System.out.format("BytesRead %d\n", stats.get(fs.getScheme()).getBytesRead());
+        System.out.format("Received %d records (%d bytes) in %.3f sec\n", totalRecords, totalDataSize, (end_time - start_time) / 1000.0);
+    }
+
+
+
 
 }
 

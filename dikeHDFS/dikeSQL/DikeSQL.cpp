@@ -22,6 +22,7 @@
 #include "DikeCsvWriter.hpp"
 #include "DikeParquetWriter.hpp"
 #include "DikeBinaryWriter.hpp"
+#include "DikeBinaryColumnWriter.hpp"
 
 //int DikeSQL::Run(DikeSQLParam * dikeSQLParam, DikeIO * input, DikeIO * output)
 int DikeSQL::Run(DikeSQLConfig & dikeSQLConfig, DikeIO * output)
@@ -42,7 +43,8 @@ int DikeSQL::Run(DikeSQLConfig & dikeSQLConfig, DikeIO * output)
     if (dikeSQLConfig["Name"].compare("dikeSQL.parquet") == 0) {        
         dikeReader = (DikeAsyncReader *)new DikeParquetReader(dikeSQLConfig);
         //dikeWriter = new DikeParquetWriter(output);
-        dikeWriter = new DikeBinaryWriter(output);
+        //dikeWriter = new DikeBinaryWriter(output);
+        dikeWriter = new DikeBinaryColumnWriter(output);
         //std::cout << "Created parquet reader " << dikeReader << std::endl;
     } else {
         dikeReader = (DikeAsyncReader *)new DikeCsvReader(dikeSQLConfig);
