@@ -22,8 +22,8 @@
 class DikeAsyncWriter {
     public:
     enum{
-        QUEUE_SIZE  = 4,
-        BUFFER_SIZE = (256 << 10)
+        QUEUE_SIZE  = 8,
+        BUFFER_SIZE = (512 << 10)
     };
 
     DikeIO * output;

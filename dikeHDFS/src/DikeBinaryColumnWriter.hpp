@@ -45,9 +45,9 @@ class DikeBinaryColumn {
             break;
             
             case SQLITE3_TEXT:
-                start_pos = new uint8_t [BINARY_COLUMN_BATCH_SIZE * 64]; // to fit in 256K
+                start_pos = new uint8_t [BINARY_COLUMN_BATCH_SIZE * 128]; // to fit in 512K
                 pos = start_pos;
-                end_pos = pos + BINARY_COLUMN_BATCH_SIZE * 64;
+                end_pos = pos + BINARY_COLUMN_BATCH_SIZE * 128;
                 start_idx = new uint8_t [BINARY_COLUMN_BATCH_SIZE];
                 idx_pos = start_idx;
             break;
@@ -116,11 +116,12 @@ class DikeBinaryColumnWriter : public DikeAsyncWriter {
 
         if(!isRunning){
             return 0;
-        }        
-  
+        }                
+
         int64_t be_value;
         for(int i = 0; i < data_count; i++) {
             //int data_type = sqlite3_column_type(sqlRes, i);
+            //std::cout << "write : " << row_count << " " << i << ": " << data_types[i] << std::endl;
             switch(data_types[i]) {
                 case SQLITE_INTEGER:
                 {
@@ -159,7 +160,7 @@ class DikeBinaryColumnWriter : public DikeAsyncWriter {
         return 1;
     }
 
-    void flush() {
+    void flush() {        
         for(int i = 0; i < data_count; i++) {
             int64_t byte_count;
             int64_t be_value;
