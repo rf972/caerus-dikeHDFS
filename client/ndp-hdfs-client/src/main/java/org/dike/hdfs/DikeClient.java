@@ -720,7 +720,7 @@ public class DikeClient
                         break;
                         case TYPE_BYTE_ARRAY:
                             byteBuffer = ByteBuffer.allocate(BATCH_SIZE);
-                            text_buffer = new byte[BATCH_SIZE * 64];
+                            text_buffer = new byte[BATCH_SIZE * 128];
                             index_buffer = new int[BATCH_SIZE];
                         break;
                     }
@@ -807,10 +807,6 @@ public class DikeClient
         System.out.format("BytesRead %d\n", stats.get(fs.getScheme()).getBytesRead());
         System.out.format("Received %d records (%d bytes) in %.3f sec\n", totalRecords, totalDataSize, (end_time - start_time) / 1000.0);
     }
-
-
-
-
 }
 
 // mvn package -o

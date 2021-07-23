@@ -1,3 +1,4 @@
+import sys
 import pandas as pd
 import pyarrow.parquet as pq
 
@@ -6,7 +7,7 @@ import pyarrow.parquet as pq
 #df.to_parquet('lineitem_srg.parquet', row_group_size=7000000)
 #df.to_parquet('lineitem.parquet')
 
-parquet_file = pq.ParquetFile('lineitem.snappy.parquet')
+parquet_file = pq.ParquetFile(sys.argv[1])
 
 print(parquet_file.metadata)
 print(parquet_file.schema)
