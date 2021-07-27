@@ -720,7 +720,7 @@ public class DikeClient
                         break;
                         case TYPE_BYTE_ARRAY:
                             byteBuffer = ByteBuffer.allocate(BATCH_SIZE);
-                            text_buffer = new byte[BATCH_SIZE * 128];
+                            text_buffer = new byte[256 * 1024];
                             index_buffer = new int[BATCH_SIZE];
                         break;
                     }
@@ -816,7 +816,7 @@ public class DikeClient
 // Q1 test
 // export DIKE_TRACE_RECORD_COUNT=7000000
 // export DIKE_QUERY="SELECT CAST(l_quantity as NUMERIC),CAST(l_extendedprice as NUMERIC),CAST(l_discount as NUMERIC),CAST(l_tax as NUMERIC),l_returnflag,l_linestatus FROM S3Object s WHERE l_shipdate IS NOT NULL AND l_shipdate <= '1998-09-02'"
-// export DIKE_QUERY="SELECT l_quantity,l_extendedprice,l_discount,l_tax,l_returnflag,l_linestatus, l_shipdate FROM S3Object WHERE l_shipdate IS NOT NULL AND l_shipdate <= '1998-09-02'"
+// export DIKE_QUERY="SELECT l_quantity,l_extendedprice,l_discount,l_tax,l_returnflag,l_linestatus FROM S3Object WHERE l_shipdate IS NOT NULL AND l_shipdate <= '1998-09-02'"
 // export DIKE_QUERY="SELECT _5, _6, _7, _8, _9, _10, _11 FROM S3Object WHERE _11 IS NOT NULL AND _11 <= '1998-09-02' LIMIT 1000"
 // export DIKE_QUERY="SELECT count(*) FROM S3Object WHERE l_shipdate IS NOT NULL AND l_shipdate <= '1998-09-02'"
 // export DIKE_QUERY="SELECT MIN(l_shipdate) FROM S3Object"
@@ -830,6 +830,7 @@ public class DikeClient
 // 3.796 sec
 // export DIKE_QUERY="SELECT min(l_quantity), min(l_extendedprice), min(l_discount), min(l_tax),min(l_returnflag), min(l_linestatus), l_shipdate FROM S3Object WHERE l_shipdate IS NOT NULL AND l_shipdate <= '1998-09-02'"
 // java -classpath target/ndp-hdfs-client-1.0-jar-with-dependencies.jar org.dike.hdfs.DikeClient /lineitem_srg.parquet
+// java -classpath target/ndp-hdfs-client-1.0-jar-with-dependencies.jar org.dike.hdfs.DikeClient /customer.parquet
 
 // java -classpath target/ndp-hdfs-client-1.0-jar-with-dependencies.jar org.dike.hdfs.DikeClient /lineitem.csv
 // 

@@ -59,14 +59,14 @@ class DikeColumnReader {
     int64_t buffer_row;
     parquet::Type::type physicalType;
     std::shared_ptr<parquet::ColumnReader> columnReader;
-    double total_read_time = 0;
+    //double total_read_time = 0;
 
     parquet::Int64Reader* int64_reader = NULL;
     parquet::DoubleReader* double_reader = NULL;
     parquet::ByteArrayReader* ba_reader = NULL;
 
     enum {
-        BUFFER_SIZE = 2048,
+        BUFFER_SIZE = 4096,
         //BUFFER_SIZE = 10,
     };
 
@@ -140,14 +140,14 @@ class DikeColumnReader {
         if(buffer_row == 0) {  // We do not have a buffer, read it
             int64_t values_read;
             
-            std::chrono::high_resolution_clock::time_point t1 =  std::chrono::high_resolution_clock::now();
+            //std::chrono::high_resolution_clock::time_point t1 =  std::chrono::high_resolution_clock::now();
             // We may need to handle out of bound read
             int64_t rows_read = int64_reader->ReadBatch(BUFFER_SIZE, 0, 0, int64_values, &values_read);
             values_size = rows_read;
 
-            std::chrono::high_resolution_clock::time_point t2 =  std::chrono::high_resolution_clock::now();
-            std::chrono::duration<double, std::milli> read_time = t2 - t1;
-            total_read_time += read_time.count();
+            //std::chrono::high_resolution_clock::time_point t2 =  std::chrono::high_resolution_clock::now();
+            //std::chrono::duration<double, std::milli> read_time = t2 - t1;
+            //total_read_time += read_time.count();
 
         }
 
@@ -197,14 +197,14 @@ class DikeColumnReader {
         // We done with skip logic
         if(buffer_row == 0) {  // We do not have a buffer, read it
             int64_t values_read;
-            std::chrono::high_resolution_clock::time_point t1 =  std::chrono::high_resolution_clock::now();
+            //std::chrono::high_resolution_clock::time_point t1 =  std::chrono::high_resolution_clock::now();
             // We may need to handle out of buond read
             int64_t rows_read = double_reader->ReadBatch(BUFFER_SIZE, 0, 0, double_values, &values_read);
             values_size = rows_read;
 
-            std::chrono::high_resolution_clock::time_point t2 =  std::chrono::high_resolution_clock::now();
-            std::chrono::duration<double, std::milli> read_time = t2 - t1;
-            total_read_time += read_time.count();
+            //std::chrono::high_resolution_clock::time_point t2 =  std::chrono::high_resolution_clock::now();
+            //std::chrono::duration<double, std::milli> read_time = t2 - t1;
+            //total_read_time += read_time.count();
 
         }
 
@@ -257,15 +257,15 @@ class DikeColumnReader {
         // We done with skip logic
         if(buffer_row == 0) {  // We do not have a buffer, read it
             int64_t values_read;
-            std::chrono::high_resolution_clock::time_point t1 =  std::chrono::high_resolution_clock::now();
+            //std::chrono::high_resolution_clock::time_point t1 =  std::chrono::high_resolution_clock::now();
 
             // We may need to handle out of buond read
             int64_t rows_read = ba_reader->ReadBatch(BUFFER_SIZE, 0, 0, ba_values, &values_read);
             values_size = rows_read;
 
-            std::chrono::high_resolution_clock::time_point t2 =  std::chrono::high_resolution_clock::now();
-            std::chrono::duration<double, std::milli> read_time = t2 - t1;
-            total_read_time += read_time.count();
+            //std::chrono::high_resolution_clock::time_point t2 =  std::chrono::high_resolution_clock::now();
+            //std::chrono::duration<double, std::milli> read_time = t2 - t1;
+            //total_read_time += read_time.count();
 
         }
 
@@ -434,7 +434,7 @@ class DikeParquetReader: public DikeAsyncReader {
     virtual ~DikeParquetReader() {        
         Poco::Thread * current = Poco::Thread::current();
         //std::cout << "~DikeParquetReader id " << current->id() << std::endl;
-
+#if 0
         if(verbose) {
             double total_read_time = 0;
             for(int i = 0; i < columnCount; i++) {
@@ -442,6 +442,7 @@ class DikeParquetReader: public DikeAsyncReader {
             }
             std::cout << "DikeAsyncReader total_read_time " << std::fixed << total_read_time / 1000 << " sec" << std::endl;
         }
+#endif        
 
         delete record;
         for(int i = 0; i < columnCount; i++) {
@@ -455,6 +456,9 @@ class DikeParquetReader: public DikeAsyncReader {
 
     int initRecord(int nCol) {
         record = new DikeRecord(nCol);
+        for (int col = 0; col < DikeRecord::MAX_COLUMNS; col++){
+            record->fields[col] = record->fieldMemory[col];
+        }
         return (record != NULL);
     }
 
@@ -483,7 +487,7 @@ class DikeParquetReader: public DikeAsyncReader {
         //std::cout <<  "readRecord " << rowIdx << std::endl;
         for (int col  = 0; col < columnCount; col++){
             record->len[col] = 0;
-            record->fields[col] = 0;
+            //record->fields[col] = 0;
         }
         return 0;
     }
@@ -533,7 +537,7 @@ class DikeParquetReader: public DikeAsyncReader {
                 record->fields[col] = record->fieldMemory[col];                
 #else
                 dikeColumnReader[col]->GetValue(rowIdx, (int64_t *) record->fieldMemory[col]);
-                record->fields[col] = record->fieldMemory[col];        
+                //record->fields[col] = record->fieldMemory[col];        
 #endif
                 *len = sizeof(int64_t);
             }
@@ -551,7 +555,7 @@ class DikeParquetReader: public DikeAsyncReader {
                 record->fields[col] = record->fieldMemory[col];
 #else                
                 dikeColumnReader[col]->GetValue(rowIdx, (double *) record->fieldMemory[col]);
-                record->fields[col] = record->fieldMemory[col];                
+                //record->fields[col] = record->fieldMemory[col];                
 #endif                
                 *len = sizeof(double);
             }     
