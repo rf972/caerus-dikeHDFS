@@ -1,4 +1,5 @@
 #include "sqlite3.c"
+#include "stdint.h"
 
 int dike_sqlite3_result_text(
   sqlite3_context *pCtx,
@@ -77,5 +78,21 @@ int dike_sqlite3_get_data(sqlite3_stmt *pStmt, const char ** res, int res_size, 
   return pVm->nResColumn;
 }
 
+double dike_sqlite3_get_double(sqlite3_stmt *pStmt, int i)
+{
+    Vdbe *pVm = (Vdbe *)pStmt;
+    return pVm->pResultSet[i].u.r;
+}
 
+int64_t dike_sqlite3_get_int64(sqlite3_stmt *pStmt, int i)
+{
+    Vdbe *pVm = (Vdbe *)pStmt;
+    return pVm->pResultSet[i].u.i;
+}
 
+int dike_sqlite3_get_bytes(sqlite3_stmt *pStmt, int i, uint8_t ** bytes)
+{
+    Vdbe *pVm = (Vdbe *)pStmt;
+    *bytes = pVm->pResultSet[i].z;
+    return pVm->pResultSet[i].n;
+}
