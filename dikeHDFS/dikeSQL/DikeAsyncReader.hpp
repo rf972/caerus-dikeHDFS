@@ -55,6 +55,7 @@ class DikeAsyncReader {
     virtual int getColumnValue(int col, void ** value, int * len, sqlite_aff_t * affinity) = 0;
 
     virtual ~DikeAsyncReader() {};
+    virtual void setColUsed(uint64_t colUsed){}; // Set by srd_BestIndex
 
     DikeRecord * record = NULL; /* Single record */
 };

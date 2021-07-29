@@ -1,5 +1,6 @@
 #include "sqlite3.c"
 #include "stdint.h"
+#include "DikeBinaryColumn.h"
 
 int dike_sqlite3_result_text(
   sqlite3_context *pCtx,
@@ -95,4 +96,40 @@ int dike_sqlite3_get_bytes(sqlite3_stmt *pStmt, int i, uint8_t ** bytes)
     Vdbe *pVm = (Vdbe *)pStmt;
     *bytes = pVm->pResultSet[i].z;
     return pVm->pResultSet[i].n;
+}
+
+int dike_sqlite3_get_results(sqlite3_stmt *pStmt, DikeBinaryColumn_t ** columns, int * flush_needed)
+{
+    Vdbe *pVm = (Vdbe *)pStmt;
+    int i;
+
+    for(i = 0; i < pVm->nResColumn; i++) {
+        switch(columns[i]->data_type) {
+                case SQLITE_INTEGER:
+                {                                       
+                    *(int64_t*)columns[i]->pos = htobe64(pVm->pResultSet[i].u.i);
+                    columns[i]->pos += sizeof(int64_t);
+                }
+                break;
+                case SQLITE_FLOAT:
+                {
+                   *(int64_t*)columns[i]->pos = htobe64(*(int64_t*)&pVm->pResultSet[i].u.r);
+                    columns[i]->pos += sizeof(int64_t);
+
+                }
+                break;
+                case SQLITE3_TEXT:
+                {                    
+                    memcpy(columns[i]->pos,  pVm->pResultSet[i].z,  pVm->pResultSet[i].n);
+                    columns[i]->pos += pVm->pResultSet[i].n;
+                    *columns[i]->idx_pos = pVm->pResultSet[i].n;
+                    columns[i]->idx_pos++;
+                    if (columns[i]->pos - columns[i]->start_pos > BINARY_COLUMN_TEXT_MARK) {
+                        *flush_needed = 1;
+                    }
+                }
+                break;
+        }
+    }
+    return 0;
 }

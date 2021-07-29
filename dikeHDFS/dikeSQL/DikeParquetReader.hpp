@@ -322,6 +322,7 @@ class DikeParquetReader: public DikeAsyncReader {
     int verbose = 0;
     DikeColumnReader ** dikeColumnReader;    
     parquet::Type::type * physicalType;
+    uint64_t colUsed; //  Fields of the table are actually used by the statement being prepared
 
     std::shared_ptr<arrow::io::HadoopFileSystem> fs;
     static std::map< int, std::shared_ptr<arrow::io::HadoopFileSystem> > hadoopFileSystemMap;
@@ -378,6 +379,8 @@ class DikeParquetReader: public DikeAsyncReader {
                                         
         st = fs->OpenReadable(fileName, &inputFile);        
         
+        std::chrono::high_resolution_clock::time_point t2;
+
         if (fileMetaDataMap.count(fileName)) {
             if (0 == fileLastAccessTimeMap[fileName].compare(dikeSQLConfig["Configuration.LastAccessTime"])){
                 fileMetaData = fileMetaDataMap[fileName];
@@ -398,6 +401,7 @@ class DikeParquetReader: public DikeAsyncReader {
         const parquet::SchemaDescriptor* schemaDescriptor = fileMetaData->schema();
 
         parquetFileReader = std::move(parquet::ParquetFileReader::Open(inputFile, parquet::default_reader_properties(), fileMetaData));
+
         rowGroupReader = std::move(parquetFileReader->RowGroup(rowGroupIndex));
 
         rowCount = rowGroupReader->metadata()->num_rows();
@@ -414,13 +418,12 @@ class DikeParquetReader: public DikeAsyncReader {
                 schema += ",";
             }           
             
-            physicalType[i] = col->physical_type();            
-            std::shared_ptr<parquet::ColumnReader> columnReader = rowGroupReader->Column(i);
-            dikeColumnReader[i] = new DikeColumnReader(i, physicalType[i], columnReader);
+            physicalType[i] = col->physical_type();
         }
         //std::cout <<  " Ready to go columnCount " << columnCount << " rowCount " << rowCount << std::endl;
-        std::chrono::high_resolution_clock::time_point t2 =  std::chrono::high_resolution_clock::now();
+        
         if(verbose) {
+            t2 =  std::chrono::high_resolution_clock::now();
             std::chrono::duration<double, std::milli> create_time = t2 - t1;
             std::cout << "DikeAsyncReader constructor took " << create_time.count()/ 1000 << " sec" << std::endl;
             std::cout << "DikeAsyncReader rowCount " << rowCount << std::endl;
@@ -429,6 +432,18 @@ class DikeParquetReader: public DikeAsyncReader {
 
     DikeAsyncReader * getReader() {
         return (DikeAsyncReader *)this; 
+    }
+
+    virtual void setColUsed(uint64_t colUsed) {
+        this->colUsed = colUsed;
+        for(int i = 0; i < columnCount; i++) {
+            if((colUsed & ((uint64_t)1 << i))) { // This column is in use according to SQLite             
+                std::shared_ptr<parquet::ColumnReader> columnReader = rowGroupReader->Column(i);
+                dikeColumnReader[i] = new DikeColumnReader(i, physicalType[i], columnReader);
+            } else {
+                dikeColumnReader[i] = 0;
+            }
+        }
     }
 
     virtual ~DikeParquetReader() {        
@@ -446,10 +461,13 @@ class DikeParquetReader: public DikeAsyncReader {
 
         delete record;
         for(int i = 0; i < columnCount; i++) {
-            delete dikeColumnReader[i];                   
+            if(dikeColumnReader[i]) {
+                delete dikeColumnReader[i];
+            }
         }
         delete [] dikeColumnReader;         
         delete [] physicalType;
+        parquetFileReader->Close();
         inputFile->Close();
         //fs->Disconnect();
     }    
