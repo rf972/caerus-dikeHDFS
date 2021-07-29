@@ -19,51 +19,7 @@
 #include "DikeBuffer.hpp"
 #include "DikeAsyncWriter.hpp"
 
-enum {
-    BINARY_COLUMN_BATCH_SIZE = 4096,
-    BINARY_COLUMN_TEXT_SIZE = DikeAsyncWriter::BUFFER_SIZE - 64,
-    BINARY_COLUMN_TEXT_MARK = BINARY_COLUMN_TEXT_SIZE - 1024,
-
-};
-
-class DikeBinaryColumn {
-    public:
-    int data_type;
-
-    uint8_t * start_pos = 0;
-    uint8_t * pos = 0;
-    uint8_t * end_pos = 0;
-
-    uint8_t * start_idx = 0;
-    uint8_t * idx_pos = 0;
-    
-    DikeBinaryColumn(int data_type) {
-        this->data_type = data_type;
-        switch(data_type){
-            case SQLITE_INTEGER:
-            case SQLITE_FLOAT: // We transfering 8 bytes in Big Endian
-                start_pos = new uint8_t [BINARY_COLUMN_BATCH_SIZE * sizeof(int64_t)];
-                pos = start_pos;
-                end_pos = pos + BINARY_COLUMN_BATCH_SIZE * sizeof(int64_t);
-            break;
-            
-            case SQLITE3_TEXT:
-                start_pos = new uint8_t [BINARY_COLUMN_TEXT_SIZE]; // to fit in 512K
-                pos = start_pos;
-                end_pos = pos + BINARY_COLUMN_TEXT_SIZE;
-                start_idx = new uint8_t [BINARY_COLUMN_BATCH_SIZE];
-                idx_pos = start_idx;
-            break;
-        }
-    }
-
-    ~DikeBinaryColumn() {
-        delete start_pos;
-        if(start_idx) {
-            delete start_idx;
-        }
-    }
-};
+#include "DikeBinaryColumn.h"
 
 class DikeBinaryColumnWriter : public DikeAsyncWriter {
     public:
@@ -71,7 +27,7 @@ class DikeBinaryColumnWriter : public DikeAsyncWriter {
     int64_t batch_count = 0;
     int64_t data_count = 0; // Number of columns
     int64_t * data_types = NULL;
-    DikeBinaryColumn ** columns = NULL;
+    DikeBinaryColumn_t ** columns = NULL;
 
     DikeBinaryColumnWriter(DikeIO * output) : DikeAsyncWriter(output) { }
 
@@ -81,7 +37,7 @@ class DikeBinaryColumnWriter : public DikeAsyncWriter {
         }
         if( columns ) {
             for(int i = 0; i < data_count; i++) {
-                delete columns[i];
+                DikeBinaryColumnDestroy(columns[i]);
             }
             delete columns;
         }
@@ -95,11 +51,12 @@ class DikeBinaryColumnWriter : public DikeAsyncWriter {
     void InitializeSchema(sqlite3_stmt *sqlRes) {
         data_count = sqlite3_column_count(sqlRes);
         data_types = new int64_t [data_count];
-        columns = new DikeBinaryColumn * [data_count];
+        columns = new DikeBinaryColumn_t * [data_count];
 
         for(int i = 0; i < data_count; i++) {
             data_types[i] = sqlite3_column_type(sqlRes, i);
-            columns[i] = new DikeBinaryColumn(data_types[i]);
+            columns[i] = new DikeBinaryColumn_t;
+            DikeBinaryColumnInit(columns[i], data_types[i]);
         }
 
         // This is our first write, so buffer should have enough space
@@ -121,6 +78,9 @@ class DikeBinaryColumnWriter : public DikeAsyncWriter {
             return 0;
         }                
 
+        int flush_needed = 0;
+        dike_sqlite3_get_results(sqlRes, columns, &flush_needed);
+#if 0
         int64_t be_value;
         bool flush_needed = false;
         for(int i = 0; i < data_count; i++) {
@@ -162,6 +122,7 @@ class DikeBinaryColumnWriter : public DikeAsyncWriter {
                 break;                        
             }
         }
+#endif
 
         row_count++;
         batch_count++;

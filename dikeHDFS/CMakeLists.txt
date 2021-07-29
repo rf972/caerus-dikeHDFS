@@ -14,7 +14,7 @@ add_subdirectory(dikeS3)
 include_directories(dikeSQL dikeS3)
 
 project(dikeHDFS)
-add_executable(dikeHDFS src/dikeHDFS.cpp)
+add_executable(dikeHDFS src/dikeHDFS.cpp src/DikeBinaryColumn.c)
 
 target_include_directories(dikeHDFS PUBLIC
     ${CMAKE_SOURCE_DIR}/src

@@ -227,7 +227,10 @@ static int srd_Filter(
 */
 static int srd_BestIndex( sqlite3_vtab *tab, sqlite3_index_info *pIdxInfo)
 {
-    pIdxInfo->estimatedCost = 1000000;
+    srdTable *pTab = (srdTable*)tab;  
+    pTab->reader->setColUsed(pIdxInfo->colUsed);
+    //pIdxInfo->estimatedCost = 1000000;    
+
     return SQLITE_OK;
 }
 
