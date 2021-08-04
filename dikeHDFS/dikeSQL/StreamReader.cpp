@@ -204,10 +204,6 @@ static int srd_Eof(sqlite3_vtab_cursor *cur){
     return false;
 }
 
-/*
-** Only a full table scan is supported.  So xFilter simply rewinds to
-** the beginning.
-*/
 static int srd_Filter(
   sqlite3_vtab_cursor *pVtabCursor, 
   int idxNum, const char *idxStr,
@@ -215,8 +211,81 @@ static int srd_Filter(
 {
     srdCursor *pCur = (srdCursor*)pVtabCursor;
     srdTable *pTab = (srdTable*)pVtabCursor->pVtab;
+#if 0
+    std::cout << "srd_Filter argc " << argc << std::endl;
+    for(int i = 0; i < argc; i++){
+        int sqliteType = sqlite3_value_type(argv[i]);
+        std::cout << "sqliteType " << sqliteType << std::endl;
+        if(sqliteType == SQLITE_NULL) {
+            std::cout << "i : " << i << " SQLITE_NULL" << std::endl;
+        }
+        if(sqliteType == SQLITE_TEXT) {
+            const unsigned char * text = sqlite3_value_text(argv[i]);
+            int len = sqlite3_value_bytes(argv[i]);
+            std::string s(text, text + len);
+            std::cout << "srd_Filter " << s << std::endl;
+        }
+    }
+#endif    
     pCur->iRowid = 0;
     return srd_Next(pVtabCursor);
+}
+
+
+void printConstraints(sqlite3_index_info *pIdxInfo)
+{
+    for(int i = 0; i < pIdxInfo->nConstraint; i++){
+        std::cout << "Col " << pIdxInfo->aConstraint[i].iColumn;
+        switch(pIdxInfo->aConstraint[i].op){
+            case SQLITE_INDEX_CONSTRAINT_EQ:
+            std::cout << " EQ ";
+            break;
+            case SQLITE_INDEX_CONSTRAINT_GT:
+            std::cout << " GT ";
+            break;
+            case SQLITE_INDEX_CONSTRAINT_LE:
+            std::cout << " LE ";
+            break;
+            case SQLITE_INDEX_CONSTRAINT_LT:
+            std::cout << " LT ";
+            break;
+            case SQLITE_INDEX_CONSTRAINT_GE:
+            std::cout << " GE ";
+            break;
+            case SQLITE_INDEX_CONSTRAINT_MATCH:
+            std::cout << " MATCH ";
+            break;
+            case SQLITE_INDEX_CONSTRAINT_GLOB:
+            std::cout << " GLOB ";
+            break;
+            case SQLITE_INDEX_CONSTRAINT_REGEXP:
+            std::cout << " REGEXP ";
+            break;
+            case SQLITE_INDEX_CONSTRAINT_NE:
+            std::cout << " NE ";
+            break;
+            case SQLITE_INDEX_CONSTRAINT_ISNOT:
+            std::cout << " ISNOT ";
+            break;
+            case SQLITE_INDEX_CONSTRAINT_ISNOTNULL:
+            std::cout << " ISNOTNULL ";
+            break;
+            case SQLITE_INDEX_CONSTRAINT_ISNULL:
+            std::cout << " ISNULL ";
+            break;
+            case SQLITE_INDEX_CONSTRAINT_IS:
+            std::cout << " IS ";
+            break;
+            case SQLITE_INDEX_CONSTRAINT_FUNCTION:
+            std::cout << " FUNCTION ";
+            break;
+       }
+       if (pIdxInfo->aConstraint[i].usable) {
+           std::cout << " Usable "<< std::endl;
+       } else {
+           std::cout << " Not usable " << std::endl;
+       }
+    }
 }
 
 /*
@@ -229,7 +298,18 @@ static int srd_BestIndex( sqlite3_vtab *tab, sqlite3_index_info *pIdxInfo)
 {
     srdTable *pTab = (srdTable*)tab;  
     pTab->reader->setColUsed(pIdxInfo->colUsed);
-    //pIdxInfo->estimatedCost = 1000000;    
+
+#if 0
+    printConstraints(pIdxInfo);
+
+    int argvIndex = 1;
+    for(int i = 0; i < pIdxInfo->nConstraint; i ++) {
+        pIdxInfo->aConstraintUsage[i].argvIndex = argvIndex++;
+        pIdxInfo->aConstraintUsage[i].omit = 1; // Constraint is assumed to be fully handled by the virtual table
+    }
+    
+    pIdxInfo->estimatedCost = 100;    
+#endif
 
     return SQLITE_OK;
 }

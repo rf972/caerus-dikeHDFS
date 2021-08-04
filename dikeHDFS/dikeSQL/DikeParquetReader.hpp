@@ -66,8 +66,8 @@ class DikeColumnReader {
     parquet::ByteArrayReader* ba_reader = NULL;
 
     enum {
-        BUFFER_SIZE = 4096,
-        //BUFFER_SIZE = 10,
+        // BUFFER_SIZE = 4096, // 3.5 sec
+        BUFFER_SIZE = 16 * 1024,
     };
 
     parquet::ByteArray ba_value;
