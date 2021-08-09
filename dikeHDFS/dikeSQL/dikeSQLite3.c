@@ -106,20 +106,20 @@ int dike_sqlite3_get_results(sqlite3_stmt *pStmt, DikeBinaryColumn_t ** columns,
 
     for(i = 0; i < pVm->nResColumn; i++) {
         switch(columns[i]->data_type) {
-                case SQLITE_INTEGER:
+                case BINARY_COLUMN_TYPE_INT64:
                 {                                       
                     *(int64_t*)columns[i]->pos = htobe64(pVm->pResultSet[i].u.i);
                     columns[i]->pos += sizeof(int64_t);
                 }
                 break;
-                case SQLITE_FLOAT:
+                case BINARY_COLUMN_TYPE_DOUBLE:
                 {
                    *(int64_t*)columns[i]->pos = htobe64(*(int64_t*)&pVm->pResultSet[i].u.r);
                     columns[i]->pos += sizeof(int64_t);
 
                 }
                 break;
-                case SQLITE3_TEXT:
+                case BINARY_COLUMN_TYPE_BYTE_ARRAY:
                 {                    
                     //memcpy(columns[i]->pos,  pVm->pResultSet[i].z,  pVm->pResultSet[i].n);
                     for(j = 0; j < pVm->pResultSet[i].n; j++) {

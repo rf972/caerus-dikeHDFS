@@ -68,7 +68,7 @@ class DikeBinaryColumnWriter : public DikeAsyncWriter {
                 datatype = BINARY_COLUMN_TYPE_BYTE_ARRAY;
                 break;
             }
-            DikeBinaryColumnInit(columns[i], data_types[i]);
+            DikeBinaryColumnInit(columns[i], datatype);
         }
 
         // This is our first write, so buffer should have enough space
@@ -76,7 +76,7 @@ class DikeBinaryColumnWriter : public DikeAsyncWriter {
         buffer->write(&be_value, sizeof(int64_t));
         for(int i = 0; i < data_count; i++) {
             be_value = htobe64(data_types[i]);
-            //std::cout << i << " : " << data_types[i] << std::endl;
+            std::cout << i << " : " << data_types[i] << std::endl;
             buffer->write(&be_value, sizeof(int64_t));
         }
     }
@@ -92,8 +92,9 @@ class DikeBinaryColumnWriter : public DikeAsyncWriter {
         }                
 
         int flush_needed = 0;
+        
         dike_sqlite3_get_results(sqlRes, columns, &flush_needed);
-
+        
         row_count++;
         batch_count++;
         if(flush_needed || batch_count >= BINARY_COLUMN_BATCH_SIZE){

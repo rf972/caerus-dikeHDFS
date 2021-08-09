@@ -26,7 +26,7 @@ class DikeProcessor {
     bool isRunning;
 
     std::thread startWorker() {
-        return std::thread([=] { Worker(); });
+        return std::thread([this] { this->Worker(); });
     }
 
     virtual void Worker() = 0;

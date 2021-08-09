@@ -80,6 +80,7 @@ int DikeSQL::Run(DikeProcessorConfig & dikeSQLConfig, DikeIO * output)
     
     isRunning = true;
     workerThread = startWorker();
+
     dikeWriter->Worker();
     isRunning = false;
     if(workerThread.joinable()){
@@ -112,7 +113,8 @@ void DikeSQL::Worker()
     int writer_rc = 1;    
     pthread_t thread_id = pthread_self();
     pthread_setname_np(thread_id, "DikeSQL::Worker");
-    
+    //std::cout << "DikeSQL::Worker " << std::endl;
+
     try {    
         while (isRunning && SQLITE_ROW == sqlite3_step(sqlRes) && writer_rc) {
             record_counter++;
