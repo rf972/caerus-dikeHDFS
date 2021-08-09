@@ -10,14 +10,14 @@ void DikeBinaryColumnInit(DikeBinaryColumn_t * p, int data_type) {
 
     p->data_type = data_type;
     switch(data_type){
-        case SQLITE_INTEGER:
-        case SQLITE_FLOAT: // We transfering 8 bytes in Big Endian
+        case BINARY_COLUMN_TYPE_INT64:
+        case BINARY_COLUMN_TYPE_DOUBLE: // We transfering 8 bytes in Big Endian
             p->start_pos =  (uint8_t *) malloc(BINARY_COLUMN_BATCH_SIZE * sizeof(int64_t));
             p->pos = p->start_pos;
             p->end_pos = p->pos + BINARY_COLUMN_BATCH_SIZE * sizeof(int64_t);
         break;
         
-        case SQLITE3_TEXT:
+        case BINARY_COLUMN_TYPE_BYTE_ARRAY:
             p->start_pos = (uint8_t *) malloc(BINARY_COLUMN_TEXT_SIZE); 
             p->pos = p->start_pos;
             p->end_pos = p->pos + BINARY_COLUMN_TEXT_SIZE;

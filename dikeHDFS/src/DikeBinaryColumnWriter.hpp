@@ -56,6 +56,18 @@ class DikeBinaryColumnWriter : public DikeAsyncWriter {
         for(int i = 0; i < data_count; i++) {
             data_types[i] = sqlite3_column_type(sqlRes, i);
             columns[i] = new DikeBinaryColumn_t;
+            int datatype = BINARY_COLUMN_TYPE_UNDEFINED;
+            switch(data_types[i]) {
+                case SQLITE_INTEGER:
+                datatype = BINARY_COLUMN_TYPE_INT64;
+                break;
+                case SQLITE_FLOAT:
+                datatype = BINARY_COLUMN_TYPE_DOUBLE;
+                break;
+                case SQLITE3_TEXT:
+                datatype = BINARY_COLUMN_TYPE_BYTE_ARRAY;
+                break;
+            }
             DikeBinaryColumnInit(columns[i], data_types[i]);
         }
 
@@ -69,7 +81,8 @@ class DikeBinaryColumnWriter : public DikeAsyncWriter {
         }
     }
 
-    virtual int write(sqlite3_stmt *sqlRes) override {
+    virtual int write(void * res) override {
+        sqlite3_stmt * sqlRes = (sqlite3_stmt *)res;
         if (data_count == 0) {
             InitializeSchema(sqlRes);
         }
@@ -80,49 +93,6 @@ class DikeBinaryColumnWriter : public DikeAsyncWriter {
 
         int flush_needed = 0;
         dike_sqlite3_get_results(sqlRes, columns, &flush_needed);
-#if 0
-        int64_t be_value;
-        bool flush_needed = false;
-        for(int i = 0; i < data_count; i++) {
-            //int data_type = sqlite3_column_type(sqlRes, i);
-            //std::cout << "write : " << row_count << " " << i << ": " << data_types[i] << std::endl;
-            switch(data_types[i]) {
-                case SQLITE_INTEGER:
-                {
-                    //int64_t int64_value = sqlite3_column_int64(sqlRes, i);
-                    int64_t int64_value = dike_sqlite3_get_int64(sqlRes, i);
-                    *(int64_t*)columns[i]->pos = htobe64(int64_value);
-                    columns[i]->pos += sizeof(int64_t);
-                }
-                break;
-                case SQLITE_FLOAT:
-                {
-                    //double double_value = sqlite3_column_double(sqlRes, i);
-                    double double_value = dike_sqlite3_get_double(sqlRes, i);
-                    *(int64_t*)columns[i]->pos = htobe64(*(int64_t*)&double_value);
-                    columns[i]->pos += sizeof(int64_t);
-
-                }
-                break;
-                case SQLITE3_TEXT:
-                {
-                    //uint32_t column_bytes = sqlite3_column_bytes(sqlRes, i);
-                    //const uint8_t* column_text = sqlite3_column_text(sqlRes, i);
-                    uint32_t column_bytes;
-                    uint8_t* column_text;
-                    column_bytes = dike_sqlite3_get_bytes(sqlRes, i, &column_text);
-                    memcpy(columns[i]->pos, column_text, column_bytes);
-                    columns[i]->pos += column_bytes;
-                    *columns[i]->idx_pos = column_bytes;
-                    columns[i]->idx_pos++;
-                    if (columns[i]->pos - columns[i]->start_pos > BINARY_COLUMN_TEXT_MARK) {
-                        flush_needed = true;
-                    }
-                }
-                break;                        
-            }
-        }
-#endif
 
         row_count++;
         batch_count++;

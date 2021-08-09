@@ -46,7 +46,7 @@ class DikeCsvReader: public DikeAsyncReader {
     std::string schema;
     int columnCount = 0;
 
-    DikeCsvReader(DikeSQLConfig & dikeSQLConfig) {        
+    DikeCsvReader(DikeProcessorConfig & dikeSQLConfig) {        
         std::stringstream ss;
         ss.str(dikeSQLConfig["Request"]);
         Poco::Net::HTTPRequest hdfs_req;
@@ -98,7 +98,7 @@ class DikeCsvReader: public DikeAsyncReader {
     int emptyCount = 0;
     uint64_t recordCount = 0;
 
-    void dikeCsvReaderInit(DikeIO * input, DikeSQLConfig & dikeSQLConfig){
+    void dikeCsvReaderInit(DikeIO * input, DikeProcessorConfig & dikeSQLConfig){
         this->input = input;        
         this->blockSize = std::stoull(dikeSQLConfig["Configuration.BlockSize"]);
         

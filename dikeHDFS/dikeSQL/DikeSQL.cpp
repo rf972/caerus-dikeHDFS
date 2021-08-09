@@ -25,7 +25,7 @@
 #include "DikeBinaryColumnWriter.hpp"
 
 //int DikeSQL::Run(DikeSQLParam * dikeSQLParam, DikeIO * input, DikeIO * output)
-int DikeSQL::Run(DikeSQLConfig & dikeSQLConfig, DikeIO * output)
+int DikeSQL::Run(DikeProcessorConfig & dikeSQLConfig, DikeIO * output)
 {
     sqlite3 *db;    
     int rc;

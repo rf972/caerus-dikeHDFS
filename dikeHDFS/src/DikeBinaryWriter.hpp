@@ -53,7 +53,8 @@ class DikeBinaryWriter : public DikeAsyncWriter {
         }
     }
 
-    virtual int write(sqlite3_stmt *sqlRes) override {
+    virtual int write(void * res) override {
+        sqlite3_stmt *sqlRes = (sqlite3_stmt *)res;
         int rc = 0;
 
         if (data_count == 0) {

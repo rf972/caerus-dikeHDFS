@@ -3,7 +3,6 @@
 
 #include <stdint.h>
 #include <stdlib.h>
-#include "sqlite3.h"
 
 #ifdef __cplusplus
 extern "C" {
@@ -15,6 +14,20 @@ enum {
     BINARY_COLUMN_TEXT_MARK = BINARY_COLUMN_TEXT_SIZE - 1024,
 
 };
+
+enum {
+    BINARY_COLUMN_TYPE_BOOLEAN = 0,
+    BINARY_COLUMN_TYPE_INT32 = 1,
+    BINARY_COLUMN_TYPE_INT64 = 2,
+    BINARY_COLUMN_TYPE_INT96 = 3,
+    BINARY_COLUMN_TYPE_FLOAT = 4,
+    BINARY_COLUMN_TYPE_DOUBLE = 5,
+    BINARY_COLUMN_TYPE_BYTE_ARRAY = 6,
+    BINARY_COLUMN_TYPE_FIXED_LEN_BYTE_ARRAY = 7,
+    // Should always be last element.
+    BINARY_COLUMN_TYPE_UNDEFINED = 8
+};
+
 
 typedef struct DikeBinaryColumn {   
     int data_type;

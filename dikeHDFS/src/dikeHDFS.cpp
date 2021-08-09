@@ -37,6 +37,8 @@
 #include "DikeStream.hpp"
 #include "DikeHTTPRequestHandler.hpp"
 
+#include "TpchQ1.hpp"
+
 using namespace Poco::Net;
 using namespace Poco::Util;
 using namespace std;
@@ -151,9 +153,9 @@ public:
         if(verbose) {
             cout << DikeUtil().Blue();
         }
-
-        DikeSQL dikeSQL;
-        DikeSQLConfig dikeSQLConfig;
+        
+        DikeProcessor * dikeProcessor = NULL;
+        DikeProcessorConfig dikeSQLConfig;
 
         std::istringstream readParamStream(readParam.c_str());      
         std::istream& xmlStream(readParamStream);        
@@ -166,6 +168,16 @@ public:
             dikeSQLConfig["system.verbose"] = std::to_string(verbose);
 
             dikeSQLConfig["Name"] = cfg->getString("Name");
+            if(verbose) {
+                cout << "Name = " + dikeSQLConfig["Name"] << endl;
+            }
+
+            if(dikeSQLConfig["Name"].compare("TpchQ1") == 0){
+                dikeProcessor = (DikeProcessor *) new TpchQ1;
+            } else {
+                dikeProcessor = (DikeProcessor *) new DikeSQL;
+            }
+
             dikeSQLConfig["Request"] = ss.str();
             dikeSQLConfig["dfs.datanode.http-port"] = dikeConfig["dfs.datanode.http-port"];
 
@@ -204,11 +216,14 @@ public:
             DikeOut output(&toClient);
 #endif
             
-            dikeSQL.Run(dikeSQLConfig, &output);       
+            dikeProcessor->Run(dikeSQLConfig, &output);       
         } catch (Poco::NotFoundException&) {
             cout << DikeUtil().Red() << "Exeption while parsing readParam" << endl;
             cout << DikeUtil().Reset() << endl;
-        }       
+        }
+        if(dikeProcessor) {
+            delete dikeProcessor;
+        }
     }
 
     

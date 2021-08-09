@@ -24,11 +24,12 @@ class DikeCsvWriter : public DikeAsyncWriter {
 
     DikeCsvWriter(DikeIO * output) : DikeAsyncWriter(output) { }
 
-    virtual int write(sqlite3_stmt *sqlRes) override {
-        const char * res[128];
+    virtual int write(void * res) override {
+        sqlite3_stmt * sqlRes = (sqlite3_stmt *) res;
+        const char * buffer[128];
         int total_bytes;
-        int data_count = dike_sqlite3_get_data(sqlRes, res, 128, &total_bytes);       
-        int rc = write(res, data_count, ',', '\n', total_bytes);
+        int data_count = dike_sqlite3_get_data(sqlRes, buffer, 128, &total_bytes);       
+        int rc = write(buffer, data_count, ',', '\n', total_bytes);
         
         return rc;
     }

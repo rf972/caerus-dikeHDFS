@@ -336,7 +336,7 @@ class DikeParquetReader: public DikeAsyncReader {
     std::unique_ptr<parquet::ParquetFileReader> parquetFileReader;
     std::shared_ptr<parquet::RowGroupReader> rowGroupReader;   
 
-    DikeParquetReader(DikeSQLConfig & dikeSQLConfig) {
+    DikeParquetReader(DikeProcessorConfig & dikeSQLConfig) {
         verbose = std::stoi(dikeSQLConfig["system.verbose"]);
         std::chrono::high_resolution_clock::time_point t1 =  std::chrono::high_resolution_clock::now();
 

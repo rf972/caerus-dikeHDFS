@@ -10,8 +10,9 @@ set(BUILD_SHARED_LIBS OFF CACHE BOOL "Build shared libraries")
 add_subdirectory(external/poco)
 add_subdirectory(dikeSQL)
 add_subdirectory(dikeS3)
+add_subdirectory(dikeLambda)
 
-include_directories(dikeSQL dikeS3)
+include_directories(dikeSQL dikeS3 dikeLambda)
 
 project(dikeHDFS)
 add_executable(dikeHDFS src/dikeHDFS.cpp src/DikeBinaryColumn.c)
@@ -34,6 +35,7 @@ target_link_libraries(dikeHDFS PUBLIC
     Poco::Net
     libdikeSQL
     libdikeS3
+    libdikeLambda
     "-lpthread -lm"
     ${PARQUET_LIBS}
     "-L${CMAKE_SOURCE_DIR}/../build/Release/lib  ${AWS_LIBS}"

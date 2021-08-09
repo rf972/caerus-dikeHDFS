@@ -14,7 +14,6 @@
 #include <semaphore.h>
 #include <unistd.h>
 
-#include <sqlite3.h>
 #include "DikeUtil.hpp"
 #include "DikeIO.hpp"
 #include "DikeBuffer.hpp"
@@ -40,7 +39,7 @@ class DikeAsyncWriter {
     int recordCount = 0;
 
     DikeAsyncWriter(DikeIO * output) {
-        //std::cout << "DikeAsyncWriter::DikeAsyncWriter " << std::endl;
+        std::cout << "DikeAsyncWriter::DikeAsyncWriter " << std::endl;
         this->output = output;
         sem_init(&work_sem, 0, 0);
         sem_init(&free_sem, 0, QUEUE_SIZE);        
@@ -101,7 +100,10 @@ class DikeAsyncWriter {
 
     //virtual int write(const char **res, int data_count, char delim, char term, int total_bytes) = 0;
     //virtual int write(char term) = 0;
-    virtual int write(sqlite3_stmt *sqlRes) = 0;
+    virtual int write(void *res) {
+        std::cout << "DikeAsyncWriter::write Not implemented" << std::endl;
+        return 0;
+    };
 
     void flush(){
         if(!isRunning){
@@ -123,10 +125,12 @@ class DikeAsyncWriter {
     }
 
     std::thread startWorker() {
-        return std::thread([=] { Worker(); });
+        std::cout << "DikeAsyncWriter::startWorker " << std::endl;
+        return std::thread([this] { this->Worker(); });
     }
 
     void Worker() {
+        std::cout << "DikeAsyncWriter::Worker " << std::endl;
         while(1){
             sem_wait(&work_sem);
             q_lock.lock();
