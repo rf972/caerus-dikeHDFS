@@ -159,6 +159,9 @@ class DikeBuffer{
         //assert(rc > 0);
         return rc;
     }
+    int getFreeSpace() {
+        return int(endPtr - posPtr);
+    }
 };
 
 #endif /* DIKE_BUFFER_HPP */

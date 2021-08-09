@@ -32,6 +32,7 @@ RUN echo APT::Install-Suggests "0"\; >>  /etc/apt/apt.conf.d/10disableextras
 
 ENV DEBIAN_FRONTEND noninteractive
 ENV DEBCONF_TERSE true
+ENV TZ=US/Eastern
 
 # hadolint ignore=DL3008
 RUN apt-get -q update \
@@ -87,7 +88,8 @@ RUN apt-get -q update \
         net-tools \
         gdb \
         valgrind \
-        ca-certificates lsb-release wget 
+        ca-certificates lsb-release wget \
+        tzdata
 
 #    && apt-get clean \
 #    && rm -rf /var/lib/apt/lists/*
@@ -125,6 +127,15 @@ ENV ENV_HADOOP_VERSION=$HADOOP_VERSION
 
 RUN mkdir -p /opt/hadoop
 RUN curl -L https://downloads.apache.org/hadoop/common/hadoop-${ENV_HADOOP_VERSION}/hadoop-${ENV_HADOOP_VERSION}.tar.gz | tar -xz -C /opt/hadoop
+
+RUN mkdir -p /opt/orc
+RUN curl -L https://downloads.apache.org/orc/orc-1.6.9/orc-1.6.9.tar.gz | tar -xz -C /opt/orc
+RUN cd /opt/orc/orc-1.6.9 \
+    && mkdir build \
+    && cd build \
+    && cmake .. -DBUILD_JAVA=OFF \
+    && make package \
+    && make install
 
 COPY entry.sh /usr/local/bin/entry.sh
 RUN chmod a+x /usr/local/bin/entry.sh

@@ -251,7 +251,8 @@ class DikeParquetWriter : public DikeAsyncWriter {
         }
     }
 
-    virtual int write(sqlite3_stmt *sqlRes) override {
+    virtual int write(void * res) override {
+        sqlite3_stmt *sqlRes  = (sqlite3_stmt *)res;
         if (cl_writers == NULL) {
             InitWriters(sqlRes);
         }        
