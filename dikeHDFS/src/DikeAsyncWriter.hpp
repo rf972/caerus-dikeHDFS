@@ -39,7 +39,7 @@ class DikeAsyncWriter {
     int recordCount = 0;
 
     DikeAsyncWriter(DikeIO * output) {
-        std::cout << "DikeAsyncWriter::DikeAsyncWriter " << std::endl;
+        //std::cout << "DikeAsyncWriter::DikeAsyncWriter " << std::endl;
         this->output = output;
         sem_init(&work_sem, 0, 0);
         sem_init(&free_sem, 0, QUEUE_SIZE);        
@@ -125,12 +125,12 @@ class DikeAsyncWriter {
     }
 
     std::thread startWorker() {
-        std::cout << "DikeAsyncWriter::startWorker " << std::endl;
+        //std::cout << "DikeAsyncWriter::startWorker " << std::endl;
         return std::thread([this] { this->Worker(); });
     }
 
     void Worker() {
-        std::cout << "DikeAsyncWriter::Worker " << std::endl;
+        //std::cout << "DikeAsyncWriter::Worker " << std::endl;
         while(1){
             sem_wait(&work_sem);
             q_lock.lock();

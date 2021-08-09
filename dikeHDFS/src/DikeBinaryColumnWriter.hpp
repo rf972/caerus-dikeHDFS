@@ -76,7 +76,7 @@ class DikeBinaryColumnWriter : public DikeAsyncWriter {
         buffer->write(&be_value, sizeof(int64_t));
         for(int i = 0; i < data_count; i++) {
             be_value = htobe64(data_types[i]);
-            std::cout << i << " : " << data_types[i] << std::endl;
+            //std::cout << i << " : " << data_types[i] << std::endl;
             buffer->write(&be_value, sizeof(int64_t));
         }
     }
