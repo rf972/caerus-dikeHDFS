@@ -17,6 +17,7 @@ class Frame {
 
     int refCount;
     Frame * parentFrame = NULL;
+    bool lastFrame = false;
 
     Frame(Node * ownerNode) {
         this->ownerNode = ownerNode;

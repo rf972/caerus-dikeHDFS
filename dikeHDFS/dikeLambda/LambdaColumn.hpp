@@ -33,7 +33,7 @@ class Column {
     double *  double_values = NULL;
     parquet::ByteArray * ba_values = NULL;    
 
-    uint64_t row_count = 0; // Number of valid row in this column
+    uint64_t row_count = 0; // Number of valid rows in this column
     bool memory_owner = false; // This column must destroy it's memory
     
     int refCount = 0; // How many references do we have    
@@ -56,6 +56,8 @@ class Column {
             case BYTE_ARRAY:
             ba_values = new parquet::ByteArray [MAX_SIZE];
             break;
+            default:
+            std::cout << "Uknown data_type " << data_type << std::endl;
         }
     }
 
@@ -94,7 +96,8 @@ class Column {
             }
             break;
         }
-        return 0;
+        //std::cout << "Read Column " << id <<  " " << name << " row_count " << row_count << std::endl;
+        return row_count;
     }
 
     ~Column() {

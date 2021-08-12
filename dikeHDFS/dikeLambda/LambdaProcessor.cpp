@@ -30,17 +30,23 @@ int LambdaProcessor::Run(DikeProcessorConfig & dikeProcessorConfig, DikeIO * out
     Poco::JSON::Parser parser;
     Poco::Dynamic::Var result = parser.parse(dikeProcessorConfig["Configuration.DAG"]);
     Poco::JSON::Object::Ptr pObject = result.extract<Poco::JSON::Object::Ptr>();
-    std::string dagName = pObject->getValue<std::string>("Name");
-    std::cout << dagName << std::endl;
+    if (verbose) {
+        std::string dagName = pObject->getValue<std::string>("Name");
+        std::cout << dagName << std::endl;
+    }
 
     Poco::JSON::Array::Ptr nodeArray = pObject->getArray("NodeArray");
-    std::cout << "Creating pipe with " << nodeArray->size() << " nodes " << std::endl;
+    if (verbose) {
+        std::cout << "Creating pipe with " << nodeArray->size() << " nodes " << std::endl;
+    }
     for(int i = 0; i < nodeArray->size(); i++){
         nodeVector.push_back(CreateNode(nodeArray->getObject(i), dikeProcessorConfig, output));
     }
 
-    for(int i = 0; i < nodeVector.size(); i++) {
-        std::cout << "nodeVector[" << i << "]->name " << nodeVector[i]->name << std::endl;
+    if (verbose) {
+        for(int i = 0; i < nodeVector.size(); i++) {
+            std::cout << "nodeVector[" << i << "]->name " << nodeVector[i]->name << std::endl;
+        }
     }
 
     // Connect Nodes
@@ -54,6 +60,14 @@ int LambdaProcessor::Run(DikeProcessorConfig & dikeProcessorConfig, DikeIO * out
     }
 
     std::chrono::high_resolution_clock::time_point t1 =  std::chrono::high_resolution_clock::now();
+
+    bool done = false;
+    while(!done)     
+    {
+        for(int i = 0; i < nodeVector.size(); i++) {
+            done = nodeVector[i]->Step();
+        }        
+    }
 
     if (verbose) {
         std::chrono::high_resolution_clock::time_point t2 =  std::chrono::high_resolution_clock::now();

@@ -36,13 +36,24 @@ class Node {
     bool done = false;
     int verbose = 0;
 
+    // Statistics
+    int stepCount = 0;
+
     Node(Poco::JSON::Object::Ptr pObject, DikeProcessorConfig & dikeProcessorConfig, DikeIO * output) {
         name = pObject->getValue<std::string>("Name");
-        std::string typeStr = pObject->getValue<std::string>("Type");
-        std::cout << "Node " << name << " type " << typeStr << std::endl;
+        std::string typeStr = pObject->getValue<std::string>("Type");        
         verbose = std::stoi(dikeProcessorConfig["system.verbose"]);
+        if(verbose){
+            std::cout << "Node " << name << " type " << typeStr << std::endl;
+        }
     }
 
+    virtual ~Node() {
+        while(!framePool.empty()) {
+            delete framePool.front();
+            framePool.pop();
+        }
+    }
     void Connect(Node * node){
         this->nextNode = node;
     }
@@ -50,7 +61,7 @@ class Node {
     virtual void Init() { }
 
     virtual void UpdateColumnMap(Frame * frame) {
-        std::cout << "UpdateColumnMap " << name  << std::endl;
+        //std::cout << "UpdateColumnMap " << name  << std::endl;
         if(nextNode != NULL){
             nextNode->UpdateColumnMap(frame);
         }
@@ -61,12 +72,18 @@ class Node {
     }
 
     virtual Frame * getFrame() { // Retrieve frame from incoming queue
+        if(frameQueue.empty()){
+            return NULL;
+        }
         Frame * frame = frameQueue.front();
         frameQueue.pop();
         return frame;
     }
 
     Frame * allocFrame() {
+        if(framePool.empty()){
+            return NULL;
+        }
         Frame * frame = framePool.front();
         framePool.pop();
         return frame;           
@@ -76,7 +93,7 @@ class Node {
         framePool.push(frame);
     }
 
-    virtual void Step() = 0;
+    virtual bool Step() = 0;
 };
 
 class InputNode : public Node {
@@ -95,13 +112,14 @@ class InputNode : public Node {
     int numRows = 0;  // Total number of rows 
     int columnCount = 0;    
     std::shared_ptr<parquet::ColumnReader> * columnReaders;
+    
     Column::DataType * columnTypes;
 
     InputNode(Poco::JSON::Object::Ptr pObject, DikeProcessorConfig & dikeProcessorConfig, DikeIO * output);
-    ~InputNode();
+    virtual ~InputNode();
 
     virtual void Init() override;
-    virtual void Step() override;
+    virtual bool Step() override;
 };
 
 class ProjectionNode : public Node {
@@ -113,34 +131,42 @@ class ProjectionNode : public Node {
     ProjectionNode(Poco::JSON::Object::Ptr pObject, DikeProcessorConfig & dikeProcessorConfig, DikeIO * output) 
     : Node(pObject, dikeProcessorConfig, output)  
     {
-        std::cout << "ProjectionNode::ProjectionNode ";
         Poco::JSON::Array::Ptr projectionArray = pObject->getArray("ProjectionArray");
         columnCount =  projectionArray->size();
         columnMap.resize(columnCount);
         for(int i = 0; i < columnCount; i++){
             std::string name = projectionArray->get(i);
             projection.push_back(name);
-            std::cout << name <<  " " ;
         }
-        std::cout << std::endl;
     }
 
     virtual void UpdateColumnMap(Frame * frame) override;
-    virtual void Step() override;
+    virtual bool Step() override;
 };
 
 class OutputNode : public Node {
     public:
     DikeIO * output = NULL;
+    uint8_t * lenBuffer = NULL;
+    uint8_t * dataBuffer = NULL;
     OutputNode(Poco::JSON::Object::Ptr pObject, DikeProcessorConfig & dikeProcessorConfig, DikeIO * output) 
         : Node(pObject, dikeProcessorConfig, output) 
-    {
-        std::cout << "OutputNode::OutputNode" << std::endl;
+    {        
         this->output = output;
+        lenBuffer = new uint8_t [Column::MAX_SIZE];
+        dataBuffer = new uint8_t [Column::MAX_SIZE * 128]; // Max text lenght
     }
 
+    virtual ~OutputNode(){
+        if(lenBuffer){
+            delete [] lenBuffer;
+        }
+        if(dataBuffer){
+            delete [] dataBuffer;
+        }
+    }
     virtual void UpdateColumnMap(Frame * frame) override;
-    virtual void Step() override;
+    virtual bool Step() override;
 };
 
 Node * CreateNode(Poco::JSON::Object::Ptr pObject, DikeProcessorConfig & dikeProcessorConfig, DikeIO * output);
