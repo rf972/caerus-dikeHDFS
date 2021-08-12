@@ -1,10 +1,10 @@
 #ifndef DIKE_PROCESSOR_HPP
 #define DIKE_PROCESSOR_HPP
 
-#include <iostream>
-#include <string.h>
+#include <map>
+#include <thread>
 
-#include "DikeAsyncWriter.hpp"
+#include "DikeIO.hpp"
 
 typedef std::map<std::string, std::string> DikeProcessorConfig;
 
@@ -20,7 +20,7 @@ class DikeProcessor {
 
     virtual int Run(DikeProcessorConfig & dikeProcessorConfig, DikeIO * output) = 0;
     
-    DikeAsyncWriter * dikeWriter = NULL;
+    // DikeAsyncWriter * dikeWriter = NULL;
     std::thread workerThread;    
     uint64_t record_counter = 0;
     bool isRunning;

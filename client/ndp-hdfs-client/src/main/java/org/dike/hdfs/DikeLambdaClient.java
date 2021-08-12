@@ -45,6 +45,15 @@ import java.util.Base64;
 
 import javax.security.auth.login.LoginException;
 
+// json related stuff
+import java.io.StringWriter;
+import javax.json.Json;
+import javax.json.JsonObject;
+import javax.json.JsonObjectBuilder;
+import javax.json.JsonArrayBuilder;
+import javax.json.JsonWriter;
+
+
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.fs.Path;
 import org.apache.hadoop.fs.FileSystem;
@@ -110,11 +119,12 @@ public class DikeLambdaClient
         Path dikehdfsPath = new Path("ndphdfs://dikehdfs:9860/");
         Path hdfsPath = new Path("hdfs://dikehdfs:9000/");
             
-        binaryColumnTest(dikehdfsPath, fname, conf, true/*pushdown*/, false/*partitionned*/);
+        //TpchQ1Test(dikehdfsPath, fname, conf, true/*pushdown*/, false/*partitionned*/);
+        LambdaTest(dikehdfsPath, fname, conf, true/*pushdown*/, false/*partitionned*/);
     }
  
 
-    public static String getLambdaReadParam(String name,
+    public static String getTpchQ1ReadParam(String name,
                                       long blockSize) throws XMLStreamException 
     {
         XMLOutputFactory xmlof = XMLOutputFactory.newInstance();
@@ -153,7 +163,244 @@ public class DikeLambdaClient
         return strw.toString();
     }
     
-    public static void binaryColumnTest(Path fsPath, String fname, Configuration conf, Boolean pushdown, Boolean partitionned)
+public static String getLambdaReadParam(String name,
+                                      long blockSize) throws XMLStreamException 
+    {
+        XMLOutputFactory xmlof = XMLOutputFactory.newInstance();
+        StringWriter strw = new StringWriter();
+        XMLStreamWriter xmlw = xmlof.createXMLStreamWriter(strw);
+        xmlw.writeStartDocument();
+        xmlw.writeStartElement("Processor");
+        
+        xmlw.writeStartElement("Name");
+        xmlw.writeCharacters("Lambda");
+        xmlw.writeEndElement(); // Name
+        
+        xmlw.writeStartElement("Configuration");
+
+        xmlw.writeStartElement("DAG");
+        JsonObjectBuilder dagBuilder = Json.createObjectBuilder();
+        dagBuilder.add("Name", "DAG Projection");
+
+        JsonObjectBuilder inputNodeBuilder = Json.createObjectBuilder();
+        inputNodeBuilder.add("Name", "InputNode");
+        inputNodeBuilder.add("Type", "_INPUT");
+        inputNodeBuilder.add("File", name);
+        
+        JsonObjectBuilder projectionNodeBuilder = Json.createObjectBuilder();
+        projectionNodeBuilder.add("Name", "TpchQ1");
+        projectionNodeBuilder.add("Type", "_PROJECTION");
+        JsonArrayBuilder projectionArrayBuilder = Json.createArrayBuilder();
+        projectionArrayBuilder.add("l_quantity");
+        projectionArrayBuilder.add("l_extendedprice");
+        projectionArrayBuilder.add("l_discount");
+        projectionArrayBuilder.add("l_tax");
+        projectionArrayBuilder.add("l_returnflag");
+        projectionArrayBuilder.add("l_linestatus");
+        projectionArrayBuilder.add("l_shipdate");
+
+        projectionNodeBuilder.add("ProjectionArray", projectionArrayBuilder);
+
+        JsonObjectBuilder optputNodeBuilder = Json.createObjectBuilder();
+        optputNodeBuilder.add("Name", "OutputNode");
+        optputNodeBuilder.add("Type", "_OUTPUT");        
+
+        JsonArrayBuilder nodeArrayBuilder = Json.createArrayBuilder();
+        nodeArrayBuilder.add(inputNodeBuilder.build());
+        nodeArrayBuilder.add(projectionNodeBuilder.build());
+        nodeArrayBuilder.add(optputNodeBuilder.build());        
+
+        dagBuilder.add("NodeArray", nodeArrayBuilder);
+
+        // For now we will assume simple pipe with ordered connections
+        JsonObject dag = dagBuilder.build();
+
+        StringWriter stringWriter = new StringWriter();
+        JsonWriter writer = Json.createWriter(stringWriter);
+        writer.writeObject(dag);
+        writer.close();
+
+        xmlw.writeCharacters(stringWriter.getBuffer().toString());
+        xmlw.writeEndElement(); // DAG
+
+        xmlw.writeStartElement("RowGroupIndex");
+        xmlw.writeCharacters("0");
+        xmlw.writeEndElement(); // RowGroupIndex
+
+        xmlw.writeStartElement("LastAccessTime");
+        xmlw.writeCharacters("1624464464409");
+        xmlw.writeEndElement(); // LastAccessTime
+
+        xmlw.writeEndElement(); // Configuration
+        xmlw.writeEndElement(); // Processor
+        xmlw.writeEndDocument();
+        xmlw.close();
+
+        return strw.toString();
+    }
+    
+
+
+    public static void TpchQ1Test(Path fsPath, String fname, Configuration conf, Boolean pushdown, Boolean partitionned)
+    {
+        InputStream input = null;
+        Path fileToRead = new Path(fname);
+        FileSystem fs = null;        
+        NdpHdfsFileSystem dikeFS = null;        
+        long totalDataSize = 0;
+        int totalRecords = 0;
+        String readParam = null;
+        Map<String,Statistics> stats;
+        int traceRecordCount = 10;
+        final int BUFFER_SIZE = 128 * 1024;
+
+        String traceRecordCountEnv = System.getenv("DIKE_TRACE_RECORD_COUNT");
+        if(traceRecordCountEnv != null){
+            traceRecordCount = Integer.parseInt(traceRecordCountEnv);
+        }
+
+        long start_time = System.currentTimeMillis();
+
+        try {
+            fs = FileSystem.get(fsPath.toUri(), conf);
+            stats = fs.getStatistics();
+            System.out.println("Scheme " + fs.getScheme());
+            stats.get(fs.getScheme()).reset();
+
+            System.out.println("\nConnected to -- " + fsPath.toString());
+            start_time = System.currentTimeMillis();                                                
+
+            dikeFS = (NdpHdfsFileSystem)fs;
+            readParam = getTpchQ1ReadParam(fname, 0 /* ignore stream size */);                                        
+            FSDataInputStream dataInputStream = dikeFS.open(fileToRead, BUFFER_SIZE, readParam);                    
+  
+            DataInputStream dis = new DataInputStream(new BufferedInputStream(dataInputStream, BUFFER_SIZE ));
+
+            int dataTypes[];
+            long nCols = dis.readLong();
+            System.out.println("nCols : " + String.valueOf(nCols));
+            dataTypes = new int [(int)nCols];
+            for( int i = 0 ; i < nCols; i++){
+                dataTypes[i] = (int)dis.readLong();
+                System.out.println(String.valueOf(i) + " : " + String.valueOf(dataTypes[i]));
+            }
+
+            final int BATCH_SIZE = 4096;
+            final int TYPE_INT64 = 2;
+            final int TYPE_DOUBLE = 5;
+            final int TYPE_BYTE_ARRAY = 6;
+  
+            class ColumVector {                
+                ByteBuffer   byteBuffer = null;
+                LongBuffer   longBuffer = null;
+                DoubleBuffer doubleBuffer = null;
+                byte text_buffer[] = null;
+                int text_size;
+                int index_buffer [] = null;
+                int data_type;
+                int record_count;
+                public ColumVector(int data_type){
+                    this.data_type = data_type;
+                    switch(data_type) {
+                        case TYPE_INT64:
+                            byteBuffer = ByteBuffer.allocate(BATCH_SIZE * 8);
+                            longBuffer = byteBuffer.asLongBuffer();
+                        break;
+                        case TYPE_DOUBLE:
+                            byteBuffer = ByteBuffer.allocate(BATCH_SIZE * 8);
+                            doubleBuffer = byteBuffer.asDoubleBuffer();
+                        break;
+                        case TYPE_BYTE_ARRAY:
+                            byteBuffer = ByteBuffer.allocate(BATCH_SIZE);
+                            text_buffer = new byte[256 * 1024];
+                            index_buffer = new int[BATCH_SIZE];
+                        break;
+                    }
+                }
+
+                public void readColumn(DataInputStream dis) throws IOException {
+                    long nbytes = dis.readLong();
+                    record_count = (int) (nbytes / 8);
+                    dis.readFully(byteBuffer.array(), 0, (int)nbytes);
+
+                    if(data_type == TYPE_BYTE_ARRAY){
+                        record_count = (int) (nbytes);
+                        int idx = 0;
+                        for(int i = 0; i < record_count; i++){
+                            index_buffer[i] = idx;
+                            idx += byteBuffer.get(i) & 0xFF;
+                        }
+                        // Read actual text size                            
+                        nbytes = dis.readLong();
+                        text_size = (int)nbytes;
+                        dis.readFully(text_buffer, 0, (int)nbytes);
+                    }
+                }
+
+                public String getString(int index) {
+                    String value = null;
+                    switch(data_type) {
+                        case TYPE_INT64:
+                            value = String.valueOf(byteBuffer.getLong(index * 8));
+                        break;
+                        case TYPE_DOUBLE:
+                            value = String.valueOf(byteBuffer.getDouble(index * 8));                            
+                        break;
+                        case TYPE_BYTE_ARRAY:                            
+                            int len = byteBuffer.get(index) & 0xFF;
+                            value = new String(text_buffer, index_buffer[index], len, StandardCharsets.UTF_8);
+                        break;
+                    }
+                    return value;
+                }
+            };            
+            
+            ColumVector [] columVector = new ColumVector [(int)nCols];
+            int record_count = 0;
+
+            for( int i = 0 ; i < nCols; i++) {
+                columVector[i] = new ColumVector(dataTypes[i]);
+            }
+
+            while(true) {
+                try {
+                    for( int i = 0 ; i < nCols; i++) {
+                        columVector[i].readColumn(dis);
+                    }
+                                      
+                    if(totalRecords < traceRecordCount) {                        
+                        for(int idx = 0; idx < traceRecordCount; idx++){
+                            String record = "";
+                            for( int i = 0 ; i < nCols; i++) {
+                                record += columVector[i].getString(idx) + ",";
+                            }
+                            System.out.println(record);
+                        }                        
+                    }
+
+                    
+                    totalRecords += columVector[0].record_count;                    
+                }catch (Exception ex) {
+                    System.out.println(ex);
+                    break;
+                }
+            }
+        } catch (Exception ex) {
+            System.out.println("Error occurred: ");
+            ex.printStackTrace();
+            long end_time = System.currentTimeMillis();            
+            System.out.format("Received %d records (%d bytes) in %.3f sec\n", totalRecords, totalDataSize, (end_time - start_time) / 1000.0);             
+            return;
+        }
+
+        long end_time = System.currentTimeMillis();
+        
+        //System.out.println(fs.getScheme());
+        System.out.format("BytesRead %d\n", stats.get(fs.getScheme()).getBytesRead());
+        System.out.format("Received %d records (%d bytes) in %.3f sec\n", totalRecords, totalDataSize, (end_time - start_time) / 1000.0);
+    }
+
+    public static void LambdaTest(Path fsPath, String fname, Configuration conf, Boolean pushdown, Boolean partitionned)
     {
         InputStream input = null;
         Path fileToRead = new Path(fname);
@@ -310,7 +557,7 @@ public class DikeLambdaClient
         //System.out.println(fs.getScheme());
         System.out.format("BytesRead %d\n", stats.get(fs.getScheme()).getBytesRead());
         System.out.format("Received %d records (%d bytes) in %.3f sec\n", totalRecords, totalDataSize, (end_time - start_time) / 1000.0);
-    }
+    }    
 }
 
 // mvn package -o

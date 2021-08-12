@@ -37,7 +37,8 @@
 #include "DikeStream.hpp"
 #include "DikeHTTPRequestHandler.hpp"
 
-#include "TpchQ1.hpp"
+#include "dikeLambda/TpchQ1.hpp"
+#include "dikeLambda/LambdaProcessor.hpp"
 
 using namespace Poco::Net;
 using namespace Poco::Util;
@@ -174,6 +175,8 @@ public:
 
             if(dikeSQLConfig["Name"].compare("TpchQ1") == 0){
                 dikeProcessor = (DikeProcessor *) new TpchQ1;
+            } else if (dikeSQLConfig["Name"].compare("Lambda") == 0) {
+                dikeProcessor = (DikeProcessor *) new LambdaProcessor;
             } else {
                 dikeProcessor = (DikeProcessor *) new DikeSQL;
             }
