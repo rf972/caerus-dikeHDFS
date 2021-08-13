@@ -53,6 +53,12 @@ import javax.json.JsonObjectBuilder;
 import javax.json.JsonArrayBuilder;
 import javax.json.JsonWriter;
 
+// Compression support
+import java.io.UnsupportedEncodingException;
+import java.util.zip.DataFormatException;
+import java.util.zip.Deflater;
+import java.util.zip.Inflater;
+
 
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.fs.Path;
@@ -205,6 +211,13 @@ public static String getLambdaReadParam(String name,
         optputNodeBuilder.add("Name", "OutputNode");
         optputNodeBuilder.add("Type", "_OUTPUT");        
 
+        String compressionType = "None";
+        String compressionTypeEnv = System.getenv("DIKE_COMPRESSION");
+        if(compressionTypeEnv != null){
+            compressionType = compressionTypeEnv;
+        }
+        optputNodeBuilder.add("CompressionType", compressionType);
+
         JsonArrayBuilder nodeArrayBuilder = Json.createArrayBuilder();
         nodeArrayBuilder.add(inputNodeBuilder.build());
         nodeArrayBuilder.add(projectionNodeBuilder.build());
@@ -239,167 +252,6 @@ public static String getLambdaReadParam(String name,
         return strw.toString();
     }
     
-
-
-    public static void TpchQ1Test(Path fsPath, String fname, Configuration conf, Boolean pushdown, Boolean partitionned)
-    {
-        InputStream input = null;
-        Path fileToRead = new Path(fname);
-        FileSystem fs = null;        
-        NdpHdfsFileSystem dikeFS = null;        
-        long totalDataSize = 0;
-        int totalRecords = 0;
-        String readParam = null;
-        Map<String,Statistics> stats;
-        int traceRecordCount = 10;
-        final int BUFFER_SIZE = 128 * 1024;
-
-        String traceRecordCountEnv = System.getenv("DIKE_TRACE_RECORD_COUNT");
-        if(traceRecordCountEnv != null){
-            traceRecordCount = Integer.parseInt(traceRecordCountEnv);
-        }
-
-        long start_time = System.currentTimeMillis();
-
-        try {
-            fs = FileSystem.get(fsPath.toUri(), conf);
-            stats = fs.getStatistics();
-            System.out.println("Scheme " + fs.getScheme());
-            stats.get(fs.getScheme()).reset();
-
-            System.out.println("\nConnected to -- " + fsPath.toString());
-            start_time = System.currentTimeMillis();                                                
-
-            dikeFS = (NdpHdfsFileSystem)fs;
-            readParam = getTpchQ1ReadParam(fname, 0 /* ignore stream size */);                                        
-            FSDataInputStream dataInputStream = dikeFS.open(fileToRead, BUFFER_SIZE, readParam);                    
-  
-            DataInputStream dis = new DataInputStream(new BufferedInputStream(dataInputStream, BUFFER_SIZE ));
-
-            int dataTypes[];
-            long nCols = dis.readLong();
-            System.out.println("nCols : " + String.valueOf(nCols));
-            dataTypes = new int [(int)nCols];
-            for( int i = 0 ; i < nCols; i++){
-                dataTypes[i] = (int)dis.readLong();
-                System.out.println(String.valueOf(i) + " : " + String.valueOf(dataTypes[i]));
-            }
-
-            final int BATCH_SIZE = 4096;
-            final int TYPE_INT64 = 2;
-            final int TYPE_DOUBLE = 5;
-            final int TYPE_BYTE_ARRAY = 6;
-  
-            class ColumVector {                
-                ByteBuffer   byteBuffer = null;
-                LongBuffer   longBuffer = null;
-                DoubleBuffer doubleBuffer = null;
-                byte text_buffer[] = null;
-                int text_size;
-                int index_buffer [] = null;
-                int data_type;
-                int record_count;
-                public ColumVector(int data_type){
-                    this.data_type = data_type;
-                    switch(data_type) {
-                        case TYPE_INT64:
-                            byteBuffer = ByteBuffer.allocate(BATCH_SIZE * 8);
-                            longBuffer = byteBuffer.asLongBuffer();
-                        break;
-                        case TYPE_DOUBLE:
-                            byteBuffer = ByteBuffer.allocate(BATCH_SIZE * 8);
-                            doubleBuffer = byteBuffer.asDoubleBuffer();
-                        break;
-                        case TYPE_BYTE_ARRAY:
-                            byteBuffer = ByteBuffer.allocate(BATCH_SIZE);
-                            text_buffer = new byte[256 * 1024];
-                            index_buffer = new int[BATCH_SIZE];
-                        break;
-                    }
-                }
-
-                public void readColumn(DataInputStream dis) throws IOException {
-                    long nbytes = dis.readLong();
-                    record_count = (int) (nbytes / 8);
-                    dis.readFully(byteBuffer.array(), 0, (int)nbytes);
-
-                    if(data_type == TYPE_BYTE_ARRAY){
-                        record_count = (int) (nbytes);
-                        int idx = 0;
-                        for(int i = 0; i < record_count; i++){
-                            index_buffer[i] = idx;
-                            idx += byteBuffer.get(i) & 0xFF;
-                        }
-                        // Read actual text size                            
-                        nbytes = dis.readLong();
-                        text_size = (int)nbytes;
-                        dis.readFully(text_buffer, 0, (int)nbytes);
-                    }
-                }
-
-                public String getString(int index) {
-                    String value = null;
-                    switch(data_type) {
-                        case TYPE_INT64:
-                            value = String.valueOf(byteBuffer.getLong(index * 8));
-                        break;
-                        case TYPE_DOUBLE:
-                            value = String.valueOf(byteBuffer.getDouble(index * 8));                            
-                        break;
-                        case TYPE_BYTE_ARRAY:                            
-                            int len = byteBuffer.get(index) & 0xFF;
-                            value = new String(text_buffer, index_buffer[index], len, StandardCharsets.UTF_8);
-                        break;
-                    }
-                    return value;
-                }
-            };            
-            
-            ColumVector [] columVector = new ColumVector [(int)nCols];
-            int record_count = 0;
-
-            for( int i = 0 ; i < nCols; i++) {
-                columVector[i] = new ColumVector(dataTypes[i]);
-            }
-
-            while(true) {
-                try {
-                    for( int i = 0 ; i < nCols; i++) {
-                        columVector[i].readColumn(dis);
-                    }
-                                      
-                    if(totalRecords < traceRecordCount) {                        
-                        for(int idx = 0; idx < traceRecordCount; idx++){
-                            String record = "";
-                            for( int i = 0 ; i < nCols; i++) {
-                                record += columVector[i].getString(idx) + ",";
-                            }
-                            System.out.println(record);
-                        }                        
-                    }
-
-                    
-                    totalRecords += columVector[0].record_count;                    
-                }catch (Exception ex) {
-                    System.out.println(ex);
-                    break;
-                }
-            }
-        } catch (Exception ex) {
-            System.out.println("Error occurred: ");
-            ex.printStackTrace();
-            long end_time = System.currentTimeMillis();            
-            System.out.format("Received %d records (%d bytes) in %.3f sec\n", totalRecords, totalDataSize, (end_time - start_time) / 1000.0);             
-            return;
-        }
-
-        long end_time = System.currentTimeMillis();
-        
-        //System.out.println(fs.getScheme());
-        System.out.format("BytesRead %d\n", stats.get(fs.getScheme()).getBytesRead());
-        System.out.format("Received %d records (%d bytes) in %.3f sec\n", totalRecords, totalDataSize, (end_time - start_time) / 1000.0);
-    }
-
     public static void LambdaTest(Path fsPath, String fname, Configuration conf, Boolean pushdown, Boolean partitionned)
     {
         InputStream input = null;
@@ -458,6 +310,7 @@ public static String getLambdaReadParam(String name,
                 int index_buffer [] = null;
                 int data_type;
                 int record_count;
+                byte [] compressedBuffer = new byte[256 * 1024];
                 public ColumVector(int data_type){
                     this.data_type = data_type;
                     switch(data_type) {
@@ -477,10 +330,20 @@ public static String getLambdaReadParam(String name,
                     }
                 }
 
-                public void readColumn(DataInputStream dis) throws IOException {
+                public void readColumn(DataInputStream dis, Boolean compressionEnabled) 
+                    throws DataFormatException, UnsupportedEncodingException, IOException {
                     long nbytes = dis.readLong();
-                    record_count = (int) (nbytes / 8);
-                    dis.readFully(byteBuffer.array(), 0, (int)nbytes);
+                    if(compressionEnabled){
+                        dis.readFully(compressedBuffer, 0, (int)nbytes);
+                        Inflater inflater = new Inflater();
+                        inflater.setInput(compressedBuffer, 0, (int)nbytes);
+                        int dataSize = inflater.inflate(byteBuffer.array());
+                        inflater.end();
+                        record_count = (int) (dataSize / 8);
+                    } else {
+                        record_count = (int) (nbytes / 8);
+                        dis.readFully(byteBuffer.array(), 0, (int)nbytes);
+                    }
 
                     if(data_type == TYPE_BYTE_ARRAY){
                         record_count = (int) (nbytes);
@@ -490,9 +353,18 @@ public static String getLambdaReadParam(String name,
                             idx += byteBuffer.get(i) & 0xFF;
                         }
                         // Read actual text size                            
-                        nbytes = dis.readLong();
-                        text_size = (int)nbytes;
-                        dis.readFully(text_buffer, 0, (int)nbytes);
+                        nbytes = dis.readLong();                    
+                        if(compressionEnabled){
+                            dis.readFully(compressedBuffer, 0, (int)nbytes);
+                            Inflater inflater = new Inflater();
+                            inflater.setInput(compressedBuffer, 0, (int)nbytes);
+                            int dataSize = inflater.inflate(text_buffer);
+                            inflater.end();
+                            text_size = dataSize;
+                        } else {
+                            text_size = (int)nbytes;
+                            dis.readFully(text_buffer, 0, (int)nbytes);
+                        }
                     }
                 }
 
@@ -520,11 +392,25 @@ public static String getLambdaReadParam(String name,
             for( int i = 0 ; i < nCols; i++) {
                 columVector[i] = new ColumVector(dataTypes[i]);
             }
+            
+            Boolean compressionEnabled = false;
+            String compressionTypeEnv = System.getenv("DIKE_COMPRESSION");
+            if(compressionTypeEnv != null){
+                if(compressionTypeEnv.equals("zlib")){
+                    compressionEnabled = true;                    
+                }
+            }
+
+            if(compressionEnabled){
+                System.out.println("Compression ENABLED ");
+            } else {
+                System.out.println("Compression DISABLED ");
+            }
 
             while(true) {
                 try {
                     for( int i = 0 ; i < nCols; i++) {
-                        columVector[i].readColumn(dis);
+                        columVector[i].readColumn(dis, compressionEnabled);
                     }
                                       
                     if(totalRecords < traceRecordCount) {                        
@@ -562,6 +448,8 @@ public static String getLambdaReadParam(String name,
 
 // mvn package -o
 // java -classpath target/ndp-hdfs-client-1.0-jar-with-dependencies.jar org.dike.hdfs.DikeLambdaClient /lineitem_srg.parquet
+
+// for i in $(seq 1 500); do echo $i && java -classpath target/ndp-hdfs-client-1.0-jar-with-dependencies.jar org.dike.hdfs.DikeLambdaClient /lineitem_srg.parquet; done
 
 /*
   required int64 field_id=1 l_orderkey;

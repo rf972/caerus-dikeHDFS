@@ -146,15 +146,35 @@ class ProjectionNode : public Node {
 
 class OutputNode : public Node {
     public:
+    bool compressionEnabled = false;
+
     DikeIO * output = NULL;
     uint8_t * lenBuffer = NULL;
     uint8_t * dataBuffer = NULL;
+
+    uint8_t * compressedBuffer = NULL;
+    int64_t compressedLen = 0;
+    uint32_t compressedBufferLen = Column::MAX_SIZE * 128 + 1024;
+
     OutputNode(Poco::JSON::Object::Ptr pObject, DikeProcessorConfig & dikeProcessorConfig, DikeIO * output) 
         : Node(pObject, dikeProcessorConfig, output) 
     {        
         this->output = output;
+
+        if(pObject->has("CompressionType")){
+            std::string compressionType = pObject->getValue<std::string>("CompressionType");
+            if(verbose){
+                std::cout << "CompressionType " << compressionType << std::endl;
+            }
+            if(compressionType.compare("zlib") == 0){
+                compressionEnabled = true;
+                compressedBuffer = new uint8_t [compressedBufferLen]; // Max text lenght + compression header
+            }
+        }
+
         lenBuffer = new uint8_t [Column::MAX_SIZE];
         dataBuffer = new uint8_t [Column::MAX_SIZE * 128]; // Max text lenght
+        
     }
 
     virtual ~OutputNode(){
@@ -164,9 +184,16 @@ class OutputNode : public Node {
         if(dataBuffer){
             delete [] dataBuffer;
         }
+        if(compressedBuffer){
+            delete [] compressedBuffer;
+        }
+
     }
     virtual void UpdateColumnMap(Frame * frame) override;
     virtual bool Step() override;
+    void Compress(uint8_t * data, uint32_t len);
+    void TranslateBE64(void * in_data, uint8_t * out_data, uint32_t len);
+    void Send(void * data, uint32_t len);
 };
 
 Node * CreateNode(Poco::JSON::Object::Ptr pObject, DikeProcessorConfig & dikeProcessorConfig, DikeIO * output);
