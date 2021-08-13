@@ -11,6 +11,7 @@
 
 class DikeSQL : public DikeProcessor {    
     public:
+    DikeAsyncWriter * dikeWriter = NULL;
     sqlite3_stmt * sqlRes;
     DikeSQL(){};
 

@@ -12,7 +12,7 @@ add_subdirectory(dikeSQL)
 add_subdirectory(dikeS3)
 add_subdirectory(dikeLambda)
 
-include_directories(dikeSQL dikeS3 dikeLambda)
+include_directories(. dikeSQL dikeS3)
 
 project(dikeHDFS)
 add_executable(dikeHDFS src/dikeHDFS.cpp src/DikeBinaryColumn.c)
