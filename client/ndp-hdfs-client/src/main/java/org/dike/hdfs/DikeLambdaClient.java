@@ -59,6 +59,12 @@ import java.util.zip.DataFormatException;
 import java.util.zip.Deflater;
 import java.util.zip.Inflater;
 
+// LZ4 support
+import net.jpountz.lz4.LZ4Exception;
+import net.jpountz.lz4.LZ4Factory;
+import net.jpountz.lz4.LZ4FastDecompressor;
+import net.jpountz.lz4.LZ4SafeDecompressor;
+import net.jpountz.xxhash.XXHashFactory;
 
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.fs.Path;
@@ -310,6 +316,7 @@ public static String getLambdaReadParam(String name,
                 int index_buffer [] = null;
                 int data_type;
                 int record_count;
+                Inflater inflater = new Inflater();
                 byte [] compressedBuffer = new byte[256 * 1024];
                 public ColumVector(int data_type){
                     this.data_type = data_type;
@@ -330,20 +337,24 @@ public static String getLambdaReadParam(String name,
                     }
                 }
 
-                public void readColumn(DataInputStream dis, Boolean compressionEnabled) 
+                public void readRawData(DataInputStream dis) throws IOException {
+                    long nbytes = dis.readLong();
+                    dis.readFully(compressedBuffer, 0, (int)nbytes);
+                    if(data_type == TYPE_BYTE_ARRAY){
+                        nbytes = dis.readLong();
+                        dis.readFully(compressedBuffer, 0, (int)nbytes);
+                    }
+                }
+
+                public void readColumn(DataInputStream dis, Inflater inflater) 
                     throws DataFormatException, UnsupportedEncodingException, IOException {
                     long nbytes = dis.readLong();
-                    if(compressionEnabled){
-                        dis.readFully(compressedBuffer, 0, (int)nbytes);
-                        Inflater inflater = new Inflater();
-                        inflater.setInput(compressedBuffer, 0, (int)nbytes);
-                        int dataSize = inflater.inflate(byteBuffer.array());
-                        inflater.end();
-                        record_count = (int) (dataSize / 8);
-                    } else {
-                        record_count = (int) (nbytes / 8);
-                        dis.readFully(byteBuffer.array(), 0, (int)nbytes);
-                    }
+                    
+                    dis.readFully(compressedBuffer, 0, (int)nbytes);                        
+                    inflater.setInput(compressedBuffer);
+                    int dataSize = inflater.inflate(byteBuffer.array());
+                    inflater.reset();
+                    record_count = (int) (dataSize / 8);
 
                     if(data_type == TYPE_BYTE_ARRAY){
                         record_count = (int) (nbytes);
@@ -354,17 +365,66 @@ public static String getLambdaReadParam(String name,
                         }
                         // Read actual text size                            
                         nbytes = dis.readLong();                    
-                        if(compressionEnabled){
-                            dis.readFully(compressedBuffer, 0, (int)nbytes);
-                            Inflater inflater = new Inflater();
-                            inflater.setInput(compressedBuffer, 0, (int)nbytes);
-                            int dataSize = inflater.inflate(text_buffer);
-                            inflater.end();
-                            text_size = dataSize;
-                        } else {
+                        dis.readFully(compressedBuffer, 0, (int)nbytes);                            
+                        inflater.setInput(compressedBuffer);
+                        dataSize = inflater.inflate(text_buffer);
+                        inflater.reset();
+                        text_size = dataSize;
+                   }
+                }
+
+                public void readColumn(DataInputStream dis, LZ4SafeDecompressor decompressor) 
+                    throws DataFormatException, UnsupportedEncodingException, IOException {
+                    long nbytes = dis.readLong();
+                    
+                    dis.readFully(compressedBuffer, 0, (int)nbytes);
+                    /* Note: if we know decompressed length
+                    * We can call LZ4FastDecompressor :
+                    * decompress(compressedBuffer, 0, byteBuffer.array(), 0, decompressedLength);
+                    * for faster processing
+                    */
+
+                    // Compressed length is known (a little slower)
+                    int dataSize = decompressor.decompress(compressedBuffer, 0, (int)nbytes, byteBuffer.array(), 0);
+
+                    record_count = (int) (dataSize / 8);
+
+                    if(data_type == TYPE_BYTE_ARRAY){
+                        record_count = (int) (nbytes);
+                        int idx = 0;
+                        for(int i = 0; i < record_count; i++){
+                            index_buffer[i] = idx;
+                            idx += byteBuffer.get(i) & 0xFF;
+                        }
+                        // Read actual text size                            
+                        nbytes = dis.readLong();                    
+                        dis.readFully(compressedBuffer, 0, (int)nbytes);                            
+                        //inflater.setInput(compressedBuffer);
+                        //dataSize = inflater.inflate(text_buffer);
+                        //inflater.reset();
+                        decompressor.decompress(compressedBuffer, 0, (int)nbytes, text_buffer, 0);
+                        text_size = dataSize;
+                   }
+                }
+
+                public void readColumn(DataInputStream dis) throws IOException {
+                    long nbytes = dis.readLong();
+
+                    record_count = (int) (nbytes / 8);
+                    dis.readFully(byteBuffer.array(), 0, (int)nbytes);
+
+
+                    if(data_type == TYPE_BYTE_ARRAY){
+                        record_count = (int) (nbytes);
+                        int idx = 0;
+                        for(int i = 0; i < record_count; i++){
+                            index_buffer[i] = idx;
+                            idx += byteBuffer.get(i) & 0xFF;
+                        }
+                        // Read actual text size                            
+                        nbytes = dis.readLong();                    
                             text_size = (int)nbytes;
                             dis.readFully(text_buffer, 0, (int)nbytes);
-                        }
                     }
                 }
 
@@ -395,6 +455,11 @@ public static String getLambdaReadParam(String name,
             
             Boolean compressionEnabled = false;
             String compressionTypeEnv = System.getenv("DIKE_COMPRESSION");
+            Inflater inflater = new Inflater();
+            LZ4Factory factory = LZ4Factory.fastestInstance();
+            //LZ4FastDecompressor decompressor = factory.fastDecompressor();
+            LZ4SafeDecompressor decompressor = factory.safeDecompressor();
+
             if(compressionTypeEnv != null){
                 if(compressionTypeEnv.equals("zlib")){
                     compressionEnabled = true;                    
@@ -410,9 +475,15 @@ public static String getLambdaReadParam(String name,
             while(true) {
                 try {
                     for( int i = 0 ; i < nCols; i++) {
-                        columVector[i].readColumn(dis, compressionEnabled);
+                        if(compressionEnabled) {
+                            //columVector[i].readColumn(dis, inflater);
+                            //columVector[i].readRawData(dis);
+                            columVector[i].readColumn(dis, decompressor);
+                        } else {
+                            columVector[i].readColumn(dis);
+                        }
                     }
-                                      
+                    
                     if(totalRecords < traceRecordCount) {                        
                         for(int idx = 0; idx < traceRecordCount; idx++){
                             String record = "";
@@ -422,14 +493,24 @@ public static String getLambdaReadParam(String name,
                             System.out.println(record);
                         }                        
                     }
-
                     
-                    totalRecords += columVector[0].record_count;                    
+                    totalRecords += columVector[0].record_count;
+                    
                 }catch (Exception ex) {
                     System.out.println(ex);
                     break;
                 }
             }
+            // Trace last column                        
+            for(int idx = 0; idx < traceRecordCount; idx++){
+                String record = "";
+                for( int i = 0 ; i < nCols; i++) {
+                    record += columVector[i].getString(idx) + ",";
+                }
+                System.out.println(record);
+            }
+            
+                                       
         } catch (Exception ex) {
             System.out.println("Error occurred: ");
             ex.printStackTrace();

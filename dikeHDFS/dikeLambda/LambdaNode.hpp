@@ -191,9 +191,11 @@ class OutputNode : public Node {
     }
     virtual void UpdateColumnMap(Frame * frame) override;
     virtual bool Step() override;
-    void Compress(uint8_t * data, uint32_t len);
+    void CompressZlib(uint8_t * data, uint32_t len, bool is_binary);
+    void CompressLZ4(uint8_t * data, uint32_t len);
+
     void TranslateBE64(void * in_data, uint8_t * out_data, uint32_t len);
-    void Send(void * data, uint32_t len);
+    void Send(void * data, uint32_t len, bool is_binary);
 };
 
 Node * CreateNode(Poco::JSON::Object::Ptr pObject, DikeProcessorConfig & dikeProcessorConfig, DikeIO * output);

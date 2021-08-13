@@ -3,10 +3,13 @@
 #include <Poco/Net/HTTPRequest.h>
 #include <Poco/zlib.h>
 
+#include "lz4.h"
+
 #include "LambdaNode.hpp"
 
-
 using namespace lambda;
+
+uint8_t lz4_state_memory [32<<10] __attribute__((aligned(128))); // see (int LZ4_sizeofState(void);)
 
 InputNode::InputNode(Poco::JSON::Object::Ptr pObject, DikeProcessorConfig & dikeProcessorConfig, DikeIO * output) 
 : Node(pObject, dikeProcessorConfig, output) 
@@ -243,13 +246,13 @@ bool OutputNode::Step()
                 data_size = col->row_count * sizeof(int64_t);
                 //std::cout << "data_size " << data_size << std::endl;
                 TranslateBE64(col->int64_values, dataBuffer, col->row_count);
-                Send(dataBuffer, data_size);
+                Send(dataBuffer, data_size, true);
                 break;
             case Column::DataType::DOUBLE:
                 data_size = col->row_count * sizeof(double);
                 //std::cout << "data_size " << data_size << std::endl;
                 TranslateBE64(col->double_values, dataBuffer, col->row_count);
-                Send(dataBuffer, data_size);
+                Send(dataBuffer, data_size, true);
             break;
             case Column::DataType::BYTE_ARRAY:
                 data_size = col->row_count;
@@ -266,14 +269,14 @@ bool OutputNode::Step()
                     }
                 }
                 //output->write((const char *)lenBuffer, (uint32_t)data_size);
-                Send(lenBuffer, data_size);
+                Send(lenBuffer, data_size, true);
                 // Write actual data
                 data_size = dataPtr - dataBuffer;
                 //std::cout << "data_size " << data_size << std::endl;
                 //be_value = htobe64(data_size);
                 //output->write((const char *)&be_value, (uint32_t)sizeof(int64_t));
                 //output->write((const char *)dataBuffer, (uint32_t)data_size);
-                Send(dataBuffer, data_size);
+                Send(dataBuffer, data_size, false);
             break;
         }
     }
@@ -284,11 +287,12 @@ bool OutputNode::Step()
     return done;
 }
 
-void OutputNode::Send(void * data, uint32_t len)
+void OutputNode::Send(void * data, uint32_t len, bool is_binary)
 {
     int64_t be_value;
     if(compressionEnabled) {
-        Compress((uint8_t *)data, len);
+        CompressLZ4((uint8_t *)data, len);
+        //CompressZlib((uint8_t *)data, len, is_binary);
         be_value = htobe64(compressedLen);
         output->write((const char *)&be_value, (uint32_t)sizeof(int64_t));
         output->write((const char *)compressedBuffer, compressedLen);
@@ -309,12 +313,17 @@ void OutputNode::TranslateBE64(void * in_data, uint8_t * out_data, uint32_t len)
     }
 }
 
-void OutputNode::Compress(uint8_t * data, uint32_t len)
+void OutputNode::CompressZlib(uint8_t * data, uint32_t len, bool is_binary)
 {
     z_stream defstream;
     defstream.zalloc = Z_NULL;
     defstream.zfree = Z_NULL;
-    defstream.opaque = Z_NULL;    
+    defstream.opaque = Z_NULL;
+    if(is_binary){
+        defstream.data_type = Z_BINARY;
+    } else {
+        defstream.data_type = Z_TEXT;
+    }
     defstream.avail_in = len; // size of input
     defstream.next_in = data; // input data
     defstream.avail_out = compressedBufferLen; // size of output
@@ -325,6 +334,15 @@ void OutputNode::Compress(uint8_t * data, uint32_t len)
     deflateEnd(&defstream);
 
     compressedLen = defstream.total_out;
+}
+
+void OutputNode::CompressLZ4(uint8_t * data, uint32_t len)
+{
+    //compressedLen = LZ4_compress_default((const char*)data, (char*)compressedBuffer, len, compressedBufferLen);
+    int acceleration = 1; // The larger the acceleration value, the faster the algorithm. Each successive value providing roughly +~3% to speed.
+    //compressedLen = LZ4_compress_fast((const char*)data, (char*)compressedBuffer, len, compressedBufferLen, acceleration);
+
+    compressedLen = LZ4_compress_fast_extState(lz4_state_memory, (const char*)data, (char*)compressedBuffer, len, compressedBufferLen, acceleration);        
 }
 
 void Frame::Free()

@@ -25,7 +25,7 @@ target_include_directories(dikeHDFS PUBLIC
     ${CMAKE_SOURCE_DIR}/external/build-aws/include
     )
 
-SET(AWS_LIBS -laws-c-event-stream  -laws-checksums -laws-c-common -laws-c-io -laws-c-cal -ls2n -lssl -lcrypto -laws-c-common)
+SET(AWS_LIBS -laws-c-event-stream  -laws-checksums -laws-c-common -laws-c-io -laws-c-cal -ls2n -lssl -lcrypto -laws-c-common -llz4)
 SET(PARQUET_LIBS -larrow -lparquet)
 
 target_link_libraries(dikeHDFS PUBLIC 
