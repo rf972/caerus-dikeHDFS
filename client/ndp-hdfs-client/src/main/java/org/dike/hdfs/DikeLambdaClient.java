@@ -502,7 +502,7 @@ public static String getLambdaQ5ReadParam(String name,
             LZ4SafeDecompressor decompressor = factory.safeDecompressor();
 
             if(compressionTypeEnv != null){
-                if(compressionTypeEnv.equals("zlib")){
+                if(compressionTypeEnv.equals("lz4")){
                     compressionEnabled = true;                    
                 }
             }
