@@ -1,11 +1,15 @@
 #include <Poco/URI.h>
 #include "Poco/Thread.h"
 #include <Poco/Net/HTTPRequest.h>
+#include <Poco/zlib.h>
+
+#include "lz4.h"
 
 #include "LambdaNode.hpp"
 
-
 using namespace lambda;
+
+uint8_t lz4_state_memory [32<<10] __attribute__((aligned(128))); // see (int LZ4_sizeofState(void);)
 
 InputNode::InputNode(Poco::JSON::Object::Ptr pObject, DikeProcessorConfig & dikeProcessorConfig, DikeIO * output) 
 : Node(pObject, dikeProcessorConfig, output) 
@@ -241,36 +245,20 @@ bool OutputNode::Step()
             case Column::DataType::INT64:
                 data_size = col->row_count * sizeof(int64_t);
                 //std::cout << "data_size " << data_size << std::endl;
-                be_value = htobe64(data_size);
-                output->write((const char *)&be_value, (uint32_t)sizeof(int64_t));
-                // Translate data to Big Endian
-                {
-                    int64_t * int64_ptr = (int64_t *)dataBuffer;
-                    for(int j = 0; j < col->row_count; j ++) {
-                        int64_ptr[j] = htobe64(col->int64_values[j]);
-                    }
-                }                
-                output->write((const char *)dataBuffer, (uint32_t)data_size);
+                TranslateBE64(col->int64_values, dataBuffer, col->row_count);
+                Send(dataBuffer, data_size, true);
                 break;
             case Column::DataType::DOUBLE:
                 data_size = col->row_count * sizeof(double);
                 //std::cout << "data_size " << data_size << std::endl;
-                be_value = htobe64(data_size);
-                output->write((const char *)&be_value, (uint32_t)sizeof(int64_t));
-                // Translate data to Big Endian
-                {
-                    int64_t * int64_ptr = (int64_t *)dataBuffer;
-                    for(int j = 0; j < col->row_count; j ++) {
-                        int64_ptr[j] = htobe64(*(int64_t *)&col->double_values[j]);
-                    }
-                }                               
-                output->write((const char *)dataBuffer, (uint32_t)data_size);
+                TranslateBE64(col->double_values, dataBuffer, col->row_count);
+                Send(dataBuffer, data_size, true);
             break;
             case Column::DataType::BYTE_ARRAY:
                 data_size = col->row_count;
                 //std::cout << "data_size " << data_size << std::endl;
-                be_value = htobe64(data_size);
-                output->write((const char *)&be_value, (uint32_t)sizeof(int64_t));
+                //be_value = htobe64(data_size);
+                //output->write((const char *)&be_value, (uint32_t)sizeof(int64_t));
                 uint8_t * dataPtr = dataBuffer;        
                 for(int j = 0; j < col->row_count; j++){
                     uint8_t len = col->ba_values[j].len;
@@ -280,13 +268,15 @@ bool OutputNode::Step()
                         dataPtr++;
                     }
                 }
-                output->write((const char *)lenBuffer, (uint32_t)data_size);
+                //output->write((const char *)lenBuffer, (uint32_t)data_size);
+                Send(lenBuffer, data_size, true);
                 // Write actual data
                 data_size = dataPtr - dataBuffer;
                 //std::cout << "data_size " << data_size << std::endl;
-                be_value = htobe64(data_size);
-                output->write((const char *)&be_value, (uint32_t)sizeof(int64_t));
-                output->write((const char *)dataBuffer, (uint32_t)data_size);
+                //be_value = htobe64(data_size);
+                //output->write((const char *)&be_value, (uint32_t)sizeof(int64_t));
+                //output->write((const char *)dataBuffer, (uint32_t)data_size);
+                Send(dataBuffer, data_size, false);
             break;
         }
     }
@@ -295,6 +285,64 @@ bool OutputNode::Step()
     }
     inFrame->Free();
     return done;
+}
+
+void OutputNode::Send(void * data, uint32_t len, bool is_binary)
+{
+    int64_t be_value;
+    if(compressionEnabled) {
+        CompressLZ4((uint8_t *)data, len);
+        //CompressZlib((uint8_t *)data, len, is_binary);
+        be_value = htobe64(compressedLen);
+        output->write((const char *)&be_value, (uint32_t)sizeof(int64_t));
+        output->write((const char *)compressedBuffer, compressedLen);
+    } else {
+        be_value = htobe64(len);
+        output->write((const char *)&be_value, (uint32_t)sizeof(int64_t));
+        output->write((const char *)data, len);
+    }
+}
+
+void OutputNode::TranslateBE64(void * in_data, uint8_t * out_data, uint32_t len)
+{
+    // Translate data to Big Endian
+    int64_t * in_ptr = (int64_t *)in_data;
+    int64_t * out_ptr = (int64_t *)out_data;
+    for(int i = 0; i < len; i ++) {
+        out_ptr[i] = htobe64(in_ptr[i]);
+    }
+}
+
+void OutputNode::CompressZlib(uint8_t * data, uint32_t len, bool is_binary)
+{
+    z_stream defstream;
+    defstream.zalloc = Z_NULL;
+    defstream.zfree = Z_NULL;
+    defstream.opaque = Z_NULL;
+    if(is_binary){
+        defstream.data_type = Z_BINARY;
+    } else {
+        defstream.data_type = Z_TEXT;
+    }
+    defstream.avail_in = len; // size of input
+    defstream.next_in = data; // input data
+    defstream.avail_out = compressedBufferLen; // size of output
+    defstream.next_out = compressedBuffer; // output data
+        
+    deflateInit(&defstream, Z_BEST_SPEED);
+    deflate(&defstream, Z_FINISH);
+    deflateEnd(&defstream);
+
+    compressedLen = defstream.total_out;
+}
+
+void OutputNode::CompressLZ4(uint8_t * data, uint32_t len)
+{
+    //compressedLen = LZ4_compress_default((const char*)data, (char*)compressedBuffer, len, compressedBufferLen);
+    int acceleration = 1; // The larger the acceleration value, the faster the algorithm. Each successive value providing roughly +~3% to speed.
+    //compressedLen = LZ4_compress_fast((const char*)data, (char*)compressedBuffer, len, compressedBufferLen, acceleration);
+
+    compressedLen = LZ4_compress_fast_extState(lz4_state_memory, (const char*)data, (char*)compressedBuffer, len, compressedBufferLen, acceleration);        
 }
 
 void Frame::Free()
