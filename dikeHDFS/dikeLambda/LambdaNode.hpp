@@ -166,7 +166,7 @@ class OutputNode : public Node {
             if(verbose){
                 std::cout << "CompressionType " << compressionType << std::endl;
             }
-            if(compressionType.compare("zlib") == 0){
+            if(compressionType.compare("lz4") == 0){
                 compressionEnabled = true;
                 compressedBuffer = new uint8_t [compressedBufferLen]; // Max text lenght + compression header
             }
