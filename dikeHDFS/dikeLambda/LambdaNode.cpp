@@ -40,25 +40,28 @@ InputNode::InputNode(Poco::JSON::Object::Ptr pObject, DikeProcessorConfig & dike
     int threadId = current->id();        
             
     if (hadoopFileSystemMap.count(threadId)) {
-        fs = hadoopFileSystemMap[threadId];
         //std::cout << " LambdaParquetReader id " << threadId << " reuse FS connection "<< std::endl;
+        fs = hadoopFileSystemMap[threadId];        
     } else {
-        arrow::io::HadoopFileSystem::Connect(&hdfsConnectionConfig, &fs);
-        hadoopFileSystemMap[threadId] = fs;
         //std::cout << " LambdaParquetReader id " << threadId << " create FS connection "<< std::endl;
+        arrow::io::HadoopFileSystem::Connect(&hdfsConnectionConfig, &fs);
+        hadoopFileSystemMap[threadId] = fs;        
     }
                                     
     fs->OpenReadable(fileName, &inputFile);                        
 
     if (fileMetaDataMap.count(fileName)) {
         if (0 == fileLastAccessTimeMap[fileName].compare(dikeProcessorConfig["Configuration.LastAccessTime"])){
+            //std::cout << " LambdaParquetReader reuse fileMetaData "<< std::endl;
             fileMetaData = fileMetaDataMap[fileName];                
         } else {
+            //std::cout << " LambdaParquetReader read fileMetaData "<< std::endl;
             fileMetaData = std::move(parquet::ReadMetaData(inputFile));
             fileMetaDataMap[fileName] = fileMetaData;
             fileLastAccessTimeMap[fileName] = dikeProcessorConfig["Configuration.LastAccessTime"];                
         }            
     } else {
+        //std::cout << " LambdaParquetReader read fileMetaData "<< std::endl;
         fileMetaData = std::move(parquet::ReadMetaData(inputFile));
         fileMetaDataMap[fileName] = fileMetaData;
         fileLastAccessTimeMap[fileName] = dikeProcessorConfig["Configuration.LastAccessTime"];            
@@ -102,15 +105,14 @@ void InputNode::Init()
 }
 
 bool InputNode::Step()
-{
+{    
     //std::cout << "InputNode::Step " << stepCount << std::endl;
     if(done) { return done; }
     stepCount++;
 
-    int size = std::min((int)Column::MAX_SIZE, numRows - rowCount);
-    Frame * frame = NULL;
+    int size = std::min((int)Column::MAX_SIZE, numRows - rowCount);    
 
-    frame = allocFrame();
+    Frame * frame = allocFrame();
     if(frame == NULL){
         frame = new Frame(this); // Allocate new frame with data    
         for(int i = 0; i < columnCount; i++){                        
@@ -133,6 +135,7 @@ bool InputNode::Step()
             frame->columns[i]->Read(columnReaders[i], size); 
         }       
     }
+
     rowCount += size;
     if(rowCount >= numRows){
         frame->lastFrame = true;
@@ -143,14 +146,13 @@ bool InputNode::Step()
 }
 
 InputNode::~InputNode() 
-{
+{    
     if(columnReaders) {
-        for(int i = 0; i < columnCount; i++) {
+        for(int i = 0; i < columnCount; i++){
             if(columnReaders[i]) {
-                columnReaders[i].reset(); // This should dereference shared_ptr
+                columnReaders[i].reset();
             }
-        }
-
+        }        
         delete [] columnReaders;
     }
     if(columnTypes){
@@ -238,27 +240,21 @@ bool OutputNode::Step()
     Column * col = 0;
     int64_t be_value;
     for( int i  = 0; i < inFrame->columns.size(); i++){
-        col = inFrame->columns[i];
-        //std::cout << "Writing out " << col->name << std::endl;
+        col = inFrame->columns[i];        
         int64_t data_size;
         switch (col->data_type) {
             case Column::DataType::INT64:
                 data_size = col->row_count * sizeof(int64_t);
-                //std::cout << "data_size " << data_size << std::endl;
                 TranslateBE64(col->int64_values, dataBuffer, col->row_count);
                 Send(dataBuffer, data_size, true);
                 break;
             case Column::DataType::DOUBLE:
-                data_size = col->row_count * sizeof(double);
-                //std::cout << "data_size " << data_size << std::endl;
+                data_size = col->row_count * sizeof(double);                
                 TranslateBE64(col->double_values, dataBuffer, col->row_count);
                 Send(dataBuffer, data_size, true);
             break;
             case Column::DataType::BYTE_ARRAY:
                 data_size = col->row_count;
-                //std::cout << "data_size " << data_size << std::endl;
-                //be_value = htobe64(data_size);
-                //output->write((const char *)&be_value, (uint32_t)sizeof(int64_t));
                 uint8_t * dataPtr = dataBuffer;        
                 for(int j = 0; j < col->row_count; j++){
                     uint8_t len = col->ba_values[j].len;
@@ -268,21 +264,17 @@ bool OutputNode::Step()
                         dataPtr++;
                     }
                 }
-                //output->write((const char *)lenBuffer, (uint32_t)data_size);
-                Send(lenBuffer, data_size, true);
-                // Write actual data
+                Send(lenBuffer, data_size, true);                
                 data_size = dataPtr - dataBuffer;
-                //std::cout << "data_size " << data_size << std::endl;
-                //be_value = htobe64(data_size);
-                //output->write((const char *)&be_value, (uint32_t)sizeof(int64_t));
-                //output->write((const char *)dataBuffer, (uint32_t)data_size);
                 Send(dataBuffer, data_size, false);
             break;
         }
     }
+
     if(inFrame->lastFrame){
         done = true;
     }
+    
     inFrame->Free();
     return done;
 }
@@ -344,16 +336,6 @@ void OutputNode::CompressLZ4(uint8_t * data, uint32_t len)
 
     compressedLen = LZ4_compress_fast_extState(lz4_state_memory, (const char*)data, (char*)compressedBuffer, len, compressedBufferLen, acceleration);        
 }
-
-void Frame::Free()
-{
-    if(parentFrame){
-        parentFrame->Free();
-        parentFrame = 0;
-    }
-    ownerNode->freeFrame(this);
-}
-
 
 Node * lambda::CreateNode(Poco::JSON::Object::Ptr pObject, DikeProcessorConfig & dikeProcessorConfig, DikeIO * output) {
     std::string typeStr = pObject->getValue<std::string>("Type");

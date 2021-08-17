@@ -1,6 +1,8 @@
 #ifndef LAMBDA_COLUMN_HPP
 #define LAMBDA_COLUMN_HPP
 
+#include <iostream>
+
 #include <parquet/column_reader.h>
 
 namespace lambda {
@@ -41,34 +43,34 @@ class Column {
     Column(int id, std::string & name, Column::DataType data_type) {
         this->id = id;
         this->name = name;
-        this->data_type = data_type;       
+        this->data_type = data_type;
+        this->refCount ++; // It is referenced by it's creator
     }
 
     void Init() {
         memory_owner = true;
         switch(data_type) {
             case INT64:
-            int64_values = new int64_t [MAX_SIZE];
+            int64_values = new int64_t [Column::config::MAX_SIZE];
             break;
             case DOUBLE:
-            double_values = new double [MAX_SIZE];
+            double_values = new double [Column::config::MAX_SIZE];
             break;
             case BYTE_ARRAY:
-            ba_values = new parquet::ByteArray [MAX_SIZE];
+            ba_values = new parquet::ByteArray [Column::config::MAX_SIZE];
             break;
             default:
             std::cout << "Uknown data_type " << data_type << std::endl;
         }
     }
 
-    Column * Clone()
-    {
+    Column * Clone() {
         refCount++;
         return this;
     }
 
     int Read(std::shared_ptr<parquet::ColumnReader> reader, int read_size) {
-        int64_t values_read;
+        int64_t values_read;        
         row_count = 0;
         switch(data_type) {
             case INT64:

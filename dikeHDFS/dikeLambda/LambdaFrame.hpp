@@ -19,21 +19,9 @@ class Frame {
     Frame * parentFrame = NULL;
     bool lastFrame = false;
 
-    Frame(Node * ownerNode) {
-        this->ownerNode = ownerNode;
-    }
-    ~Frame(){
-        for(int i = 0; i < columns.size(); i++) {
-            columns[i]->refCount--;
-            if(columns[i]->refCount == 0) {
-                delete columns[i];
-            }
-        }
-    }
-    void Add(Column * col) {
-        columns.push_back(col);
-    }
-
+    Frame(Node * ownerNode);
+    ~Frame();
+    void Add(Column * col); // Add column to frame
     void Free(); // Returm this frame to the owners pool
 };
 
