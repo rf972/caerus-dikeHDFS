@@ -143,6 +143,9 @@ public class DikeLambdaClient
         if(name.contains("nation")) {
             return getLambdaQ5ReadParam(name);
         }
+        if(name.contains("customer")) {
+            return getLambdaQ10ReadParam(name);
+        }        
         return null;
     }
 
@@ -179,7 +182,7 @@ public class DikeLambdaClient
         projectionArrayBuilder.add("l_tax");
         projectionArrayBuilder.add("l_returnflag");
         projectionArrayBuilder.add("l_linestatus");
-        projectionArrayBuilder.add("l_shipdate");
+        //projectionArrayBuilder.add("l_shipdate");
 
         projectionNodeBuilder.add("ProjectionArray", projectionArrayBuilder);
 
@@ -228,7 +231,91 @@ public class DikeLambdaClient
         return strw.toString();
     }
     
-public static String getLambdaQ5ReadParam(String name) throws XMLStreamException 
+    public static String getLambdaQ10ReadParam(String name) throws XMLStreamException 
+    {
+        XMLOutputFactory xmlof = XMLOutputFactory.newInstance();
+        StringWriter strw = new StringWriter();
+        XMLStreamWriter xmlw = xmlof.createXMLStreamWriter(strw);
+        xmlw.writeStartDocument();
+        xmlw.writeStartElement("Processor");
+        
+        xmlw.writeStartElement("Name");
+        xmlw.writeCharacters("Lambda");
+        xmlw.writeEndElement(); // Name
+        
+        xmlw.writeStartElement("Configuration");
+
+        xmlw.writeStartElement("DAG");
+        JsonObjectBuilder dagBuilder = Json.createObjectBuilder();
+        dagBuilder.add("Name", "DAG Projection");
+
+        JsonObjectBuilder inputNodeBuilder = Json.createObjectBuilder();
+        inputNodeBuilder.add("Name", "InputNode");
+        inputNodeBuilder.add("Type", "_INPUT");
+        inputNodeBuilder.add("File", name);
+        
+        JsonObjectBuilder projectionNodeBuilder = Json.createObjectBuilder();
+        projectionNodeBuilder.add("Name", "TpchQ1");
+        projectionNodeBuilder.add("Type", "_PROJECTION");
+        JsonArrayBuilder projectionArrayBuilder = Json.createArrayBuilder();
+        projectionArrayBuilder.add("c_custkey");
+        projectionArrayBuilder.add("c_name");
+        projectionArrayBuilder.add("c_address");
+        projectionArrayBuilder.add("c_nationkey");
+        projectionArrayBuilder.add("c_phone");
+        projectionArrayBuilder.add("c_acctbal");
+        projectionArrayBuilder.add("c_comment");
+        
+        //"c_custkey","c_name","c_address","c_nationkey","c_phone","c_acctbal","c_comment"
+
+        projectionNodeBuilder.add("ProjectionArray", projectionArrayBuilder);
+
+        JsonObjectBuilder optputNodeBuilder = Json.createObjectBuilder();
+        optputNodeBuilder.add("Name", "OutputNode");
+        optputNodeBuilder.add("Type", "_OUTPUT");        
+
+        String compressionType = "None";
+        String compressionTypeEnv = System.getenv("DIKE_COMPRESSION");
+        if(compressionTypeEnv != null){
+            compressionType = compressionTypeEnv;
+        }
+        optputNodeBuilder.add("CompressionType", compressionType);
+
+        JsonArrayBuilder nodeArrayBuilder = Json.createArrayBuilder();
+        nodeArrayBuilder.add(inputNodeBuilder.build());
+        nodeArrayBuilder.add(projectionNodeBuilder.build());
+        nodeArrayBuilder.add(optputNodeBuilder.build());        
+
+        dagBuilder.add("NodeArray", nodeArrayBuilder);
+
+        // For now we will assume simple pipe with ordered connections
+        JsonObject dag = dagBuilder.build();
+
+        StringWriter stringWriter = new StringWriter();
+        JsonWriter writer = Json.createWriter(stringWriter);
+        writer.writeObject(dag);
+        writer.close();
+
+        xmlw.writeCharacters(stringWriter.getBuffer().toString());
+        xmlw.writeEndElement(); // DAG
+
+        xmlw.writeStartElement("RowGroupIndex");
+        xmlw.writeCharacters("0");
+        xmlw.writeEndElement(); // RowGroupIndex
+
+        xmlw.writeStartElement("LastAccessTime");
+        xmlw.writeCharacters("1624464464409");
+        xmlw.writeEndElement(); // LastAccessTime
+
+        xmlw.writeEndElement(); // Configuration
+        xmlw.writeEndElement(); // Processor
+        xmlw.writeEndDocument();
+        xmlw.close();
+
+        return strw.toString();
+    }
+
+    public static String getLambdaQ5ReadParam(String name) throws XMLStreamException 
     {
         XMLOutputFactory xmlof = XMLOutputFactory.newInstance();
         StringWriter strw = new StringWriter();
@@ -356,7 +443,8 @@ public static String getLambdaQ5ReadParam(String name) throws XMLStreamException
             final int TYPE_DOUBLE = 5;
             final int TYPE_BYTE_ARRAY = 6;
   
-            class ColumVector {                
+            class ColumVector {   
+                int colId;             
                 ByteBuffer   byteBuffer = null;
                 LongBuffer   longBuffer = null;
                 DoubleBuffer doubleBuffer = null;
@@ -367,7 +455,8 @@ public static String getLambdaQ5ReadParam(String name) throws XMLStreamException
                 int record_count;
                 Inflater inflater = new Inflater();
                 byte [] compressedBuffer = new byte[256 * 1024];
-                public ColumVector(int data_type){
+                public ColumVector(int colId, int data_type){
+                    this.colId = colId;
                     this.data_type = data_type;
                     switch(data_type) {
                         case TYPE_INT64:
@@ -380,7 +469,7 @@ public static String getLambdaQ5ReadParam(String name) throws XMLStreamException
                         break;
                         case TYPE_BYTE_ARRAY:
                             byteBuffer = ByteBuffer.allocate(BATCH_SIZE);
-                            text_buffer = new byte[256 * 1024];
+                            text_buffer = new byte[BATCH_SIZE * 128];
                             index_buffer = new int[BATCH_SIZE];
                         break;
                     }
@@ -458,10 +547,10 @@ public static String getLambdaQ5ReadParam(String name) throws XMLStreamException
 
                 public void readColumn(DataInputStream dis) throws IOException {
                     long nbytes = dis.readLong();
+                    //System.out.format("readColumn[%d] %d ", colId, nbytes);
 
                     record_count = (int) (nbytes / 8);
                     dis.readFully(byteBuffer.array(), 0, (int)nbytes);
-
 
                     if(data_type == TYPE_BYTE_ARRAY){
                         record_count = (int) (nbytes);
@@ -471,10 +560,12 @@ public static String getLambdaQ5ReadParam(String name) throws XMLStreamException
                             idx += byteBuffer.get(i) & 0xFF;
                         }
                         // Read actual text size                            
-                        nbytes = dis.readLong();                    
-                            text_size = (int)nbytes;
-                            dis.readFully(text_buffer, 0, (int)nbytes);
+                        nbytes = dis.readLong();
+                        //System.out.format("text_size %d ", nbytes);
+                        text_size = (int)nbytes;
+                        dis.readFully(text_buffer, 0, (int)nbytes);
                     }
+                    //System.out.format("\n");
                 }
 
                 public String getString(int index) {
@@ -499,7 +590,7 @@ public static String getLambdaQ5ReadParam(String name) throws XMLStreamException
             int record_count = 0;
 
             for( int i = 0 ; i < nCols; i++) {
-                columVector[i] = new ColumVector(dataTypes[i]);
+                columVector[i] = new ColumVector(i, dataTypes[i]);
             }
             
             Boolean compressionEnabled = false;
@@ -569,6 +660,7 @@ public static String getLambdaQ5ReadParam(String name) throws XMLStreamException
 // mvn package -o
 // java -classpath target/ndp-hdfs-client-1.0-jar-with-dependencies.jar org.dike.hdfs.DikeLambdaClient /lineitem_srg.parquet
 // java -classpath target/ndp-hdfs-client-1.0-jar-with-dependencies.jar org.dike.hdfs.DikeLambdaClient /nation.parquet
+// java -classpath target/ndp-hdfs-client-1.0-jar-with-dependencies.jar org.dike.hdfs.DikeLambdaClient /customer.parquet
 
 // for i in $(seq 1 500); do echo $i && java -classpath target/ndp-hdfs-client-1.0-jar-with-dependencies.jar org.dike.hdfs.DikeLambdaClient /lineitem_srg.parquet; done
 
