@@ -263,9 +263,12 @@ bool OutputNode::Step()
                         *dataPtr = col->ba_values[j].ptr[k];
                         dataPtr++;
                     }
-                }
+                }                
                 Send(lenBuffer, data_size, true);                
                 data_size = dataPtr - dataBuffer;
+                if(data_size > Column::MAX_SIZE * 128){ // TODO we have to handle it grasefully
+                    std::cout << "OutputNode::Step " << stepCount << " memory corrupted :: " << data_size << std::endl;
+                }
                 Send(dataBuffer, data_size, false);
             break;
         }
@@ -351,6 +354,7 @@ Node * lambda::CreateNode(Poco::JSON::Object::Ptr pObject, DikeProcessorConfig &
     std::cout << "Uknown Node Type : " << typeStr << std::endl;
     return NULL;
 }
+
 
 std::map<int, std::shared_ptr<arrow::io::HadoopFileSystem> > lambda::InputNode::hadoopFileSystemMap;
 std::map< std::string, std::shared_ptr<parquet::FileMetaData> >  lambda::InputNode::fileMetaDataMap;

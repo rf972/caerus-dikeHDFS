@@ -176,8 +176,7 @@ class OutputNode : public Node {
         }
 
         lenBuffer = new uint8_t [Column::MAX_SIZE];
-        dataBuffer = new uint8_t [Column::MAX_SIZE * 128]; // Max text lenght
-        
+        dataBuffer = new uint8_t [Column::MAX_SIZE * 128]; // Max text lenght        
     }
 
     virtual ~OutputNode(){
