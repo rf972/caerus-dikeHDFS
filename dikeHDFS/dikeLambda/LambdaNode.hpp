@@ -49,6 +49,7 @@ class Node {
     }
 
     virtual ~Node() {
+        //std::cout << "Node::~Node " << name << std::endl;
         while(!framePool.empty()) {
             delete framePool.front();
             framePool.pop();
@@ -86,10 +87,12 @@ class Node {
         }
         Frame * frame = framePool.front();
         framePool.pop();
+        //std::cout << "Pop frame  " << frame <<  " Node " << name << std::endl;
         return frame;           
     }
 
     void freeFrame(Frame * frame) {
+        //std::cout << "Push frame  " << frame <<  " Node " << name << std::endl;
         framePool.push(frame);
     }
 

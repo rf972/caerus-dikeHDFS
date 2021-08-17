@@ -135,8 +135,18 @@ public class DikeLambdaClient
         LambdaTest(dikehdfsPath, fname, conf, true/*pushdown*/, false/*partitionned*/);
     }    
     
-public static String getLambdaReadParam(String name,
-                                      long blockSize) throws XMLStreamException 
+    public static String getLambdaReadParam(String name) throws XMLStreamException
+    {
+        if(name.contains("lineitem")) {
+            return getLambdaQ1ReadParam(name);
+        }
+        if(name.contains("nation")) {
+            return getLambdaQ5ReadParam(name);
+        }
+        return null;
+    }
+
+    public static String getLambdaQ1ReadParam(String name) throws XMLStreamException 
     {
         XMLOutputFactory xmlof = XMLOutputFactory.newInstance();
         StringWriter strw = new StringWriter();
@@ -218,8 +228,7 @@ public static String getLambdaReadParam(String name,
         return strw.toString();
     }
     
-public static String getLambdaQ5ReadParam(String name,
-                                      long blockSize) throws XMLStreamException 
+public static String getLambdaQ5ReadParam(String name) throws XMLStreamException 
     {
         XMLOutputFactory xmlof = XMLOutputFactory.newInstance();
         StringWriter strw = new StringWriter();
@@ -327,9 +336,8 @@ public static String getLambdaQ5ReadParam(String name,
             System.out.println("\nConnected to -- " + fsPath.toString());
             start_time = System.currentTimeMillis();                                                
 
-            dikeFS = (NdpHdfsFileSystem)fs;
-            //readParam = getLambdaReadParam(fname, 0 /* ignore stream size */);                                        
-            readParam = getLambdaQ5ReadParam(fname, 0 /* ignore stream size */);                                        
+            dikeFS = (NdpHdfsFileSystem)fs;            
+            readParam = getLambdaReadParam(fname);                                        
             FSDataInputStream dataInputStream = dikeFS.open(fileToRead, BUFFER_SIZE, readParam);                    
   
             DataInputStream dis = new DataInputStream(new BufferedInputStream(dataInputStream, BUFFER_SIZE ));
@@ -431,7 +439,7 @@ public static String getLambdaQ5ReadParam(String name,
                     record_count = (int) (dataSize / 8);
 
                     if(data_type == TYPE_BYTE_ARRAY){
-                        record_count = (int) (nbytes);
+                        record_count = (int) (dataSize);
                         int idx = 0;
                         for(int i = 0; i < record_count; i++){
                             index_buffer[i] = idx;
@@ -443,7 +451,7 @@ public static String getLambdaQ5ReadParam(String name,
                         //inflater.setInput(compressedBuffer);
                         //dataSize = inflater.inflate(text_buffer);
                         //inflater.reset();
-                        decompressor.decompress(compressedBuffer, 0, (int)nbytes, text_buffer, 0);
+                        dataSize = decompressor.decompress(compressedBuffer, 0, (int)nbytes, text_buffer, 0);
                         text_size = dataSize;
                    }
                 }
@@ -541,17 +549,7 @@ public static String getLambdaQ5ReadParam(String name,
                     System.out.println(ex);
                     break;
                 }
-            }
-            // Trace last column                        
-            for(int idx = 0; idx < traceRecordCount; idx++){
-                String record = "";
-                for( int i = 0 ; i < nCols; i++) {
-                    record += columVector[i].getString(idx) + ",";
-                }
-                System.out.println(record);
-            }
-            
-                                       
+            }                          
         } catch (Exception ex) {
             System.out.println("Error occurred: ");
             ex.printStackTrace();
