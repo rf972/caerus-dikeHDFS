@@ -9,8 +9,6 @@
 
 using namespace lambda;
 
-uint8_t lz4_state_memory [32<<10] __attribute__((aligned(128))); // see (int LZ4_sizeofState(void);)
-
 InputNode::InputNode(Poco::JSON::Object::Ptr pObject, DikeProcessorConfig & dikeProcessorConfig, DikeIO * output) 
 : Node(pObject, dikeProcessorConfig, output) 
 {    
@@ -266,7 +264,7 @@ bool OutputNode::Step()
                 }                
                 Send(lenBuffer, data_size, true);                
                 data_size = dataPtr - dataBuffer;
-                if(data_size > Column::MAX_SIZE * 128){ // TODO we have to handle it grasefully
+                if(data_size > Column::MAX_TEXT_SIZE){ // TODO we have to handle it gracefully
                     std::cout << "OutputNode::Step " << stepCount << " memory corrupted :: " << data_size << std::endl;
                 }
                 Send(dataBuffer, data_size, false);

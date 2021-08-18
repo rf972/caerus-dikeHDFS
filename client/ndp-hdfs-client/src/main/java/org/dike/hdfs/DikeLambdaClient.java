@@ -404,12 +404,13 @@ public class DikeLambdaClient
         int totalRecords = 0;
         String readParam = null;
         Map<String,Statistics> stats;
-        int traceRecordCount = 10;
+        int traceRecordMax = 10;
+        int traceRecordCount = 0;
         final int BUFFER_SIZE = 128 * 1024;
 
-        String traceRecordCountEnv = System.getenv("DIKE_TRACE_RECORD_COUNT");
-        if(traceRecordCountEnv != null){
-            traceRecordCount = Integer.parseInt(traceRecordCountEnv);
+        String traceRecordMaxEnv = System.getenv("DIKE_TRACE_RECORD_MAX");
+        if(traceRecordMaxEnv != null){
+            traceRecordMax = Integer.parseInt(traceRecordMaxEnv);
         }
 
         long start_time = System.currentTimeMillis();
@@ -624,13 +625,14 @@ public class DikeLambdaClient
                         }
                     }
                     
-                    if(totalRecords < traceRecordCount) {                        
-                        for(int idx = 0; idx < traceRecordCount; idx++){
+                    if(traceRecordCount < traceRecordMax) {                        
+                        for(int idx = 0; idx < columVector[0].record_count && traceRecordCount < traceRecordMax; idx++){
                             String record = "";
                             for( int i = 0 ; i < nCols; i++) {
                                 record += columVector[i].getString(idx) + ",";
                             }
                             System.out.println(record);
+                            traceRecordCount++;
                         }                        
                     }
                     
@@ -663,6 +665,11 @@ public class DikeLambdaClient
 // java -classpath target/ndp-hdfs-client-1.0-jar-with-dependencies.jar org.dike.hdfs.DikeLambdaClient /customer.parquet
 
 // for i in $(seq 1 500); do echo $i && java -classpath target/ndp-hdfs-client-1.0-jar-with-dependencies.jar org.dike.hdfs.DikeLambdaClient /lineitem_srg.parquet; done
+
+// 36864,Customer#000036864,tWmo,qWmIl5i9wVN,0,10-768-562-2480,5952.13,deposits cajole above the unusual, regular dugouts. fluffily silent patterns haggle furiously furiously ironic the,
+// 36865,Customer#000056865,ALyVNih5 xNu0lKhiuCf7bd,8,32-969-310-5555,1539.11,nglthe furiously special requests. carefully even ideas use after the carefully final requests. regular, ir,
+
+// export DIKE_TRACE_RECORD_MAX=36865
 
 /*
   required int64 field_id=1 l_orderkey;
