@@ -777,7 +777,7 @@ public class DikeClient
                     }
                                       
                     if(totalRecords < traceRecordCount) {                        
-                        for(int idx = 0; idx < traceRecordCount; idx++){
+                        for(int idx = 0; idx < traceRecordCount && idx < columVector[0].record_count; idx++){
                             String record = "";
                             for( int i = 0 ; i < nCols; i++) {
                                 record += columVector[i].getString(idx) + ",";

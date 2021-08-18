@@ -158,6 +158,7 @@ class OutputNode : public Node {
     uint8_t * compressedBuffer = NULL;
     int64_t compressedLen = 0;
     uint32_t compressedBufferLen = Column::MAX_SIZE * 128 + 1024;
+    uint8_t lz4_state_memory [32<<10] __attribute__((aligned(128))); // see (int LZ4_sizeofState(void);)
 
     OutputNode(Poco::JSON::Object::Ptr pObject, DikeProcessorConfig & dikeProcessorConfig, DikeIO * output) 
         : Node(pObject, dikeProcessorConfig, output) 

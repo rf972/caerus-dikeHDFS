@@ -25,6 +25,7 @@ class Column {
 
     enum config {
         MAX_SIZE = 4096,
+        MAX_TEXT_SIZE = 4096 * 128,
     };
 
     public:
@@ -33,7 +34,10 @@ class Column {
     Column::DataType data_type;
     int64_t * int64_values = NULL;
     double *  double_values = NULL;
-    parquet::ByteArray * ba_values = NULL;    
+    parquet::ByteArray * ba_values = NULL;
+
+    uint8_t * textBuffer = NULL; // Shadow buffer 
+    uint8_t * textBufferPtr = NULL; // Pointer to memory inside textBuffer
 
     uint64_t row_count = 0; // Number of valid rows in this column
     bool memory_owner = false; // This column must destroy it's memory
@@ -58,6 +62,7 @@ class Column {
             break;
             case BYTE_ARRAY:
             ba_values = new parquet::ByteArray [Column::config::MAX_SIZE];
+            textBuffer = new uint8_t[MAX_TEXT_SIZE];
             break;
             default:
             std::cout << "Uknown data_type " << data_type << std::endl;
@@ -93,7 +98,12 @@ class Column {
             {
                 parquet::ByteArrayReader* ba_reader = static_cast<parquet::ByteArrayReader*>(reader.get());
                 while(row_count < read_size) {
-                    row_count += ba_reader->ReadBatch(read_size - row_count, 0, 0, &ba_values[row_count], &values_read);
+                    ba_reader->ReadBatch(read_size - row_count, 0, 0, &ba_values[row_count], &values_read);
+                    if(values_read < read_size) { // Page boundary detection
+                        fillTextBuffer(row_count, values_read);
+                    }
+                    row_count += values_read;
+                    //std::cout << "Read Column " << id <<  " " << name << " row_count " << row_count << std::endl;
                 }
             }
             break;
@@ -102,6 +112,19 @@ class Column {
         return row_count;
     }
 
+    void fillTextBuffer(int offset, int size) {
+        if(offset == 0) {
+            textBufferPtr = textBuffer;
+        }
+
+        for (int i = offset; i < offset + size; i++){
+            for(int j = 0; j < ba_values[i].len; j++){
+                textBufferPtr[j] =  ba_values[i].ptr[j];                
+            }
+            ba_values[i].ptr = textBufferPtr;
+            textBufferPtr += ba_values[i].len;
+        }
+    }
     ~Column() {
         if(memory_owner){
             switch(data_type) {
@@ -113,6 +136,7 @@ class Column {
             break;
             case BYTE_ARRAY:
             delete [] ba_values;
+            delete [] textBuffer;
             break;
             }
         }
