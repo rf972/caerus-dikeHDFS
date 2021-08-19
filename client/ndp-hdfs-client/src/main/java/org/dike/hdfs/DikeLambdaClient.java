@@ -443,7 +443,13 @@ public class DikeLambdaClient
             final int TYPE_INT64 = 2;
             final int TYPE_DOUBLE = 5;
             final int TYPE_BYTE_ARRAY = 6;
-  
+            final int TYPE_FIXED_LEN_BYTE_ARRAY = 7;
+
+            final int HEADER_DATA_TYPE = 0 * 4;
+            final int HEADER_TYPE_SIZE = 1 * 4;
+            final int HEADER_DATA_LEN = 2 * 4;
+            final int HEADER_COMPRESSED_LEN = 3 * 4;
+
             class ColumVector {   
                 int colId;             
                 ByteBuffer   byteBuffer = null;
@@ -451,14 +457,18 @@ public class DikeLambdaClient
                 DoubleBuffer doubleBuffer = null;
                 byte text_buffer[] = null;
                 int text_size;
+                int fixedTextLen = 0;
                 int index_buffer [] = null;
                 int data_type;
-                int record_count;
-                Inflater inflater = new Inflater();
+                int record_count;                
                 byte [] compressedBuffer = new byte[256 * 1024];
+
+                ByteBuffer header = null;
+
                 public ColumVector(int colId, int data_type){
                     this.colId = colId;
                     this.data_type = data_type;
+                    header = ByteBuffer.allocate(4 * 4); // Header size by int size
                     switch(data_type) {
                         case TYPE_INT64:
                             byteBuffer = ByteBuffer.allocate(BATCH_SIZE * 8);
@@ -485,37 +495,13 @@ public class DikeLambdaClient
                     }
                 }
 
-                public void readColumn(DataInputStream dis, Inflater inflater) 
-                    throws DataFormatException, UnsupportedEncodingException, IOException {
-                    long nbytes = dis.readLong();
-                    
-                    dis.readFully(compressedBuffer, 0, (int)nbytes);                        
-                    inflater.setInput(compressedBuffer);
-                    int dataSize = inflater.inflate(byteBuffer.array());
-                    inflater.reset();
-                    record_count = (int) (dataSize / 8);
-
-                    if(data_type == TYPE_BYTE_ARRAY){
-                        record_count = (int) (nbytes);
-                        int idx = 0;
-                        for(int i = 0; i < record_count; i++){
-                            index_buffer[i] = idx;
-                            idx += byteBuffer.get(i) & 0xFF;
-                        }
-                        // Read actual text size                            
-                        nbytes = dis.readLong();                    
-                        dis.readFully(compressedBuffer, 0, (int)nbytes);                            
-                        inflater.setInput(compressedBuffer);
-                        dataSize = inflater.inflate(text_buffer);
-                        inflater.reset();
-                        text_size = dataSize;
-                   }
-                }
-
                 public void readColumn(DataInputStream dis, LZ4SafeDecompressor decompressor) 
                     throws DataFormatException, UnsupportedEncodingException, IOException {
-                    long nbytes = dis.readLong();
-                    
+                    long nbytes;
+                    dis.readFully(header.array(), 0, header.capacity());
+                    nbytes = header.getInt(HEADER_COMPRESSED_LEN);                    
+                    //System.out.format("readColumn[%d] %d header size %d ", colId, nbytes, header.capacity());
+
                     dis.readFully(compressedBuffer, 0, (int)nbytes);
                     /* Note: if we know decompressed length
                     * We can call LZ4FastDecompressor :
@@ -524,11 +510,18 @@ public class DikeLambdaClient
                     */
 
                     // Compressed length is known (a little slower)
-                    int dataSize = decompressor.decompress(compressedBuffer, 0, (int)nbytes, byteBuffer.array(), 0);
+                    int dataSize;
+                    if(TYPE_FIXED_LEN_BYTE_ARRAY == header.getInt(HEADER_DATA_TYPE)){
+                        fixedTextLen = header.getInt(HEADER_TYPE_SIZE);                        
+                        dataSize = decompressor.decompress(compressedBuffer, 0, (int)nbytes, text_buffer, 0);
+                        record_count = (int) (dataSize / fixedTextLen);
+                    } else {
+                        fixedTextLen = 0;
+                        dataSize = decompressor.decompress(compressedBuffer, 0, (int)nbytes, byteBuffer.array(), 0);
+                        record_count = (int) (dataSize / 8);
+                    }
 
-                    record_count = (int) (dataSize / 8);
-
-                    if(data_type == TYPE_BYTE_ARRAY){
+                    if(TYPE_BYTE_ARRAY == header.getInt(HEADER_DATA_TYPE)){
                         record_count = (int) (dataSize);
                         int idx = 0;
                         for(int i = 0; i < record_count; i++){
@@ -536,24 +529,80 @@ public class DikeLambdaClient
                             idx += byteBuffer.get(i) & 0xFF;
                         }
                         // Read actual text size                            
-                        nbytes = dis.readLong();                    
+                        // nbytes = dis.readLong();
+                        dis.readFully(header.array(), 0, header.capacity());                                                
+                        nbytes = header.getInt(HEADER_COMPRESSED_LEN);                        
                         dis.readFully(compressedBuffer, 0, (int)nbytes);                            
-                        //inflater.setInput(compressedBuffer);
-                        //dataSize = inflater.inflate(text_buffer);
-                        //inflater.reset();
                         dataSize = decompressor.decompress(compressedBuffer, 0, (int)nbytes, text_buffer, 0);
                         text_size = dataSize;
                    }
+                   //System.out.format("\n");
                 }
 
+                public void readColumn(DataInputStream dis, LZ4FastDecompressor decompressor) 
+                    throws DataFormatException, UnsupportedEncodingException, IOException {
+                    long nbytes;
+                    dis.readFully(header.array(), 0, header.capacity());
+                    nbytes = header.getInt(HEADER_COMPRESSED_LEN);                    
+                    //System.out.format("readColumn[%d] %d header size %d ", colId, nbytes, header.capacity());
+
+                    dis.readFully(compressedBuffer, 0, (int)nbytes);
+
+                    int dataSize;
+                    if(TYPE_FIXED_LEN_BYTE_ARRAY == header.getInt(HEADER_DATA_TYPE)){
+                        fixedTextLen = header.getInt(HEADER_TYPE_SIZE);                        
+                        //dataSize = decompressor.decompress(compressedBuffer, 0, (int)nbytes, text_buffer, 0);
+                        dataSize = header.getInt(HEADER_DATA_LEN);
+                        decompressor.decompress(compressedBuffer, 0, text_buffer, 0, dataSize);
+                        record_count = (int) (dataSize / fixedTextLen);
+                    } else {
+                        fixedTextLen = 0;
+                        //dataSize = decompressor.decompress(compressedBuffer, 0, (int)nbytes, byteBuffer.array(), 0);
+                        dataSize = header.getInt(HEADER_DATA_LEN);
+                        decompressor.decompress(compressedBuffer, 0, byteBuffer.array(), 0, dataSize);
+                        record_count = (int) (dataSize / 8);
+                    }
+
+                    if(TYPE_BYTE_ARRAY == header.getInt(HEADER_DATA_TYPE)){
+                        record_count = (int) (dataSize);
+                        int idx = 0;
+                        for(int i = 0; i < record_count; i++){
+                            index_buffer[i] = idx;
+                            idx += byteBuffer.get(i) & 0xFF;
+                        }
+                        // Read actual text size                            
+                        // nbytes = dis.readLong();
+                        dis.readFully(header.array(), 0, header.capacity());                                                
+                        nbytes = header.getInt(HEADER_COMPRESSED_LEN);                        
+                        dis.readFully(compressedBuffer, 0, (int)nbytes);                            
+                        //dataSize = decompressor.decompress(compressedBuffer, 0, (int)nbytes, text_buffer, 0);
+                        dataSize = header.getInt(HEADER_DATA_LEN);
+                        decompressor.decompress(compressedBuffer, 0, text_buffer, 0, dataSize);
+                        text_size = dataSize;
+                   }
+                   //System.out.format("\n");
+                }
+
+
+
                 public void readColumn(DataInputStream dis) throws IOException {
-                    long nbytes = dis.readLong();
-                    //System.out.format("readColumn[%d] %d ", colId, nbytes);
+                    long nbytes;
+                            
+                    dis.readFully(header.array(), 0, header.capacity());
+                    nbytes = header.getInt(HEADER_DATA_LEN);
+                    //System.out.format("readColumn[%d] %d header size %d ", colId, nbytes, header.capacity());
 
                     record_count = (int) (nbytes / 8);
-                    dis.readFully(byteBuffer.array(), 0, (int)nbytes);
-
-                    if(data_type == TYPE_BYTE_ARRAY){
+                    
+                    if(TYPE_FIXED_LEN_BYTE_ARRAY == header.getInt(HEADER_DATA_TYPE)){
+                        fixedTextLen = header.getInt(HEADER_TYPE_SIZE);
+                        dis.readFully(text_buffer, 0, (int)nbytes);
+                    } else {
+                        fixedTextLen = 0;
+                        dis.readFully(byteBuffer.array(), 0, (int)nbytes);
+                    }
+                    
+                    if(TYPE_BYTE_ARRAY == header.getInt(HEADER_DATA_TYPE)) {
                         record_count = (int) (nbytes);
                         int idx = 0;
                         for(int i = 0; i < record_count; i++){
@@ -561,10 +610,11 @@ public class DikeLambdaClient
                             idx += byteBuffer.get(i) & 0xFF;
                         }
                         // Read actual text size                            
-                        nbytes = dis.readLong();
-                        //System.out.format("text_size %d ", nbytes);
-                        text_size = (int)nbytes;
-                        dis.readFully(text_buffer, 0, (int)nbytes);
+                        
+                        dis.readFully(header.array(), 0, header.capacity());                                                
+                        text_size =  header.getInt(HEADER_DATA_LEN);
+                        //System.out.format("text_size %d ", text_size);
+                        dis.readFully(text_buffer, 0, (int)text_size);
                     }
                     //System.out.format("\n");
                 }
@@ -578,9 +628,13 @@ public class DikeLambdaClient
                         case TYPE_DOUBLE:
                             value = String.valueOf(byteBuffer.getDouble(index * 8));                            
                         break;
-                        case TYPE_BYTE_ARRAY:                            
-                            int len = byteBuffer.get(index) & 0xFF;
-                            value = new String(text_buffer, index_buffer[index], len, StandardCharsets.UTF_8);
+                        case TYPE_BYTE_ARRAY:
+                            if(fixedTextLen > 0){
+                                value = new String(text_buffer, fixedTextLen * index, fixedTextLen, StandardCharsets.UTF_8);
+                            } else {
+                                int len = byteBuffer.get(index) & 0xFF;
+                                value = new String(text_buffer, index_buffer[index], len, StandardCharsets.UTF_8);
+                            }
                         break;
                     }
                     return value;
@@ -598,8 +652,8 @@ public class DikeLambdaClient
             String compressionTypeEnv = System.getenv("DIKE_COMPRESSION");
             Inflater inflater = new Inflater();
             LZ4Factory factory = LZ4Factory.fastestInstance();
-            //LZ4FastDecompressor decompressor = factory.fastDecompressor();
-            LZ4SafeDecompressor decompressor = factory.safeDecompressor();
+            LZ4FastDecompressor decompressor = factory.fastDecompressor();
+            //LZ4SafeDecompressor decompressor = factory.safeDecompressor();
 
             if(compressionTypeEnv != null){
                 if(compressionTypeEnv.equals("lz4")){
@@ -670,6 +724,7 @@ public class DikeLambdaClient
 // 36865,Customer#000056865,ALyVNih5 xNu0lKhiuCf7bd,8,32-969-310-5555,1539.11,nglthe furiously special requests. carefully even ideas use after the carefully final requests. regular, ir,
 
 // export DIKE_TRACE_RECORD_MAX=36865
+// export DIKE_COMPRESSION=lz4
 
 /*
   required int64 field_id=1 l_orderkey;

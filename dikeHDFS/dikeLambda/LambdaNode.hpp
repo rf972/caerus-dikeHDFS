@@ -199,6 +199,8 @@ class OutputNode : public Node {
 
     void TranslateBE64(void * in_data, uint8_t * out_data, uint32_t len);
     void Send(void * data, uint32_t len, bool is_binary);
+    // New format
+    void Send(Column::DataType data_type, int type_size, void * data, uint32_t len);
 };
 
 Node * CreateNode(Poco::JSON::Object::Ptr pObject, DikeProcessorConfig & dikeProcessorConfig, DikeIO * output);

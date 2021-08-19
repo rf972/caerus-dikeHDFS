@@ -3,7 +3,8 @@
 #include <Poco/Net/HTTPRequest.h>
 #include <Poco/zlib.h>
 
-#include "lz4.h"
+#include <lz4.h>
+//#include <zstd.h>   
 
 #include "LambdaNode.hpp"
 
@@ -244,30 +245,45 @@ bool OutputNode::Step()
             case Column::DataType::INT64:
                 data_size = col->row_count * sizeof(int64_t);
                 TranslateBE64(col->int64_values, dataBuffer, col->row_count);
-                Send(dataBuffer, data_size, true);
+                //Send(dataBuffer, data_size, true);
+                Send(Column::DataType::INT64, sizeof(int64_t), dataBuffer, data_size);
                 break;
             case Column::DataType::DOUBLE:
                 data_size = col->row_count * sizeof(double);                
                 TranslateBE64(col->double_values, dataBuffer, col->row_count);
-                Send(dataBuffer, data_size, true);
+                //Send(dataBuffer, data_size, true);
+                Send(Column::DataType::DOUBLE, sizeof(double), dataBuffer, data_size);
             break;
             case Column::DataType::BYTE_ARRAY:
                 data_size = col->row_count;
-                uint8_t * dataPtr = dataBuffer;        
+                uint8_t * dataPtr = dataBuffer;
+                int fixedLen = col->ba_values[0].len;
+                bool fixed_len_byte_array = true;
                 for(int j = 0; j < col->row_count; j++){
                     uint8_t len = col->ba_values[j].len;
-                    lenBuffer[j] = len;            
+                    lenBuffer[j] = len;
+                    if(len != fixedLen) {
+                        fixed_len_byte_array = false;
+                    }
                     for(int k = 0 ; k < len; k++){
                         *dataPtr = col->ba_values[j].ptr[k];
                         dataPtr++;
                     }
-                }                
-                Send(lenBuffer, data_size, true);                
-                data_size = dataPtr - dataBuffer;
+                }
                 if(data_size > Column::MAX_TEXT_SIZE){ // TODO we have to handle it gracefully
                     std::cout << "OutputNode::Step " << stepCount << " memory corrupted :: " << data_size << std::endl;
                 }
-                Send(dataBuffer, data_size, false);
+
+                if(fixed_len_byte_array){
+                    data_size = dataPtr - dataBuffer;
+                    Send(Column::DataType::FIXED_LEN_BYTE_ARRAY, fixedLen, dataBuffer, data_size);                    
+                } else {
+                    //Send(lenBuffer, data_size, true);                
+                    Send(Column::DataType::BYTE_ARRAY, sizeof(uint8_t), lenBuffer, data_size);
+                    data_size = dataPtr - dataBuffer;
+                    //Send(dataBuffer, data_size, false);
+                    Send(Column::DataType::BYTE_ARRAY, 0, dataBuffer, data_size);
+                }
             break;
         }
     }
@@ -278,6 +294,26 @@ bool OutputNode::Step()
     
     inFrame->Free();
     return done;
+}
+
+void OutputNode::Send(Column::DataType data_type, int type_size, void * data, uint32_t len)
+{
+    int header[4];
+    header[0] = htobe32(data_type); // TYPE
+    header[1] = htobe32(type_size); // TYPE SIZE
+    header[2] = htobe32(len); // DATA LEN
+    header[3] = htobe32(0); // COMPRESSED LEN
+
+    int64_t be_value;
+    if(compressionEnabled) {
+        CompressLZ4((uint8_t *)data, len);        
+        header[3] = htobe32(compressedLen); // COMPRESSED LEN
+        output->write((const char *)header, (uint32_t)(4*sizeof(uint32_t)));
+        output->write((const char *)compressedBuffer, compressedLen);
+    } else {        
+        output->write((const char *)header, (uint32_t)(4*sizeof(uint32_t)));
+        output->write((const char *)data, len);
+    }
 }
 
 void OutputNode::Send(void * data, uint32_t len, bool is_binary)
