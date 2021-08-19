@@ -12,9 +12,8 @@ Frame::Frame(Node * ownerNode) {
 Frame::~Frame(){
     //std::cout << "Delete frame  " << this <<  " Node " << ownerNode->name << std::endl;
     
-    for(int i = 0; i < columns.size(); i++) {
-        columns[i]->refCount--;
-        if(columns[i]->refCount == 0) {
+    for(int i = 0; i < columns.size(); i++) {        
+        if(columns[i]->ownerNode == ownerNode) {
             delete columns[i];
         }
     }    

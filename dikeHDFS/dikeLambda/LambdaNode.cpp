@@ -84,7 +84,7 @@ void InputNode::Init()
         std::string name = columnRoot->name();
         parquet::Type::type physical_type = columnRoot->physical_type();
         columnTypes[i] = (Column::DataType) physical_type; // TODO type tramslation
-        Column * col = new Column(i, name,  columnTypes[i]); 
+        Column * col = new Column(this, i, name,  columnTypes[i]); 
         frame->Add(col);
     }    
 
@@ -92,7 +92,7 @@ void InputNode::Init()
     UpdateColumnMap(frame);
 
     for(int i = 0; i < columnCount; i++){
-        if(frame->columns[i]->refCount > 0) {
+        if(frame->columns[i]->useCount > 0) {
             //std::cout << "Create reader for Column " << i << std::endl;
             columnReaders[i] = std::move(rowGroupReader->Column(i));            
         } else {
@@ -116,7 +116,7 @@ bool InputNode::Step()
         for(int i = 0; i < columnCount; i++){                        
             auto columnRoot = (parquet::schema::PrimitiveNode*)schemaDescriptor->GetColumnRoot(i);
             std::string name = columnRoot->name();            
-            Column * col = new Column(i, name,  columnTypes[i]);
+            Column * col = new Column(this, i, name,  columnTypes[i]);
             //std::cout << "Create Column " << i <<  " " << name << std::endl;            
             frame->Add(col);
             if(columnReaders[i]) {
@@ -166,7 +166,7 @@ void ProjectionNode::UpdateColumnMap(Frame * inFrame)
     for(int i = 0; i < columnCount; i++){
         for(int j = 0; j < inFrame->columns.size(); j++){
             if(projection[i].compare(inFrame->columns[j]->name) == 0){
-                inFrame->columns[j]->refCount ++; // This column will be in use
+                inFrame->columns[j]->useCount ++; // This column will be in use
                 columnMap[i] = j;
             }
         }
@@ -174,7 +174,7 @@ void ProjectionNode::UpdateColumnMap(Frame * inFrame)
     Frame * outFrame = new Frame(this);
     outFrame->columns.resize(columnCount);
     for(int i = 0; i < columnCount; i++) {
-        outFrame->columns[i] = inFrame->columns[columnMap[i]]->Clone(); 
+        outFrame->columns[i] = inFrame->columns[columnMap[i]]; 
     }
 
     Node::UpdateColumnMap(outFrame);
@@ -203,7 +203,7 @@ bool ProjectionNode::Step()
 
     for(int i = 0; i < columnCount; i++) {
         //std::cout << "Mapping Column " << i <<  " to " << columnMap[i] << std::endl;
-        outFrame->columns[i] = inFrame->columns[columnMap[i]]->Clone(); 
+        outFrame->columns[i] = inFrame->columns[columnMap[i]]; 
     }
 
     if(inFrame->lastFrame){
