@@ -8,6 +8,8 @@
 namespace lambda {
 
 class Column;
+class Node;
+
 class Column {
     public:
     enum DataType {
@@ -39,20 +41,22 @@ class Column {
     uint8_t * textBuffer = NULL; // Shadow buffer 
     uint8_t * textBufferPtr = NULL; // Pointer to memory inside textBuffer
 
-    uint64_t row_count = 0; // Number of valid rows in this column
-    bool memory_owner = false; // This column must destroy it's memory
+    uint64_t row_count = 0; // Number of valid rows in this column    
     
-    int refCount = 0; // How many references do we have    
+    int useCount = 0; // How many nodes using this column
+    Node * ownerNode = NULL;
+    bool initialized = false; // true means memory allocated
 
-    Column(int id, std::string & name, Column::DataType data_type) {
+    Column(Node * ownerNode, int id, std::string & name, Column::DataType data_type) {
+        this->ownerNode = ownerNode;
         this->id = id;
         this->name = name;
         this->data_type = data_type;
-        this->refCount ++; // It is referenced by it's creator
+        
     }
 
-    void Init() {
-        memory_owner = true;
+    void Init() {        
+        initialized = true;
         switch(data_type) {
             case INT64:
             int64_values = new int64_t [Column::config::MAX_SIZE];
@@ -67,11 +71,6 @@ class Column {
             default:
             std::cout << "Uknown data_type " << data_type << std::endl;
         }
-    }
-
-    Column * Clone() {
-        refCount++;
-        return this;
     }
 
     int Read(std::shared_ptr<parquet::ColumnReader> reader, int read_size) {
@@ -126,20 +125,22 @@ class Column {
         }
     }
     ~Column() {
-        if(memory_owner){
-            switch(data_type) {
-            case INT64:
-            delete [] int64_values;
-            break;
-            case DOUBLE:
-            delete [] double_values;
-            break;
-            case BYTE_ARRAY:
-            delete [] ba_values;
-            delete [] textBuffer;
-            break;
-            }
+        if(!initialized){
+            return;
         }
+        //std::cout << "Column destructor " << id <<  " " << name << std::endl;
+        switch(data_type) {
+        case INT64:
+        delete [] int64_values;
+        break;
+        case DOUBLE:
+        delete [] double_values;
+        break;
+        case BYTE_ARRAY:
+        delete [] ba_values;
+        delete [] textBuffer;
+        break;
+        }        
     }
 };
 
