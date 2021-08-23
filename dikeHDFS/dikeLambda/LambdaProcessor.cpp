@@ -2,9 +2,10 @@
 #include <sstream>
 #include <chrono>
 #include <stdio.h>
-#include <pthread.h>
+//#include <pthread.h>
 #include <algorithm>
 #include <vector>
+#include <thread>
 
 #include <Poco/JSON/JSON.h>
 #include <Poco/JSON/Parser.h>
@@ -61,13 +62,18 @@ int LambdaProcessor::Run(DikeProcessorConfig & dikeProcessorConfig, DikeIO * out
 
     std::chrono::high_resolution_clock::time_point t1 =  std::chrono::high_resolution_clock::now();
 
+    // Start output worker
+    Node * outputNode = nodeVector[nodeVector.size() - 1];
+    std::thread outputThread = outputNode->startWorker();
     bool done = false;
     while(!done)     
     {
-        for(int i = 0; i < nodeVector.size(); i++) {
+        for(int i = 0; i < nodeVector.size() - 1; i++) {
             done = nodeVector[i]->Step();
         }        
     }
+
+    outputThread.join();
 
     if (verbose) {
         std::chrono::high_resolution_clock::time_point t2 =  std::chrono::high_resolution_clock::now();

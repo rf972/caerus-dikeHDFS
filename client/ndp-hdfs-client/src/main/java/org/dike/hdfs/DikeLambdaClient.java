@@ -603,7 +603,7 @@ public class DikeLambdaClient
                     dis.readFully(header.array(), 0, header.capacity());
                     nbytes = header.getInt(HEADER_COMPRESSED_LEN);                    
                     //System.out.format("readColumn[%d] %d header size %d ", colId, nbytes, header.capacity());
-                    //System.out.format("readColumn[%d] type %d ratio %f \n", colId, header.getInt(HEADER_DATA_TYPE), 1.0 * header.getInt(HEADER_DATA_LEN) /  header.getInt(HEADER_COMPRESSED_LEN));
+                    //System.out.format("readColumn[%d] type %d ratio %f \n", colId, header.getInt(HEADER_DATA_TYPE), 1.0 * header.getInt(HEADER_DATA_LEN) /  header.getInt(HEADER_COMPRESSED_LEN));                    
 
                     dis.readFully(compressedBuffer, 0, nbytes);                    
 

@@ -3,6 +3,8 @@
 
 #include <string>
 #include <queue>
+#include <mutex>
+#include <semaphore.h>
 #include <vector>
 
 #include "Poco/JSON/Object.h"
@@ -34,7 +36,12 @@ class Node {
 
     Node * nextNode = NULL; // One connection for now
     std::queue<Frame *> frameQueue; // Used as incoming queue
+    std::mutex frameQueueMutex;
+    sem_t frameQueueSem;
+
     std::queue<Frame *> framePool; // Used as memory pool for frames
+    std::mutex framePoolMutex;
+    sem_t framePoolSem;
 
     bool done = false;
     int verbose = 0;
@@ -49,6 +56,8 @@ class Node {
         if(verbose){
             std::cout << "Node " << name << " type " << typeStr << std::endl;
         }
+        sem_init(&frameQueueSem, 0, 0);
+        sem_init(&framePoolSem, 0, 0);
     }
 
     virtual ~Node() {
@@ -57,6 +66,8 @@ class Node {
             delete framePool.front();
             framePool.pop();
         }
+        sem_destroy(&frameQueueSem);
+        sem_destroy(&framePoolSem);        
     }
     void Connect(Node * node){
         this->nextNode = node;
@@ -72,34 +83,58 @@ class Node {
     }
 
     virtual void putFrame(Frame * frame) { // Submit frame for processing
+        frameQueueMutex.lock();
         frameQueue.push(frame);
+        frameQueueMutex.unlock();
+        sem_post(&frameQueueSem);
     }
 
     virtual Frame * getFrame() { // Retrieve frame from incoming queue
+        sem_wait(&frameQueueSem);        
+        frameQueueMutex.lock();
         if(frameQueue.empty()){
+            frameQueueMutex.unlock();
             return NULL;
         }
         Frame * frame = frameQueue.front();
         frameQueue.pop();
+        frameQueueMutex.unlock();
         return frame;
     }
 
     Frame * allocFrame() {
+        sem_wait(&framePoolSem);
+        framePoolMutex.lock();
         if(framePool.empty()){
+            framePoolMutex.unlock();
             return NULL;
         }
         Frame * frame = framePool.front();
         framePool.pop();
+        framePoolMutex.unlock();
         //std::cout << "Pop frame  " << frame <<  " Node " << name << std::endl;
         return frame;           
     }
 
     void freeFrame(Frame * frame) {
         //std::cout << "Push frame  " << frame <<  " Node " << name << std::endl;
+        framePoolMutex.lock();
         framePool.push(frame);
+        framePoolMutex.unlock();
+        sem_post(&framePoolSem);
     }
 
     virtual bool Step() = 0;
+    virtual void Worker() {
+        bool done = false;
+        while(!done) {
+            done = Step();
+        }
+    }
+    std::thread startWorker() {
+        //std::cout << "DikeAsyncWriter::startWorker " << std::endl;
+        return std::thread([this] { this->Worker(); });
+    }    
 };
 
 class InputNode : public Node {

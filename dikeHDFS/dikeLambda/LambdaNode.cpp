@@ -95,12 +95,29 @@ void InputNode::Init()
     for(int i = 0; i < columnCount; i++){
         if(frame->columns[i]->useCount > 0) {
             //std::cout << "Create reader for Column " << i << std::endl;
-            columnReaders[i] = std::move(rowGroupReader->Column(i));            
+            columnReaders[i] = std::move(rowGroupReader->Column(i));
+            frame->columns[i]->Init(); // This will allocate memory buffers
         } else {
             columnReaders[i] = NULL;
         }
     }
-    delete frame;
+    freeFrame(frame); // this will put this frame on framePool
+
+    // Create few additional frames
+    for(int c = 0; c < 3; c++) {
+        frame = new Frame(this); // Allocate new frame with data    
+        for(int i = 0; i < columnCount; i++){                        
+            auto columnRoot = (parquet::schema::PrimitiveNode*)schemaDescriptor->GetColumnRoot(i);
+            std::string name = columnRoot->name();            
+            Column * col = new Column(this, i, name,  columnTypes[i]);
+            //std::cout << "Create Column " << i <<  " " << name << std::endl;            
+            frame->Add(col);
+            if(columnReaders[i]) {
+                col->Init(); // This will allocate memory buffers
+            }        
+        }
+        freeFrame(frame); // this will put this frame on framePool
+    }
 }
 
 bool InputNode::Step()
@@ -179,7 +196,14 @@ void ProjectionNode::UpdateColumnMap(Frame * inFrame)
     }
 
     Node::UpdateColumnMap(outFrame);
-    delete outFrame;
+    freeFrame(outFrame); // this will put this frame on framePool
+    
+    // Create few additional frames
+    for(int c = 0; c < 3; c++) {
+        outFrame = new Frame(this); // Allocate new frame with data
+        outFrame->columns.resize(columnCount);
+        freeFrame(outFrame); // this will put this frame on framePool
+    }    
 }
 
 bool ProjectionNode::Step()
@@ -325,25 +349,6 @@ void OutputNode::Send(int id, Column::DataType data_type, int type_size, void * 
         output->write((const char *)data, len);
     }
 }
-
-#if 0
-void OutputNode::Send(void * data, uint32_t len, bool is_binary)
-{
-    int64_t be_value;
-    if(compressionEnabled) {
-        CompressZSTD((uint8_t *)data, len);
-        //CompressLZ4((uint8_t *)data, len);
-        //CompressZlib((uint8_t *)data, len, is_binary);
-        be_value = htobe64(compressedLen);
-        output->write((const char *)&be_value, (uint32_t)sizeof(int64_t));
-        output->write((const char *)compressedBuffer, compressedLen);
-    } else {
-        be_value = htobe64(len);
-        output->write((const char *)&be_value, (uint32_t)sizeof(int64_t));
-        output->write((const char *)data, len);
-    }
-}
-#endif
 
 void OutputNode::TranslateBE64(void * in_data, uint8_t * out_data, uint32_t len)
 {
