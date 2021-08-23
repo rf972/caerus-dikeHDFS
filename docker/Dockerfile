@@ -18,7 +18,8 @@
 # Dockerfile for installing the necessary dependencies for building Hadoop.
 # See BUILDING.txt.
 
-FROM ubuntu:bionic
+#FROM ubuntu:bionic
+FROM ubuntu:focal
 
 WORKDIR /root
 
@@ -72,10 +73,8 @@ RUN apt-get -q update \
         pkg-config \
         python \
         python2.7 \
-        python-pip \
         python-pkg-resources \
         python-setuptools \
-        python-wheel \
         rsync \
         shellcheck \
         software-properties-common \
@@ -90,7 +89,10 @@ RUN apt-get -q update \
         valgrind \
         ca-certificates lsb-release wget \
         tzdata \
-        libsnappy-dev liblz4-dev 
+        libsnappy-dev liblz4-dev libzstd-dev
+
+# python-pip \
+# python-wheel \
 
 #    && apt-get clean \
 #    && rm -rf /var/lib/apt/lists/*

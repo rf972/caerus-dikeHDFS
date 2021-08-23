@@ -3,12 +3,15 @@
 
 #include <string>
 #include <queue>
+#include <vector>
 
 #include "Poco/JSON/Object.h"
 
 #include <parquet/arrow/reader.h>
 #include <arrow/filesystem/filesystem.h>
 #include <arrow/io/api.h>
+
+#include <zstd.h>   
 
 #include "DikeUtil.hpp"
 #include "LambdaProcessor.hpp"
@@ -157,8 +160,10 @@ class OutputNode : public Node {
 
     uint8_t * compressedBuffer = NULL;
     int64_t compressedLen = 0;
-    uint32_t compressedBufferLen = Column::MAX_SIZE * 128 + 1024;
+    uint32_t compressedBufferLen = Column::MAX_TEXT_SIZE + 1024;
     uint8_t lz4_state_memory [32<<10] __attribute__((aligned(128))); // see (int LZ4_sizeofState(void);)
+    std::vector<ZSTD_CCtx *> ZSTD_Context;
+    int compressionLevel = 1;
 
     OutputNode(Poco::JSON::Object::Ptr pObject, DikeProcessorConfig & dikeProcessorConfig, DikeIO * output) 
         : Node(pObject, dikeProcessorConfig, output) 
@@ -170,14 +175,16 @@ class OutputNode : public Node {
             if(verbose){
                 std::cout << "CompressionType " << compressionType << std::endl;
             }
-            if(compressionType.compare("lz4") == 0){
+            if(compressionType.compare("ZSTD") == 0){
                 compressionEnabled = true;
-                compressedBuffer = new uint8_t [compressedBufferLen]; // Max text lenght + compression header
+                compressionLevel = pObject->getValue<int>("CompressionLevel");
+                compressedBufferLen = ZSTD_compressBound(Column::MAX_TEXT_SIZE);
+                compressedBuffer = new uint8_t [compressedBufferLen]; // Max text lenght + compression header                
             }
         }
 
         lenBuffer = new uint8_t [Column::MAX_SIZE];
-        dataBuffer = new uint8_t [Column::MAX_SIZE * 128]; // Max text lenght        
+        dataBuffer = new uint8_t [Column::MAX_TEXT_SIZE]; // Max text lenght        
     }
 
     virtual ~OutputNode(){
@@ -190,17 +197,21 @@ class OutputNode : public Node {
         if(compressedBuffer){
             delete [] compressedBuffer;
         }
+        for (int i = 0; i < ZSTD_Context.size(); i++) {
+            ZSTD_freeCCtx(ZSTD_Context[i]);
+        }
 
     }
     virtual void UpdateColumnMap(Frame * frame) override;
     virtual bool Step() override;
     void CompressZlib(uint8_t * data, uint32_t len, bool is_binary);
     void CompressLZ4(uint8_t * data, uint32_t len);
+    void CompressZSTD(int id, uint8_t * data, uint32_t len);
 
     void TranslateBE64(void * in_data, uint8_t * out_data, uint32_t len);
     void Send(void * data, uint32_t len, bool is_binary);
     // New format
-    void Send(Column::DataType data_type, int type_size, void * data, uint32_t len);
+    void Send(int id, Column::DataType data_type, int type_size, void * data, uint32_t len);
 };
 
 Node * CreateNode(Poco::JSON::Object::Ptr pObject, DikeProcessorConfig & dikeProcessorConfig, DikeIO * output);

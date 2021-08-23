@@ -42,6 +42,7 @@ import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
 import java.util.Base64;
+import java.util.Arrays;
 
 import javax.security.auth.login.LoginException;
 
@@ -65,6 +66,9 @@ import net.jpountz.lz4.LZ4Factory;
 import net.jpountz.lz4.LZ4FastDecompressor;
 import net.jpountz.lz4.LZ4SafeDecompressor;
 import net.jpountz.xxhash.XXHashFactory;
+
+// ZSTD support
+import com.github.luben.zstd.Zstd;
 
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.fs.Path;
@@ -196,6 +200,13 @@ public class DikeLambdaClient
             compressionType = compressionTypeEnv;
         }
         optputNodeBuilder.add("CompressionType", compressionType);
+
+        String compressionLevel = "1";
+        String compressionLevelEnv = System.getenv("DIKE_COMPRESSION_LEVEL");
+        if(compressionLevelEnv != null){
+            compressionLevel = compressionLevelEnv;
+        }
+        optputNodeBuilder.add("CompressionLevel", compressionLevel);
 
         JsonArrayBuilder nodeArrayBuilder = Json.createArrayBuilder();
         nodeArrayBuilder.add(inputNodeBuilder.build());
@@ -439,7 +450,7 @@ public class DikeLambdaClient
                 System.out.println(String.valueOf(i) + " : " + String.valueOf(dataTypes[i]));
             }
 
-            final int BATCH_SIZE = 4096;
+            final int BATCH_SIZE = 8192;
             final int TYPE_INT64 = 2;
             final int TYPE_DOUBLE = 5;
             final int TYPE_BYTE_ARRAY = 6;
@@ -461,7 +472,7 @@ public class DikeLambdaClient
                 int index_buffer [] = null;
                 int data_type;
                 int record_count;                
-                byte [] compressedBuffer = new byte[256 * 1024];
+                byte [] compressedBuffer = new byte[BATCH_SIZE * 128];
 
                 ByteBuffer header = null;
 
@@ -487,10 +498,13 @@ public class DikeLambdaClient
                 }
 
                 public void readRawData(DataInputStream dis) throws IOException {
-                    long nbytes = dis.readLong();
-                    dis.readFully(compressedBuffer, 0, (int)nbytes);
+                    int nbytes;
+                    dis.readFully(header.array(), 0, header.capacity());
+                    nbytes = header.getInt(HEADER_COMPRESSED_LEN);                    
+                    dis.readFully(compressedBuffer, 0, nbytes);
                     if(data_type == TYPE_BYTE_ARRAY){
-                        nbytes = dis.readLong();
+                        dis.readFully(header.array(), 0, header.capacity());
+                        nbytes = header.getInt(HEADER_COMPRESSED_LEN);                    
                         dis.readFully(compressedBuffer, 0, (int)nbytes);
                     }
                 }
@@ -583,7 +597,60 @@ public class DikeLambdaClient
                    //System.out.format("\n");
                 }
 
+                public void readColumnZSTD(DataInputStream dis) throws  IOException {
+                    int nbytes;
+                    
+                    dis.readFully(header.array(), 0, header.capacity());
+                    nbytes = header.getInt(HEADER_COMPRESSED_LEN);                    
+                    //System.out.format("readColumn[%d] %d header size %d ", colId, nbytes, header.capacity());
+                    //System.out.format("readColumn[%d] type %d ratio %f \n", colId, header.getInt(HEADER_DATA_TYPE), 1.0 * header.getInt(HEADER_DATA_LEN) /  header.getInt(HEADER_COMPRESSED_LEN));
 
+                    dis.readFully(compressedBuffer, 0, nbytes);                    
+
+                    //System.out.format("readColumn[%d] %d decompressedSize %d \n", colId, nbytes, Zstd.decompressedSize(compressedBuffer));                    
+
+                    int dataSize;
+                    if(TYPE_FIXED_LEN_BYTE_ARRAY == header.getInt(HEADER_DATA_TYPE)){
+                        fixedTextLen = header.getInt(HEADER_TYPE_SIZE);                                                
+                        dataSize = header.getInt(HEADER_DATA_LEN);
+                        //decompressor.decompress(compressedBuffer, 0, text_buffer, 0, dataSize);
+                        //decompress(byte[] dst, byte[] src)
+                        //Zstd.decompress(text_buffer, compressedBuffer);
+                        Zstd.decompress(text_buffer, Arrays.copyOfRange(compressedBuffer, 0, nbytes));
+                        record_count = (int) (dataSize / fixedTextLen);
+                    } else {
+                        fixedTextLen = 0;
+                        //dataSize = decompressor.decompress(compressedBuffer, 0, (int)nbytes, byteBuffer.array(), 0);
+                        dataSize = header.getInt(HEADER_DATA_LEN);
+                        //decompressor.decompress(compressedBuffer, 0, byteBuffer.array(), 0, dataSize);
+                        Zstd.decompress(byteBuffer.array(), Arrays.copyOfRange(compressedBuffer, 0, nbytes));
+                        
+                        //System.out.format("readColumn[%d] Zstd.decompress %d bytes \n", colId, nbytes);                        
+                        record_count = (int) (dataSize / 8);
+                    }
+
+                    if(TYPE_BYTE_ARRAY == header.getInt(HEADER_DATA_TYPE)){
+                        record_count = (int) (dataSize);
+                        int idx = 0;
+                        for(int i = 0; i < record_count; i++){
+                            index_buffer[i] = idx;
+                            idx += byteBuffer.get(i) & 0xFF;
+                        }
+                        // Read actual text size                                                    
+                        dis.readFully(header.array(), 0, header.capacity());
+                        //System.out.format("readColumn[%d] type %d ratio %f \n", colId, header.getInt(HEADER_DATA_TYPE), 1.0 * header.getInt(HEADER_DATA_LEN) /  header.getInt(HEADER_COMPRESSED_LEN));
+
+                        nbytes = header.getInt(HEADER_COMPRESSED_LEN);                        
+                        dis.readFully(compressedBuffer, 0, (int)nbytes);                            
+                        
+                        dataSize = header.getInt(HEADER_DATA_LEN);
+                        //decompressor.decompress(compressedBuffer, 0, text_buffer, 0, dataSize);
+                        //Zstd.decompress(text_buffer, compressedBuffer);
+                        Zstd.decompress(text_buffer, Arrays.copyOfRange(compressedBuffer, 0, nbytes));
+                        text_size = dataSize;
+                   }
+                   //System.out.format("\n");
+                }
 
                 public void readColumn(DataInputStream dis) throws IOException {
                     long nbytes;
@@ -656,7 +723,7 @@ public class DikeLambdaClient
             //LZ4SafeDecompressor decompressor = factory.safeDecompressor();
 
             if(compressionTypeEnv != null){
-                if(compressionTypeEnv.equals("lz4")){
+                if(compressionTypeEnv.equals("ZSTD")){
                     compressionEnabled = true;                    
                 }
             }
@@ -673,7 +740,8 @@ public class DikeLambdaClient
                         if(compressionEnabled) {
                             //columVector[i].readColumn(dis, inflater);
                             //columVector[i].readRawData(dis);
-                            columVector[i].readColumn(dis, decompressor);
+                            //columVector[i].readColumn(dis, decompressor);
+                            columVector[i].readColumnZSTD(dis);
                         } else {
                             columVector[i].readColumn(dis);
                         }
@@ -724,7 +792,8 @@ public class DikeLambdaClient
 // 36865,Customer#000056865,ALyVNih5 xNu0lKhiuCf7bd,8,32-969-310-5555,1539.11,nglthe furiously special requests. carefully even ideas use after the carefully final requests. regular, ir,
 
 // export DIKE_TRACE_RECORD_MAX=36865
-// export DIKE_COMPRESSION=lz4
+// export DIKE_COMPRESSION=ZSTD
+// export DIKE_COMPRESSION_LEVEL=-10
 
 /*
   required int64 field_id=1 l_orderkey;
