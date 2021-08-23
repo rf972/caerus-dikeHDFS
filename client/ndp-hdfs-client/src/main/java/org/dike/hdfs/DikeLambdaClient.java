@@ -605,7 +605,10 @@ public class DikeLambdaClient
                     //System.out.format("readColumn[%d] %d header size %d ", colId, nbytes, header.capacity());
                     //System.out.format("readColumn[%d] type %d ratio %f \n", colId, header.getInt(HEADER_DATA_TYPE), 1.0 * header.getInt(HEADER_DATA_LEN) /  header.getInt(HEADER_COMPRESSED_LEN));                    
 
-                    dis.readFully(compressedBuffer, 0, nbytes);                    
+                    byte [] cb = new byte [nbytes];
+
+                    //dis.readFully(compressedBuffer, 0, nbytes);
+                    dis.readFully(cb, 0, nbytes);                    
 
                     //System.out.format("readColumn[%d] %d decompressedSize %d \n", colId, nbytes, Zstd.decompressedSize(compressedBuffer));                    
 
@@ -613,18 +616,14 @@ public class DikeLambdaClient
                     if(TYPE_FIXED_LEN_BYTE_ARRAY == header.getInt(HEADER_DATA_TYPE)){
                         fixedTextLen = header.getInt(HEADER_TYPE_SIZE);                                                
                         dataSize = header.getInt(HEADER_DATA_LEN);
-                        //decompressor.decompress(compressedBuffer, 0, text_buffer, 0, dataSize);
-                        //decompress(byte[] dst, byte[] src)
-                        //Zstd.decompress(text_buffer, compressedBuffer);
-                        Zstd.decompress(text_buffer, Arrays.copyOfRange(compressedBuffer, 0, nbytes));
+                        //Zstd.decompress(text_buffer, Arrays.copyOfRange(compressedBuffer, 0, nbytes));
+                        Zstd.decompress(text_buffer, cb);
                         record_count = (int) (dataSize / fixedTextLen);
                     } else {
-                        fixedTextLen = 0;
-                        //dataSize = decompressor.decompress(compressedBuffer, 0, (int)nbytes, byteBuffer.array(), 0);
-                        dataSize = header.getInt(HEADER_DATA_LEN);
-                        //decompressor.decompress(compressedBuffer, 0, byteBuffer.array(), 0, dataSize);
-                        Zstd.decompress(byteBuffer.array(), Arrays.copyOfRange(compressedBuffer, 0, nbytes));
-                        
+                        fixedTextLen = 0;                        
+                        dataSize = header.getInt(HEADER_DATA_LEN);                        
+                        //Zstd.decompress(byteBuffer.array(), Arrays.copyOfRange(compressedBuffer, 0, nbytes));
+                        Zstd.decompress(byteBuffer.array(), cb);
                         //System.out.format("readColumn[%d] Zstd.decompress %d bytes \n", colId, nbytes);                        
                         record_count = (int) (dataSize / 8);
                     }
@@ -640,13 +639,14 @@ public class DikeLambdaClient
                         dis.readFully(header.array(), 0, header.capacity());
                         //System.out.format("readColumn[%d] type %d ratio %f \n", colId, header.getInt(HEADER_DATA_TYPE), 1.0 * header.getInt(HEADER_DATA_LEN) /  header.getInt(HEADER_COMPRESSED_LEN));
 
-                        nbytes = header.getInt(HEADER_COMPRESSED_LEN);                        
-                        dis.readFully(compressedBuffer, 0, (int)nbytes);                            
+                        nbytes = header.getInt(HEADER_COMPRESSED_LEN);
+                        cb = new byte [nbytes];
+                        //dis.readFully(compressedBuffer, 0, nbytes);                            
+                        dis.readFully(cb, 0, nbytes);                            
                         
                         dataSize = header.getInt(HEADER_DATA_LEN);
-                        //decompressor.decompress(compressedBuffer, 0, text_buffer, 0, dataSize);
-                        //Zstd.decompress(text_buffer, compressedBuffer);
-                        Zstd.decompress(text_buffer, Arrays.copyOfRange(compressedBuffer, 0, nbytes));
+                        //Zstd.decompress(text_buffer, Arrays.copyOfRange(compressedBuffer, 0, nbytes));
+                        Zstd.decompress(text_buffer, cb);
                         text_size = dataSize;
                    }
                    //System.out.format("\n");
