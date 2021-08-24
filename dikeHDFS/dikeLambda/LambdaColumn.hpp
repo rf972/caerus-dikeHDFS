@@ -97,10 +97,8 @@ class Column {
             {
                 parquet::ByteArrayReader* ba_reader = static_cast<parquet::ByteArrayReader*>(reader.get());
                 while(row_count < read_size) {
-                    ba_reader->ReadBatch(read_size - row_count, 0, 0, &ba_values[row_count], &values_read);
-                    if(values_read < read_size) { // Page boundary detection
-                        fillTextBuffer(row_count, values_read);
-                    }
+                    ba_reader->ReadBatch(read_size - row_count, 0, 0, &ba_values[row_count], &values_read);                    
+                    fillTextBuffer(row_count, values_read);                    
                     row_count += values_read;
                     //std::cout << "Read Column " << id <<  " " << name << " row_count " << row_count << std::endl;
                 }

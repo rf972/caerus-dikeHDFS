@@ -95,3 +95,5 @@ long *lengths = col4->length.data();
 -- Installing: /usr/local/bin/orc-metadata
 -- Installing: /usr/local/bin/orc-statistics
 #endif
+
+/mnt/usb-SanDisk_Ultra_128GB/tmp/orc-1.6.9
