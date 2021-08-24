@@ -4,7 +4,7 @@
 #include <Poco/zlib.h>
 
 #include <lz4.h>
-//#include <zstd.h>   
+#include <zstd.h>   
 
 #include "LambdaNode.hpp"
 
@@ -95,12 +95,29 @@ void InputNode::Init()
     for(int i = 0; i < columnCount; i++){
         if(frame->columns[i]->useCount > 0) {
             //std::cout << "Create reader for Column " << i << std::endl;
-            columnReaders[i] = std::move(rowGroupReader->Column(i));            
+            columnReaders[i] = std::move(rowGroupReader->Column(i));
+            frame->columns[i]->Init(); // This will allocate memory buffers
         } else {
             columnReaders[i] = NULL;
         }
     }
-    delete frame;
+    freeFrame(frame); // this will put this frame on framePool
+
+    // Create few additional frames
+    for(int c = 0; c < 3; c++) {
+        frame = new Frame(this); // Allocate new frame with data    
+        for(int i = 0; i < columnCount; i++){                        
+            auto columnRoot = (parquet::schema::PrimitiveNode*)schemaDescriptor->GetColumnRoot(i);
+            std::string name = columnRoot->name();            
+            Column * col = new Column(this, i, name,  columnTypes[i]);
+            //std::cout << "Create Column " << i <<  " " << name << std::endl;            
+            frame->Add(col);
+            if(columnReaders[i]) {
+                col->Init(); // This will allocate memory buffers
+            }        
+        }
+        freeFrame(frame); // this will put this frame on framePool
+    }
 }
 
 bool InputNode::Step()
@@ -179,7 +196,14 @@ void ProjectionNode::UpdateColumnMap(Frame * inFrame)
     }
 
     Node::UpdateColumnMap(outFrame);
-    delete outFrame;
+    freeFrame(outFrame); // this will put this frame on framePool
+    
+    // Create few additional frames
+    for(int c = 0; c < 3; c++) {
+        outFrame = new Frame(this); // Allocate new frame with data
+        outFrame->columns.resize(columnCount);
+        freeFrame(outFrame); // this will put this frame on framePool
+    }    
 }
 
 bool ProjectionNode::Step()
@@ -225,6 +249,15 @@ void OutputNode::UpdateColumnMap(Frame * frame)
         be_value = htobe64(frame->columns[i]->data_type);
         output->write((const char *)&be_value, (uint32_t)sizeof(int64_t));
     }
+    if(compressionEnabled) {
+        ZSTD_Context.resize(frame->columns.size());            
+
+        for (int i = 0; i < ZSTD_Context.size(); i++) {
+            ZSTD_Context[i] = ZSTD_createCCtx();
+            ZSTD_CCtx_setParameter(ZSTD_Context[i], ZSTD_c_compressionLevel, compressionLevel);
+            ZSTD_CCtx_setParameter(ZSTD_Context[i], ZSTD_c_strategy, ZSTD_fast);
+        }
+    }
 }
 
 bool OutputNode::Step()
@@ -246,13 +279,13 @@ bool OutputNode::Step()
                 data_size = col->row_count * sizeof(int64_t);
                 TranslateBE64(col->int64_values, dataBuffer, col->row_count);
                 //Send(dataBuffer, data_size, true);
-                Send(Column::DataType::INT64, sizeof(int64_t), dataBuffer, data_size);
+                Send(i, Column::DataType::INT64, sizeof(int64_t), dataBuffer, data_size);
                 break;
             case Column::DataType::DOUBLE:
                 data_size = col->row_count * sizeof(double);                
                 TranslateBE64(col->double_values, dataBuffer, col->row_count);
                 //Send(dataBuffer, data_size, true);
-                Send(Column::DataType::DOUBLE, sizeof(double), dataBuffer, data_size);
+                Send(i, Column::DataType::DOUBLE, sizeof(double), dataBuffer, data_size);
             break;
             case Column::DataType::BYTE_ARRAY:
                 data_size = col->row_count;
@@ -276,13 +309,13 @@ bool OutputNode::Step()
 
                 if(fixed_len_byte_array){
                     data_size = dataPtr - dataBuffer;
-                    Send(Column::DataType::FIXED_LEN_BYTE_ARRAY, fixedLen, dataBuffer, data_size);                    
+                    Send(i, Column::DataType::FIXED_LEN_BYTE_ARRAY, fixedLen, dataBuffer, data_size);                    
                 } else {
                     //Send(lenBuffer, data_size, true);                
-                    Send(Column::DataType::BYTE_ARRAY, sizeof(uint8_t), lenBuffer, data_size);
+                    Send(i, Column::DataType::BYTE_ARRAY, sizeof(uint8_t), lenBuffer, data_size);
                     data_size = dataPtr - dataBuffer;
                     //Send(dataBuffer, data_size, false);
-                    Send(Column::DataType::BYTE_ARRAY, 0, dataBuffer, data_size);
+                    Send(i, Column::DataType::BYTE_ARRAY, 0, dataBuffer, data_size);
                 }
             break;
         }
@@ -296,7 +329,7 @@ bool OutputNode::Step()
     return done;
 }
 
-void OutputNode::Send(Column::DataType data_type, int type_size, void * data, uint32_t len)
+void OutputNode::Send(int id, Column::DataType data_type, int type_size, void * data, uint32_t len)
 {
     int header[4];
     header[0] = htobe32(data_type); // TYPE
@@ -306,28 +339,13 @@ void OutputNode::Send(Column::DataType data_type, int type_size, void * data, ui
 
     int64_t be_value;
     if(compressionEnabled) {
-        CompressLZ4((uint8_t *)data, len);        
+        //CompressLZ4((uint8_t *)data, len);
+        CompressZSTD(id, (uint8_t *)data, len);
         header[3] = htobe32(compressedLen); // COMPRESSED LEN
         output->write((const char *)header, (uint32_t)(4*sizeof(uint32_t)));
         output->write((const char *)compressedBuffer, compressedLen);
     } else {        
         output->write((const char *)header, (uint32_t)(4*sizeof(uint32_t)));
-        output->write((const char *)data, len);
-    }
-}
-
-void OutputNode::Send(void * data, uint32_t len, bool is_binary)
-{
-    int64_t be_value;
-    if(compressionEnabled) {
-        CompressLZ4((uint8_t *)data, len);
-        //CompressZlib((uint8_t *)data, len, is_binary);
-        be_value = htobe64(compressedLen);
-        output->write((const char *)&be_value, (uint32_t)sizeof(int64_t));
-        output->write((const char *)compressedBuffer, compressedLen);
-    } else {
-        be_value = htobe64(len);
-        output->write((const char *)&be_value, (uint32_t)sizeof(int64_t));
         output->write((const char *)data, len);
     }
 }
@@ -372,6 +390,13 @@ void OutputNode::CompressLZ4(uint8_t * data, uint32_t len)
     //compressedLen = LZ4_compress_fast((const char*)data, (char*)compressedBuffer, len, compressedBufferLen, acceleration);
 
     compressedLen = LZ4_compress_fast_extState(lz4_state_memory, (const char*)data, (char*)compressedBuffer, len, compressedBufferLen, acceleration);        
+}
+
+void OutputNode::CompressZSTD(int id, uint8_t * data, uint32_t len)
+{
+    //compressedLen = ZSTD_compress( compressedBuffer, compressedBufferLen, data, len, 1);
+    //compressedLen = ZSTD_compressCCtx(ZSTD_Context[id], compressedBuffer, compressedBufferLen, data, len, -5);
+    compressedLen = ZSTD_compress2(ZSTD_Context[id], compressedBuffer, compressedBufferLen, data, len);
 }
 
 Node * lambda::CreateNode(Poco::JSON::Object::Ptr pObject, DikeProcessorConfig & dikeProcessorConfig, DikeIO * output) {

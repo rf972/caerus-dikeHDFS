@@ -30,7 +30,7 @@
 #include <map>
 #include <sstream>
 
-#include "S3Handlers.hpp"
+//#include "S3Handlers.hpp"
 #include "DikeUtil.hpp"
 #include "DikeIO.hpp"
 #include "DikeSQL.hpp"
@@ -227,9 +227,7 @@ public:
         if(dikeProcessor) {
             delete dikeProcessor;
         }
-    }
-
-    
+    }    
     
     //hdfs_session.close();
     if(verbose) {
@@ -266,6 +264,7 @@ public:
   }
 };
 
+#if 0
 class S3GatewayHandlerFactory : public HTTPRequestHandlerFactory {
 public:
   int verbose = 0;
@@ -296,6 +295,7 @@ public:
     return NULL;
   }
 };
+#endif
 
 class DikeServerApp : public ServerApplication
 {
@@ -337,13 +337,13 @@ class DikeServerApp : public ServerApplication
   {
     HTTPServerParams* nameNodeParams = new HTTPServerParams;
     HTTPServerParams* dataNodeParams = new HTTPServerParams;
-    HTTPServerParams* s3GatewayParams = new HTTPServerParams;
+    //HTTPServerParams* s3GatewayParams = new HTTPServerParams;
 
     Poco::Timespan timeout = Poco::Timespan(60*60*24, 0);
 
     nameNodeParams->setTimeout(timeout);
     dataNodeParams->setTimeout(timeout);
-    s3GatewayParams->setTimeout(timeout);
+    //s3GatewayParams->setTimeout(timeout);
  
     loadConfiguration(Poco::Util::Application::PRIO_DEFAULT);   
     loadDikeConfig();
@@ -359,14 +359,15 @@ class DikeServerApp : public ServerApplication
     HTTPServer dataNode(new DataNodeHandlerFactory(verbose, dikeConfig),
                         ServerSocket(std::stoi(dikeConfig["dike.dfs.ndp.http-port"])), 
                         dataNodeParams);
-
+#if 0
     HTTPServer s3Gateway(new S3GatewayHandlerFactory(verbose, dikeConfig),
                         ServerSocket(std::stoi(dikeConfig["dike.S3.gateway.http-port"])), 
                         s3GatewayParams);
+#endif
 
     nameNode.start();
     dataNode.start();
-    s3Gateway.start();
+    //s3Gateway.start();
 
 #if _DEBUG
     cout << endl << "Server started (Debug)" << endl;
@@ -379,7 +380,7 @@ class DikeServerApp : public ServerApplication
     cout << endl << "Shutting down..." << endl;
     nameNode.stop();
     dataNode.stop();
-    s3Gateway.stop();
+    //s3Gateway.stop();
 
     return Application::EXIT_OK;
   }

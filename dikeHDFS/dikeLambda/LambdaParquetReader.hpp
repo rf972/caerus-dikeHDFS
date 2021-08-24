@@ -303,6 +303,7 @@ class LambdaParquetReader{
         std::shared_ptr<parquet::ColumnReader> columnReader = rowGroupReader->Column(col);
         lambdaColumnReader[col] = new LambdaColumnReader(col, physicalType[col], rowCount, columnReader);
         //std::cout << "initColumn " << col << std::endl;
+        return 0;
     }
 };
 

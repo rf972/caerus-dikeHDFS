@@ -26,6 +26,7 @@ EXTERNAL_SRC_PATH=${ROOT_DIR}/external
 
 mkdir -p ${BUILD_PATH}
 
+<< 'DISABLE_AWS_BUILD'
 for awslib in aws-c-common aws-checksums aws-lc s2n-tls aws-c-cal aws-c-io aws-c-io aws-c-event-stream
 do 
     echo "Building ${awslib}"
@@ -35,6 +36,7 @@ do
     make -j 4 && make install 
     popd 
 done 
+DISABLE_AWS_BUILD
 
 pushd  ${BUILD_PATH}                           
 cmake -D CMAKE_BUILD_TYPE=${BUILD_TYPE} ${ROOT_DIR}
