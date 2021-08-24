@@ -9,28 +9,79 @@
 #include <arrow/api.h>
 #include <arrow/io/api.h>
 #include <arrow/io/memory.h>
-#include <arrow/table.h>
 #include <arrow/filesystem/filesystem.h>
+
+#include <orc/orc-config.hh>
+#include <orc/Reader.hh>
+#include <orc/Exceptions.hh>
+#include <orc/OrcFile.hh>
+
+class DikeReadableFile : public arrow::io::RandomAccessFile {    
+ public:
+    std::shared_ptr<arrow::Buffer> buffer;
+
+    DikeReadableFile() { 
+      std::cout << __FUNCTION__ << " : " << __LINE__ << std::endl;
+    }
+
+    ~DikeReadableFile() override { 
+      std::cout << __FUNCTION__ << " : " << __LINE__ << std::endl;
+    }
+
+    arrow::Status Close() override { 
+      std::cout << __FUNCTION__ << " : " << __LINE__ << std::endl;
+      return arrow::Status::OK();
+    }
+
+    bool closed() const override { 
+      std::cout << __FUNCTION__ << " : " << __LINE__ << std::endl;
+      return false;
+    }
+
+    arrow::Result<int64_t> Read(int64_t nbytes, void* out) override { 
+      std::cout << __FUNCTION__ << " : " << __LINE__ << std::endl;
+      return 0;
+    }
+
+    arrow::Result<std::shared_ptr<arrow::Buffer>> Read(int64_t nbytes) override { 
+      std::cout << __FUNCTION__ << " : " << __LINE__ << std::endl;
+      return std::move(buffer);
+    }
+
+    arrow::Result<int64_t> ReadAt(int64_t position, int64_t nbytes, void* out) override { 
+      std::cout << __FUNCTION__ << " : " << __LINE__ << std::endl;
+      return 0;
+    }
+
+    arrow::Result<std::shared_ptr<arrow::Buffer>> ReadAt(int64_t position, int64_t nbytes) override { 
+      std::cout << __FUNCTION__ << " : " << __LINE__ << std::endl;
+      return std::move(buffer);
+    }
+
+    arrow::Status Seek(int64_t position) override { 
+      std::cout << __FUNCTION__ << " : " << __LINE__ << std::endl;
+      return arrow::Status::OK();
+    }
+
+    arrow::Result<int64_t> Tell() const override { 
+      std::cout << __FUNCTION__ << " : " << __LINE__ << std::endl;
+      return 0;
+    }
+
+    arrow::Result<int64_t> GetSize() override { 
+      std::cout << __FUNCTION__ << " : " << __LINE__ << std::endl;
+      return 0;
+    }
+};
+
 
 int main(int argc, char ** argv)
 {
     arrow::Status st;    
-#if 0
-    std::shared_ptr<arrow::fs::FileSystem> fs;
-    fs = arrow::fs::FileSystemFromUri("file:///data").ValueOrDie();
-
-    std::shared_ptr<arrow::io::RandomAccessFile> inputFile;
-    inputFile = fs->OpenInputFile("/data/lineitem.parquet").ValueOrDie();
-#endif
-
-    // Open Parquet file reader
-    //std::unique_ptr<parquet::arrow::FileReader>  arrow_reader;
-    std::shared_ptr<arrow::Table> table;
 
     // https://gist.github.com/hurdad/06058a22ca2b56e25d63aaa6f3a9108f
 	arrow::io::HdfsConnectionConfig conf;
-	conf.host = "dikehdfs";	
-	//conf.port = 8020;
+	conf.host = "dikehdfs";		
     conf.port = 9000;
     conf.user = "peter";
 
@@ -38,10 +89,11 @@ int main(int argc, char ** argv)
 	st = arrow::io::HadoopFileSystem::Connect(&conf, &fs);
 	std::cout << st.ToString() << std::endl;
 
-    std::shared_ptr<arrow::io::HdfsReadableFile> inputFile;
-    st = fs->OpenReadable("/lineitem.parquet", &inputFile);
-    std::cout << st.ToString() << std::endl;
-
+    //std::shared_ptr<arrow::io::HdfsReadableFile> inputFile;
+    //st = fs->OpenReadable("/lineitem.parquet", &inputFile);
+    //std::cout << st.ToString() << std::endl;
+    std::shared_ptr<DikeReadableFile> inputFile = std::shared_ptr<DikeReadableFile>(new DikeReadableFile());;
+    
     std::shared_ptr<parquet::FileMetaData> fileMetaData;    
     fileMetaData = parquet::ReadMetaData(inputFile);
 

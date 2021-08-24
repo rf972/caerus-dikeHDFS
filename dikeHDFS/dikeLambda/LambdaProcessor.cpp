@@ -84,6 +84,7 @@ int LambdaProcessor::Run(DikeProcessorConfig & dikeProcessorConfig, DikeIO * out
     }
 
     for(int i = 0; i < nodeVector.size(); i++){
+        //std::cout << "Deleting Node " << nodeVector[i]->name << std::endl;
         delete nodeVector[i];
     }
 

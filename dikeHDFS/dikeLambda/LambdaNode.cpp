@@ -202,6 +202,9 @@ void ProjectionNode::UpdateColumnMap(Frame * inFrame)
     for(int c = 0; c < 3; c++) {
         outFrame = new Frame(this); // Allocate new frame with data
         outFrame->columns.resize(columnCount);
+        for(int i = 0; i < columnCount; i++) {
+            outFrame->columns[i] = inFrame->columns[columnMap[i]];
+        }
         freeFrame(outFrame); // this will put this frame on framePool
     }    
 }
