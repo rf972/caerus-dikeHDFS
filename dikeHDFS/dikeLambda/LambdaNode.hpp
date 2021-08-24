@@ -69,6 +69,7 @@ class Node {
         sem_destroy(&frameQueueSem);
         sem_destroy(&framePoolSem);        
     }
+
     void Connect(Node * node){
         this->nextNode = node;
     }
@@ -235,8 +236,8 @@ class OutputNode : public Node {
         for (int i = 0; i < ZSTD_Context.size(); i++) {
             ZSTD_freeCCtx(ZSTD_Context[i]);
         }
-
     }
+
     virtual void UpdateColumnMap(Frame * frame) override;
     virtual bool Step() override;
     void CompressZlib(uint8_t * data, uint32_t len, bool is_binary);

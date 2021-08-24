@@ -292,6 +292,13 @@ public class DikeLambdaClient
         }
         optputNodeBuilder.add("CompressionType", compressionType);
 
+        String compressionLevel = "1";
+        String compressionLevelEnv = System.getenv("DIKE_COMPRESSION_LEVEL");
+        if(compressionLevelEnv != null){
+            compressionLevel = compressionLevelEnv;
+        }
+        optputNodeBuilder.add("CompressionLevel", compressionLevel);
+
         JsonArrayBuilder nodeArrayBuilder = Json.createArrayBuilder();
         nodeArrayBuilder.add(inputNodeBuilder.build());
         nodeArrayBuilder.add(projectionNodeBuilder.build());
@@ -370,6 +377,13 @@ public class DikeLambdaClient
             compressionType = compressionTypeEnv;
         }
         optputNodeBuilder.add("CompressionType", compressionType);
+
+        String compressionLevel = "1";
+        String compressionLevelEnv = System.getenv("DIKE_COMPRESSION_LEVEL");
+        if(compressionLevelEnv != null){
+            compressionLevel = compressionLevelEnv;
+        }
+        optputNodeBuilder.add("CompressionLevel", compressionLevel);
 
         JsonArrayBuilder nodeArrayBuilder = Json.createArrayBuilder();
         nodeArrayBuilder.add(inputNodeBuilder.build());
@@ -783,7 +797,9 @@ public class DikeLambdaClient
 
 // mvn package -o
 // java -classpath target/ndp-hdfs-client-1.0-jar-with-dependencies.jar org.dike.hdfs.DikeLambdaClient /lineitem_srg.parquet
+// Q5
 // java -classpath target/ndp-hdfs-client-1.0-jar-with-dependencies.jar org.dike.hdfs.DikeLambdaClient /nation.parquet
+// Q10
 // java -classpath target/ndp-hdfs-client-1.0-jar-with-dependencies.jar org.dike.hdfs.DikeLambdaClient /customer.parquet
 
 // for i in $(seq 1 500); do echo $i && java -classpath target/ndp-hdfs-client-1.0-jar-with-dependencies.jar org.dike.hdfs.DikeLambdaClient /lineitem_srg.parquet; done
