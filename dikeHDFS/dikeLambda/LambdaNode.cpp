@@ -258,7 +258,7 @@ void OutputNode::UpdateColumnMap(Frame * frame)
         for (int i = 0; i < ZSTD_Context.size(); i++) {
             ZSTD_Context[i] = ZSTD_createCCtx();
             ZSTD_CCtx_setParameter(ZSTD_Context[i], ZSTD_c_compressionLevel, compressionLevel);
-            ZSTD_CCtx_setParameter(ZSTD_Context[i], ZSTD_c_strategy, ZSTD_fast);
+            //ZSTD_CCtx_setParameter(ZSTD_Context[i], ZSTD_c_strategy, ZSTD_fast);
         }
     }
 }
