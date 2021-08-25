@@ -140,6 +140,41 @@ class Column {
         break;
         }        
     }
+
+    void ApplyFilter(uint8_t * filter) {
+        if(!initialized) { return; }
+        //std::cout << "ApplyFilter Column  " << name << std::endl;
+        switch(data_type) {
+        case INT64:
+        _ApplyFilter(int64_values, filter);
+        break;
+        case DOUBLE:        
+        _ApplyFilter(double_values, filter);
+        break;
+        case BYTE_ARRAY:
+        _ApplyFilter(ba_values, filter);        
+        break;
+        }
+    }
+
+    private:
+    template<typename T>
+    void _ApplyFilter(T values, uint8_t * filter) {
+        int index = -1;
+        for(int i = 0; i < row_count; i++) { // Find first hole
+            if(filter[i] == 0){
+                index = i;
+                break;
+            }
+        }
+        for(int i = index + 1; i < row_count; i++) {
+            if(filter[i]) { // Valid data
+                values[index] = values[i];
+                index++;
+            }
+        }
+        row_count = index;
+    }
 };
 
 } // namespace lambda

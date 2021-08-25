@@ -214,7 +214,7 @@ public class DikeLambdaClient
         projectionArrayBuilder.add("l_tax");
         projectionArrayBuilder.add("l_returnflag");
         projectionArrayBuilder.add("l_linestatus");
-        projectionArrayBuilder.add("l_shipdate");
+        //projectionArrayBuilder.add("l_shipdate");
 
         projectionNodeBuilder.add("ProjectionArray", projectionArrayBuilder);
 

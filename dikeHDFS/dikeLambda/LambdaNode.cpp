@@ -265,13 +265,14 @@ void OutputNode::UpdateColumnMap(Frame * frame)
 }
 
 bool OutputNode::Step()
-{
-    //std::cout << "OutputNode::Step " << stepCount << std::endl;
+{    
     if(done) { return done; }
-    stepCount++;
-
+    
     Frame * inFrame = getFrame();
     if(inFrame == NULL) return done;
+
+    //std::cout << "OutputNode::Step " << stepCount << " Rows " << inFrame->columns[0]->row_count << std::endl;
+    stepCount++;
 
     Column * col = 0;
     int64_t be_value;
