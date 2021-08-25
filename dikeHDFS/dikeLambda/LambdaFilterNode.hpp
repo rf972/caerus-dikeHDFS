@@ -5,10 +5,13 @@
 
 namespace lambda {
 
+class Filter;
+
 class FilterNode : public Node {
     public:
-
-    FilterNode(Poco::JSON::Object::Ptr pObject, DikeProcessorConfig & dikeProcessorConfig, DikeIO * output);    
+    std::vector<Filter *> filterArray;
+    FilterNode(Poco::JSON::Object::Ptr pObject, DikeProcessorConfig & dikeProcessorConfig, DikeIO * output);
+    ~FilterNode();
 
     virtual void UpdateColumnMap(Frame * frame) override;
     virtual bool Step() override;
