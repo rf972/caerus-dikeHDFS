@@ -180,13 +180,32 @@ public class DikeLambdaClient
         nodeArrayBuilder.add(inputNodeBuilder.build());
         
         JsonObjectBuilder filterNodeBuilder = Json.createObjectBuilder();
-        filterNodeBuilder.add("Name", "FilterNode");
+        filterNodeBuilder.add("Name", "TpchQ1 Filter");
         filterNodeBuilder.add("Type", "_FILTER");
+        JsonArrayBuilder filterArrayBuilder = Json.createArrayBuilder();
+
+        JsonObjectBuilder filterBuilder = Json.createObjectBuilder();
+        filterBuilder.add("Expression", "IsNotNull");
+        JsonObjectBuilder argBuilder = Json.createObjectBuilder();
+        argBuilder.add("ColumnReference", "l_shipdate");
+        filterBuilder.add("Arg", argBuilder);        
+        filterArrayBuilder.add(filterBuilder);
+
+        filterBuilder = Json.createObjectBuilder().add("Expression", "LessThanOrEqual");
+
+        argBuilder = Json.createObjectBuilder().add("ColumnReference", "l_shipdate");        
+        filterBuilder.add("Left", argBuilder);
+        argBuilder = Json.createObjectBuilder().add("Literal", "1998-09-02");        
+        filterBuilder.add("Right", argBuilder);
+        filterArrayBuilder.add(filterBuilder);
+
+        filterNodeBuilder.add("FilterArray", filterArrayBuilder);
+        
         nodeArrayBuilder.add(filterNodeBuilder.build()); 
 
 
         JsonObjectBuilder projectionNodeBuilder = Json.createObjectBuilder();
-        projectionNodeBuilder.add("Name", "TpchQ1");
+        projectionNodeBuilder.add("Name", "TpchQ1 Project");
         projectionNodeBuilder.add("Type", "_PROJECTION");
         JsonArrayBuilder projectionArrayBuilder = Json.createArrayBuilder();
         projectionArrayBuilder.add("l_quantity");

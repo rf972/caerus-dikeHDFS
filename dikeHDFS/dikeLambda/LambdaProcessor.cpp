@@ -45,7 +45,7 @@ int LambdaProcessor::Run(DikeProcessorConfig & dikeProcessorConfig, DikeIO * out
         nodeVector.push_back(CreateNode(nodeArray->getObject(i), dikeProcessorConfig, output));
     }
 
-    if (verbose) {
+    if (0 && verbose) {
         for(int i = 0; i < nodeVector.size(); i++) {
             std::cout << "nodeVector[" << i << "]->name " << nodeVector[i]->name << std::endl;
         }
