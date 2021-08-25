@@ -15,6 +15,7 @@
 #include "LambdaProcessor.hpp"
 #include "LambdaFrame.hpp"
 #include "LambdaNode.hpp"
+#include "LambdaFilterNode.hpp"
 
 using namespace lambda;
 

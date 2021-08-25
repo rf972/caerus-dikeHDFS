@@ -171,11 +171,20 @@ public class DikeLambdaClient
         JsonObjectBuilder dagBuilder = Json.createObjectBuilder();
         dagBuilder.add("Name", "DAG Projection");
 
+        JsonArrayBuilder nodeArrayBuilder = Json.createArrayBuilder();
+
         JsonObjectBuilder inputNodeBuilder = Json.createObjectBuilder();
         inputNodeBuilder.add("Name", "InputNode");
         inputNodeBuilder.add("Type", "_INPUT");
         inputNodeBuilder.add("File", name);
+        nodeArrayBuilder.add(inputNodeBuilder.build());
         
+        JsonObjectBuilder filterNodeBuilder = Json.createObjectBuilder();
+        filterNodeBuilder.add("Name", "FilterNode");
+        filterNodeBuilder.add("Type", "_FILTER");
+        nodeArrayBuilder.add(filterNodeBuilder.build()); 
+
+
         JsonObjectBuilder projectionNodeBuilder = Json.createObjectBuilder();
         projectionNodeBuilder.add("Name", "TpchQ1");
         projectionNodeBuilder.add("Type", "_PROJECTION");
@@ -189,6 +198,8 @@ public class DikeLambdaClient
         projectionArrayBuilder.add("l_shipdate");
 
         projectionNodeBuilder.add("ProjectionArray", projectionArrayBuilder);
+
+        nodeArrayBuilder.add(projectionNodeBuilder.build());
 
         JsonObjectBuilder optputNodeBuilder = Json.createObjectBuilder();
         optputNodeBuilder.add("Name", "OutputNode");
@@ -207,10 +218,6 @@ public class DikeLambdaClient
             compressionLevel = compressionLevelEnv;
         }
         optputNodeBuilder.add("CompressionLevel", compressionLevel);
-
-        JsonArrayBuilder nodeArrayBuilder = Json.createArrayBuilder();
-        nodeArrayBuilder.add(inputNodeBuilder.build());
-        nodeArrayBuilder.add(projectionNodeBuilder.build());
         nodeArrayBuilder.add(optputNodeBuilder.build());        
 
         dagBuilder.add("NodeArray", nodeArrayBuilder);
@@ -266,7 +273,7 @@ public class DikeLambdaClient
         inputNodeBuilder.add("File", name);
         
         JsonObjectBuilder projectionNodeBuilder = Json.createObjectBuilder();
-        projectionNodeBuilder.add("Name", "TpchQ1");
+        projectionNodeBuilder.add("Name", "TpchQ10");
         projectionNodeBuilder.add("Type", "_PROJECTION");
         JsonArrayBuilder projectionArrayBuilder = Json.createArrayBuilder();
         projectionArrayBuilder.add("c_custkey");
@@ -357,7 +364,7 @@ public class DikeLambdaClient
         inputNodeBuilder.add("File", name);
         
         JsonObjectBuilder projectionNodeBuilder = Json.createObjectBuilder();
-        projectionNodeBuilder.add("Name", "TpchQ1");
+        projectionNodeBuilder.add("Name", "TpchQ5");
         projectionNodeBuilder.add("Type", "_PROJECTION");
         JsonArrayBuilder projectionArrayBuilder = Json.createArrayBuilder();
         //["n_nationkey","n_name","n_regionkey"]

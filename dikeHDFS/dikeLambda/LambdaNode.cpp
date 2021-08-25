@@ -7,6 +7,7 @@
 #include <zstd.h>   
 
 #include "LambdaNode.hpp"
+#include "LambdaFilterNode.hpp"
 
 using namespace lambda;
 
@@ -406,6 +407,9 @@ Node * lambda::CreateNode(Poco::JSON::Object::Ptr pObject, DikeProcessorConfig &
     std::string typeStr = pObject->getValue<std::string>("Type");
     if(typeStr.compare("_INPUT") == 0){
         return new InputNode(pObject, dikeProcessorConfig, output);
+    }
+    if(typeStr.compare("_FILTER") == 0){
+        return new FilterNode(pObject, dikeProcessorConfig, output);
     }
     if(typeStr.compare("_PROJECTION") == 0){
         return new ProjectionNode(pObject, dikeProcessorConfig, output);
