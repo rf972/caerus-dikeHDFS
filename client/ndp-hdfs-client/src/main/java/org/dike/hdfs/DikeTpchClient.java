@@ -129,6 +129,11 @@ public class DikeTpchClient
                 fname = "/lineitem_srg.parquet";
                 param = getQ1Param(fname);
             break;
+            case 6:
+                fname = "/lineitem_srg.parquet";
+                param = getQ6Param(fname);
+            break;
+
             default:
                 System.out.format("Unsupported testNumber %d \n", Integer.parseInt(testNumber));
                 return;            
@@ -256,6 +261,150 @@ public class DikeTpchClient
         return null;        
     }
     
+    public static String getQ6Param(String name)    
+    { // SELECT  SUM( l_extendedprice) FROM S3Object WHERE l_shipdate IS NOT NULL AND l_discount >= 0.05 AND l_discount <= 0.07 AND l_quantity < 24.0 AND l_shipdate >= '1994-01-01' AND l_shipdate < '1995-01-01' 
+        try {
+        XMLOutputFactory xmlof = XMLOutputFactory.newInstance();
+        StringWriter strw = new StringWriter();
+        XMLStreamWriter xmlw = xmlof.createXMLStreamWriter(strw);
+        xmlw.writeStartDocument();
+        xmlw.writeStartElement("Processor");
+        
+        xmlw.writeStartElement("Name");
+        xmlw.writeCharacters("Lambda");
+        xmlw.writeEndElement(); // Name
+        
+        xmlw.writeStartElement("Configuration");
+
+        xmlw.writeStartElement("DAG");
+        JsonObjectBuilder dagBuilder = Json.createObjectBuilder();
+        dagBuilder.add("Name", "DAG Projection");
+
+        JsonArrayBuilder nodeArrayBuilder = Json.createArrayBuilder();
+
+        JsonObjectBuilder inputNodeBuilder = Json.createObjectBuilder();
+        inputNodeBuilder.add("Name", "InputNode");
+        inputNodeBuilder.add("Type", "_INPUT");
+        inputNodeBuilder.add("File", name);
+        nodeArrayBuilder.add(inputNodeBuilder.build());
+        
+        JsonObjectBuilder filterNodeBuilder = Json.createObjectBuilder();
+        filterNodeBuilder.add("Name", "TpchQ6 Filter");
+        filterNodeBuilder.add("Type", "_FILTER");
+        JsonArrayBuilder filterArrayBuilder = Json.createArrayBuilder();
+
+        JsonObjectBuilder filterBuilder = Json.createObjectBuilder();
+        filterBuilder.add("Expression", "IsNotNull");
+        JsonObjectBuilder argBuilder = Json.createObjectBuilder();
+        argBuilder.add("ColumnReference", "l_shipdate");
+        filterBuilder.add("Arg", argBuilder);        
+        filterArrayBuilder.add(filterBuilder);
+
+        filterBuilder = Json.createObjectBuilder().add("Expression", "GreaterThanOrEqual");
+        argBuilder = Json.createObjectBuilder().add("ColumnReference", "l_discount");        
+        filterBuilder.add("Left", argBuilder);
+        argBuilder = Json.createObjectBuilder().add("Literal", "0.05");        
+        filterBuilder.add("Right", argBuilder);
+        filterArrayBuilder.add(filterBuilder);
+
+
+        filterBuilder = Json.createObjectBuilder().add("Expression", "LessThanOrEqual");
+        argBuilder = Json.createObjectBuilder().add("ColumnReference", "l_discount");        
+        filterBuilder.add("Left", argBuilder);
+        argBuilder = Json.createObjectBuilder().add("Literal", "0.07");        
+        filterBuilder.add("Right", argBuilder);
+        filterArrayBuilder.add(filterBuilder);
+
+        filterBuilder = Json.createObjectBuilder().add("Expression", "LessThan");
+        argBuilder = Json.createObjectBuilder().add("ColumnReference", "l_quantity");        
+        filterBuilder.add("Left", argBuilder);
+        argBuilder = Json.createObjectBuilder().add("Literal", "24.0");        
+        filterBuilder.add("Right", argBuilder);
+        filterArrayBuilder.add(filterBuilder);
+
+        filterBuilder = Json.createObjectBuilder().add("Expression", "GreaterThanOrEqual");
+        argBuilder = Json.createObjectBuilder().add("ColumnReference", "l_shipdate");        
+        filterBuilder.add("Left", argBuilder);
+        argBuilder = Json.createObjectBuilder().add("Literal", "1994-01-01");        
+        filterBuilder.add("Right", argBuilder);
+        filterArrayBuilder.add(filterBuilder);
+
+        filterBuilder = Json.createObjectBuilder().add("Expression", "LessThan");
+        argBuilder = Json.createObjectBuilder().add("ColumnReference", "l_shipdate");        
+        filterBuilder.add("Left", argBuilder);
+        argBuilder = Json.createObjectBuilder().add("Literal", "1995-01-01");        
+        filterBuilder.add("Right", argBuilder);
+        filterArrayBuilder.add(filterBuilder);
+
+
+
+        filterNodeBuilder.add("FilterArray", filterArrayBuilder);
+        
+        nodeArrayBuilder.add(filterNodeBuilder.build()); 
+
+
+        JsonObjectBuilder projectionNodeBuilder = Json.createObjectBuilder();
+        projectionNodeBuilder.add("Name", "TpchQ6 Project");
+        projectionNodeBuilder.add("Type", "_PROJECTION");
+        JsonArrayBuilder projectionArrayBuilder = Json.createArrayBuilder();
+        projectionArrayBuilder.add("l_extendedprice");
+
+        projectionNodeBuilder.add("ProjectionArray", projectionArrayBuilder);
+
+        nodeArrayBuilder.add(projectionNodeBuilder.build());
+
+        JsonObjectBuilder optputNodeBuilder = Json.createObjectBuilder();
+        optputNodeBuilder.add("Name", "OutputNode");
+        optputNodeBuilder.add("Type", "_OUTPUT");        
+
+        String compressionType = "None";
+        String compressionTypeEnv = System.getenv("DIKE_COMPRESSION");
+        if(compressionTypeEnv != null){
+            compressionType = compressionTypeEnv;
+        }
+        optputNodeBuilder.add("CompressionType", compressionType);
+
+        String compressionLevel = "1";
+        String compressionLevelEnv = System.getenv("DIKE_COMPRESSION_LEVEL");
+        if(compressionLevelEnv != null){
+            compressionLevel = compressionLevelEnv;
+        }
+        optputNodeBuilder.add("CompressionLevel", compressionLevel);
+        nodeArrayBuilder.add(optputNodeBuilder.build());        
+
+        dagBuilder.add("NodeArray", nodeArrayBuilder);
+
+        // For now we will assume simple pipe with ordered connections
+        JsonObject dag = dagBuilder.build();
+
+        StringWriter stringWriter = new StringWriter();
+        JsonWriter writer = Json.createWriter(stringWriter);
+        writer.writeObject(dag);
+        writer.close();
+
+        xmlw.writeCharacters(stringWriter.getBuffer().toString());
+        xmlw.writeEndElement(); // DAG
+
+        xmlw.writeStartElement("RowGroupIndex");
+        xmlw.writeCharacters("0");
+        xmlw.writeEndElement(); // RowGroupIndex
+
+        xmlw.writeStartElement("LastAccessTime");
+        xmlw.writeCharacters("1624464464409");
+        xmlw.writeEndElement(); // LastAccessTime
+
+        xmlw.writeEndElement(); // Configuration
+        xmlw.writeEndElement(); // Processor
+        xmlw.writeEndDocument();
+        xmlw.close();
+        return strw.toString();
+        } catch (Exception ex) {
+            System.out.println("Error occurred: ");
+            ex.printStackTrace();            
+        }
+        return null;        
+    }
+
     public static String getLambdaQ10ReadParam(String name) throws XMLStreamException 
     {
         XMLOutputFactory xmlof = XMLOutputFactory.newInstance();
@@ -707,7 +856,10 @@ public class DikeTpchClient
 }
 
 // mvn package -o
+// Q1
 // java -classpath target/ndp-hdfs-client-1.0-jar-with-dependencies.jar org.dike.hdfs.DikeTpchClient 1
+// Q6
+// java -classpath target/ndp-hdfs-client-1.0-jar-with-dependencies.jar org.dike.hdfs.DikeTpchClient 6
 // Q5
 // java -classpath target/ndp-hdfs-client-1.0-jar-with-dependencies.jar org.dike.hdfs.DikeTpchClient 5
 // Q10
