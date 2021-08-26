@@ -54,19 +54,6 @@ import javax.json.JsonObjectBuilder;
 import javax.json.JsonArrayBuilder;
 import javax.json.JsonWriter;
 
-// Compression support
-import java.io.UnsupportedEncodingException;
-import java.util.zip.DataFormatException;
-import java.util.zip.Deflater;
-import java.util.zip.Inflater;
-
-// LZ4 support
-import net.jpountz.lz4.LZ4Exception;
-import net.jpountz.lz4.LZ4Factory;
-import net.jpountz.lz4.LZ4FastDecompressor;
-import net.jpountz.lz4.LZ4SafeDecompressor;
-import net.jpountz.xxhash.XXHashFactory;
-
 // ZSTD support
 import com.github.luben.zstd.Zstd;
 
@@ -116,11 +103,11 @@ import javax.xml.namespace.QName;
 
 import org.dike.hdfs.NdpHdfsFileSystem;
 
-public class DikeLambdaClient
+public class DikeTpchClient
 {
     public static void main( String[] args )
     {
-        String fname = args[0];
+        String testNumber = args[0];
         // Suppress log4j warnings
         BasicConfigurator.configure();
         Logger.getRootLogger().setLevel(Level.INFO);
@@ -135,26 +122,23 @@ public class DikeLambdaClient
         Path dikehdfsPath = new Path("ndphdfs://dikehdfs:9860/");
         Path hdfsPath = new Path("hdfs://dikehdfs:9000/");
             
-        //TpchQ1Test(dikehdfsPath, fname, conf, true/*pushdown*/, false/*partitionned*/);
-        LambdaTest(dikehdfsPath, fname, conf, true/*pushdown*/, false/*partitionned*/);
-    }    
-    
-    public static String getLambdaReadParam(String name) throws XMLStreamException
-    {
-        if(name.contains("lineitem")) {
-            return getLambdaQ1ReadParam(name);
+        String fname = "";
+        String param = "";
+        switch(Integer.parseInt(testNumber)) {
+            case 1:
+                fname = "/lineitem_srg.parquet";
+                param = getQ1Param(fname);
+            break;
+            default:
+                System.out.format("Unsupported testNumber %d \n", Integer.parseInt(testNumber));
+                return;            
         }
-        if(name.contains("nation")) {
-            return getLambdaQ5ReadParam(name);
-        }
-        if(name.contains("customer")) {
-            return getLambdaQ10ReadParam(name);
-        }        
-        return null;
-    }
+        TpchTest(dikehdfsPath, fname, conf, param);
+    }        
 
-    public static String getLambdaQ1ReadParam(String name) throws XMLStreamException 
+    public static String getQ1Param(String name)    
     {
+        try {
         XMLOutputFactory xmlof = XMLOutputFactory.newInstance();
         StringWriter strw = new StringWriter();
         XMLStreamWriter xmlw = xmlof.createXMLStreamWriter(strw);
@@ -264,8 +248,12 @@ public class DikeLambdaClient
         xmlw.writeEndElement(); // Processor
         xmlw.writeEndDocument();
         xmlw.close();
-
         return strw.toString();
+        } catch (Exception ex) {
+            System.out.println("Error occurred: ");
+            ex.printStackTrace();            
+        }
+        return null;        
     }
     
     public static String getLambdaQ10ReadParam(String name) throws XMLStreamException 
@@ -445,15 +433,14 @@ public class DikeLambdaClient
         return strw.toString();
     }
 
-    public static void LambdaTest(Path fsPath, String fname, Configuration conf, Boolean pushdown, Boolean partitionned)
+    public static void TpchTest(Path fsPath, String fname, Configuration conf, String readParam)
     {
         InputStream input = null;
         Path fileToRead = new Path(fname);
         FileSystem fs = null;        
         NdpHdfsFileSystem dikeFS = null;        
         long totalDataSize = 0;
-        int totalRecords = 0;
-        String readParam = null;
+        int totalRecords = 0;        
         Map<String,Statistics> stats;
         int traceRecordMax = 10;
         int traceRecordCount = 0;
@@ -475,10 +462,8 @@ public class DikeLambdaClient
             System.out.println("\nConnected to -- " + fsPath.toString());
             start_time = System.currentTimeMillis();                                                
 
-            dikeFS = (NdpHdfsFileSystem)fs;            
-            readParam = getLambdaReadParam(fname);                                        
+            dikeFS = (NdpHdfsFileSystem)fs;                                                              
             FSDataInputStream dataInputStream = dikeFS.open(fileToRead, BUFFER_SIZE, readParam);                    
-  
             DataInputStream dis = new DataInputStream(new BufferedInputStream(dataInputStream, BUFFER_SIZE ));
 
             int dataTypes[];
@@ -549,94 +534,6 @@ public class DikeLambdaClient
                     }
                 }
 
-                public void readColumn(DataInputStream dis, LZ4SafeDecompressor decompressor) 
-                    throws DataFormatException, UnsupportedEncodingException, IOException {
-                    long nbytes;
-                    dis.readFully(header.array(), 0, header.capacity());
-                    nbytes = header.getInt(HEADER_COMPRESSED_LEN);                    
-                    //System.out.format("readColumn[%d] %d header size %d ", colId, nbytes, header.capacity());
-
-                    dis.readFully(compressedBuffer, 0, (int)nbytes);
-                    /* Note: if we know decompressed length
-                    * We can call LZ4FastDecompressor :
-                    * decompress(compressedBuffer, 0, byteBuffer.array(), 0, decompressedLength);
-                    * for faster processing
-                    */
-
-                    // Compressed length is known (a little slower)
-                    int dataSize;
-                    if(TYPE_FIXED_LEN_BYTE_ARRAY == header.getInt(HEADER_DATA_TYPE)){
-                        fixedTextLen = header.getInt(HEADER_TYPE_SIZE);                        
-                        dataSize = decompressor.decompress(compressedBuffer, 0, (int)nbytes, text_buffer, 0);
-                        record_count = (int) (dataSize / fixedTextLen);
-                    } else {
-                        fixedTextLen = 0;
-                        dataSize = decompressor.decompress(compressedBuffer, 0, (int)nbytes, byteBuffer.array(), 0);
-                        record_count = (int) (dataSize / 8);
-                    }
-
-                    if(TYPE_BYTE_ARRAY == header.getInt(HEADER_DATA_TYPE)){
-                        record_count = (int) (dataSize);
-                        int idx = 0;
-                        for(int i = 0; i < record_count; i++){
-                            index_buffer[i] = idx;
-                            idx += byteBuffer.get(i) & 0xFF;
-                        }
-                        // Read actual text size                            
-                        // nbytes = dis.readLong();
-                        dis.readFully(header.array(), 0, header.capacity());                                                
-                        nbytes = header.getInt(HEADER_COMPRESSED_LEN);                        
-                        dis.readFully(compressedBuffer, 0, (int)nbytes);                            
-                        dataSize = decompressor.decompress(compressedBuffer, 0, (int)nbytes, text_buffer, 0);
-                        text_size = dataSize;
-                   }
-                   //System.out.format("\n");
-                }
-
-                public void readColumn(DataInputStream dis, LZ4FastDecompressor decompressor) 
-                    throws DataFormatException, UnsupportedEncodingException, IOException {
-                    long nbytes;
-                    dis.readFully(header.array(), 0, header.capacity());
-                    nbytes = header.getInt(HEADER_COMPRESSED_LEN);                    
-                    //System.out.format("readColumn[%d] %d header size %d ", colId, nbytes, header.capacity());
-
-                    dis.readFully(compressedBuffer, 0, (int)nbytes);
-
-                    int dataSize;
-                    if(TYPE_FIXED_LEN_BYTE_ARRAY == header.getInt(HEADER_DATA_TYPE)){
-                        fixedTextLen = header.getInt(HEADER_TYPE_SIZE);                        
-                        //dataSize = decompressor.decompress(compressedBuffer, 0, (int)nbytes, text_buffer, 0);
-                        dataSize = header.getInt(HEADER_DATA_LEN);
-                        decompressor.decompress(compressedBuffer, 0, text_buffer, 0, dataSize);
-                        record_count = (int) (dataSize / fixedTextLen);
-                    } else {
-                        fixedTextLen = 0;
-                        //dataSize = decompressor.decompress(compressedBuffer, 0, (int)nbytes, byteBuffer.array(), 0);
-                        dataSize = header.getInt(HEADER_DATA_LEN);
-                        decompressor.decompress(compressedBuffer, 0, byteBuffer.array(), 0, dataSize);
-                        record_count = (int) (dataSize / 8);
-                    }
-
-                    if(TYPE_BYTE_ARRAY == header.getInt(HEADER_DATA_TYPE)){
-                        record_count = (int) (dataSize);
-                        int idx = 0;
-                        for(int i = 0; i < record_count; i++){
-                            index_buffer[i] = idx;
-                            idx += byteBuffer.get(i) & 0xFF;
-                        }
-                        // Read actual text size                            
-                        // nbytes = dis.readLong();
-                        dis.readFully(header.array(), 0, header.capacity());                                                
-                        nbytes = header.getInt(HEADER_COMPRESSED_LEN);                        
-                        dis.readFully(compressedBuffer, 0, (int)nbytes);                            
-                        //dataSize = decompressor.decompress(compressedBuffer, 0, (int)nbytes, text_buffer, 0);
-                        dataSize = header.getInt(HEADER_DATA_LEN);
-                        decompressor.decompress(compressedBuffer, 0, text_buffer, 0, dataSize);
-                        text_size = dataSize;
-                   }
-                   //System.out.format("\n");
-                }
-
                 public void readColumnZSTD(DataInputStream dis) throws  IOException {
                     int nbytes;
                     
@@ -646,8 +543,6 @@ public class DikeLambdaClient
                     //System.out.format("readColumn[%d] type %d ratio %f \n", colId, header.getInt(HEADER_DATA_TYPE), 1.0 * header.getInt(HEADER_DATA_LEN) /  header.getInt(HEADER_COMPRESSED_LEN));                    
 
                     byte [] cb = new byte [nbytes];
-
-                    //dis.readFully(compressedBuffer, 0, nbytes);
                     dis.readFully(cb, 0, nbytes);                    
 
                     //System.out.format("readColumn[%d] %d decompressedSize %d \n", colId, nbytes, Zstd.decompressedSize(compressedBuffer));                    
@@ -656,13 +551,11 @@ public class DikeLambdaClient
                     if(TYPE_FIXED_LEN_BYTE_ARRAY == header.getInt(HEADER_DATA_TYPE)){
                         fixedTextLen = header.getInt(HEADER_TYPE_SIZE);                                                
                         dataSize = header.getInt(HEADER_DATA_LEN);
-                        //Zstd.decompress(text_buffer, Arrays.copyOfRange(compressedBuffer, 0, nbytes));
                         Zstd.decompress(text_buffer, cb);
                         record_count = (int) (dataSize / fixedTextLen);
                     } else {
                         fixedTextLen = 0;                        
                         dataSize = header.getInt(HEADER_DATA_LEN);                        
-                        //Zstd.decompress(byteBuffer.array(), Arrays.copyOfRange(compressedBuffer, 0, nbytes));
                         Zstd.decompress(byteBuffer.array(), cb);
                         //System.out.format("readColumn[%d] Zstd.decompress %d bytes \n", colId, nbytes);                        
                         record_count = (int) (dataSize / 8);
@@ -681,11 +574,9 @@ public class DikeLambdaClient
 
                         nbytes = header.getInt(HEADER_COMPRESSED_LEN);
                         cb = new byte [nbytes];
-                        //dis.readFully(compressedBuffer, 0, nbytes);                            
                         dis.readFully(cb, 0, nbytes);                            
                         
                         dataSize = header.getInt(HEADER_DATA_LEN);
-                        //Zstd.decompress(text_buffer, Arrays.copyOfRange(compressedBuffer, 0, nbytes));
                         Zstd.decompress(text_buffer, cb);
                         text_size = dataSize;
                    }
@@ -757,10 +648,6 @@ public class DikeLambdaClient
             
             Boolean compressionEnabled = false;
             String compressionTypeEnv = System.getenv("DIKE_COMPRESSION");
-            Inflater inflater = new Inflater();
-            LZ4Factory factory = LZ4Factory.fastestInstance();
-            LZ4FastDecompressor decompressor = factory.fastDecompressor();
-            //LZ4SafeDecompressor decompressor = factory.safeDecompressor();
 
             if(compressionTypeEnv != null){
                 if(compressionTypeEnv.equals("ZSTD")){
@@ -778,9 +665,7 @@ public class DikeLambdaClient
                 try {
                     for( int i = 0 ; i < nCols; i++) {
                         if(compressionEnabled) {
-                            //columVector[i].readColumn(dis, inflater);
                             //columVector[i].readRawData(dis);
-                            //columVector[i].readColumn(dis, decompressor);
                             columVector[i].readColumnZSTD(dis);
                         } else {
                             columVector[i].readColumn(dis);
@@ -822,36 +707,12 @@ public class DikeLambdaClient
 }
 
 // mvn package -o
-// java -classpath target/ndp-hdfs-client-1.0-jar-with-dependencies.jar org.dike.hdfs.DikeLambdaClient /lineitem_srg.parquet
+// java -classpath target/ndp-hdfs-client-1.0-jar-with-dependencies.jar org.dike.hdfs.DikeTpchClient 1
 // Q5
-// java -classpath target/ndp-hdfs-client-1.0-jar-with-dependencies.jar org.dike.hdfs.DikeLambdaClient /nation.parquet
+// java -classpath target/ndp-hdfs-client-1.0-jar-with-dependencies.jar org.dike.hdfs.DikeTpchClient 5
 // Q10
-// java -classpath target/ndp-hdfs-client-1.0-jar-with-dependencies.jar org.dike.hdfs.DikeLambdaClient /customer.parquet
-
-// for i in $(seq 1 500); do echo $i && java -classpath target/ndp-hdfs-client-1.0-jar-with-dependencies.jar org.dike.hdfs.DikeLambdaClient /lineitem_srg.parquet; done
-
-// 36864,Customer#000036864,tWmo,qWmIl5i9wVN,0,10-768-562-2480,5952.13,deposits cajole above the unusual, regular dugouts. fluffily silent patterns haggle furiously furiously ironic the,
-// 36865,Customer#000056865,ALyVNih5 xNu0lKhiuCf7bd,8,32-969-310-5555,1539.11,nglthe furiously special requests. carefully even ideas use after the carefully final requests. regular, ir,
+// java -classpath target/ndp-hdfs-client-1.0-jar-with-dependencies.jar org.dike.hdfs.DikeTpchClient 10
 
 // export DIKE_TRACE_RECORD_MAX=36865
 // export DIKE_COMPRESSION=ZSTD
 // export DIKE_COMPRESSION_LEVEL=-10
-
-/*
-  required int64 field_id=1 l_orderkey;
-  required int64 field_id=2 l_partkey;
-  required int64 field_id=3 l_suppkey;
-  required int64 field_id=4 l_linenumber;
-  required double field_id=5 l_quantity;
-  required double field_id=6 l_extendedprice;
-  required double field_id=7 l_discount;
-  required double field_id=8 l_tax;
-  optional binary field_id=9 l_returnflag (String);
-  optional binary field_id=10 l_linestatus (String);
-  optional binary field_id=11 l_shipdate (String);
-  optional binary field_id=12 l_commitdate (String);
-  optional binary field_id=13 l_receiptdate (String);
-  optional binary field_id=14 l_shipinstruct (String);
-  optional binary field_id=15 l_shipmode (String);
-  optional binary field_id=16 l_comment (String);
-*/

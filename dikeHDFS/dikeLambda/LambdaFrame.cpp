@@ -32,3 +32,10 @@ void Frame::Free()
     }
     ownerNode->freeFrame(this);
 }
+
+void Frame::ApplyFilter(uint8_t * filter)
+{
+    for(int i = 0; i < columns.size(); i++) {        
+        columns[i]->ApplyFilter(filter);
+    }
+}

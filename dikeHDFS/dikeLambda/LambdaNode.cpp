@@ -7,6 +7,7 @@
 #include <zstd.h>   
 
 #include "LambdaNode.hpp"
+#include "LambdaFilterNode.hpp"
 
 using namespace lambda;
 
@@ -264,13 +265,14 @@ void OutputNode::UpdateColumnMap(Frame * frame)
 }
 
 bool OutputNode::Step()
-{
-    //std::cout << "OutputNode::Step " << stepCount << std::endl;
+{    
     if(done) { return done; }
-    stepCount++;
-
+    
     Frame * inFrame = getFrame();
     if(inFrame == NULL) return done;
+
+    //std::cout << "OutputNode::Step " << stepCount << " Rows " << inFrame->columns[0]->row_count << std::endl;
+    stepCount++;
 
     Column * col = 0;
     int64_t be_value;
@@ -406,6 +408,9 @@ Node * lambda::CreateNode(Poco::JSON::Object::Ptr pObject, DikeProcessorConfig &
     std::string typeStr = pObject->getValue<std::string>("Type");
     if(typeStr.compare("_INPUT") == 0){
         return new InputNode(pObject, dikeProcessorConfig, output);
+    }
+    if(typeStr.compare("_FILTER") == 0){
+        return new FilterNode(pObject, dikeProcessorConfig, output);
     }
     if(typeStr.compare("_PROJECTION") == 0){
         return new ProjectionNode(pObject, dikeProcessorConfig, output);

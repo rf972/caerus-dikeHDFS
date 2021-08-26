@@ -84,7 +84,7 @@ class Node {
     }
 
     virtual void putFrame(Frame * frame) { // Submit frame for processing
-        frameQueueMutex.lock();
+        frameQueueMutex.lock();        
         frameQueue.push(frame);
         frameQueueMutex.unlock();
         sem_post(&frameQueueSem);

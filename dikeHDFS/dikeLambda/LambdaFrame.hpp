@@ -23,6 +23,7 @@ class Frame {
     ~Frame();
     void Add(Column * col); // Add column to frame
     void Free(); // Returm this frame to the owners pool
+    void ApplyFilter(uint8_t * filter);
 };
 
 } // namespace lambda

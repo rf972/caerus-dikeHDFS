@@ -15,6 +15,7 @@
 #include "LambdaProcessor.hpp"
 #include "LambdaFrame.hpp"
 #include "LambdaNode.hpp"
+#include "LambdaFilterNode.hpp"
 
 using namespace lambda;
 
@@ -44,7 +45,7 @@ int LambdaProcessor::Run(DikeProcessorConfig & dikeProcessorConfig, DikeIO * out
         nodeVector.push_back(CreateNode(nodeArray->getObject(i), dikeProcessorConfig, output));
     }
 
-    if (verbose) {
+    if (0 && verbose) {
         for(int i = 0; i < nodeVector.size(); i++) {
             std::cout << "nodeVector[" << i << "]->name " << nodeVector[i]->name << std::endl;
         }
@@ -63,12 +64,13 @@ int LambdaProcessor::Run(DikeProcessorConfig & dikeProcessorConfig, DikeIO * out
     std::chrono::high_resolution_clock::time_point t1 =  std::chrono::high_resolution_clock::now();
 
     // Start output worker
-    Node * outputNode = nodeVector[nodeVector.size() - 1];
+    Node * outputNode = nodeVector[nodeVector.size() - 1];    
     std::thread outputThread = outputNode->startWorker();
+
     bool done = false;
     while(!done)     
     {
-        for(int i = 0; i < nodeVector.size() - 1; i++) {
+        for(int i = 0; i < nodeVector.size() - 1 ; i++) {
             done = nodeVector[i]->Step();
         }        
     }
