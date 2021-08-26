@@ -343,7 +343,7 @@ void OutputNode::Send(int id, Column::DataType data_type, int type_size, void * 
     header[3] = htobe32(0); // COMPRESSED LEN
 
     int64_t be_value;
-    if(compressionEnabled) {
+    if(compressionEnabled && len > 1024) { // There is no need to compress small chunks of data
         //CompressLZ4((uint8_t *)data, len);
         CompressZSTD(id, (uint8_t *)data, len);
         header[3] = htobe32(compressedLen); // COMPRESSED LEN
@@ -363,38 +363,6 @@ void OutputNode::TranslateBE64(void * in_data, uint8_t * out_data, uint32_t len)
     for(int i = 0; i < len; i ++) {
         out_ptr[i] = htobe64(in_ptr[i]);
     }
-}
-
-void OutputNode::CompressZlib(uint8_t * data, uint32_t len, bool is_binary)
-{
-    z_stream defstream;
-    defstream.zalloc = Z_NULL;
-    defstream.zfree = Z_NULL;
-    defstream.opaque = Z_NULL;
-    if(is_binary){
-        defstream.data_type = Z_BINARY;
-    } else {
-        defstream.data_type = Z_TEXT;
-    }
-    defstream.avail_in = len; // size of input
-    defstream.next_in = data; // input data
-    defstream.avail_out = compressedBufferLen; // size of output
-    defstream.next_out = compressedBuffer; // output data
-        
-    deflateInit(&defstream, Z_BEST_SPEED);
-    deflate(&defstream, Z_FINISH);
-    deflateEnd(&defstream);
-
-    compressedLen = defstream.total_out;
-}
-
-void OutputNode::CompressLZ4(uint8_t * data, uint32_t len)
-{
-    //compressedLen = LZ4_compress_default((const char*)data, (char*)compressedBuffer, len, compressedBufferLen);
-    int acceleration = 1; // The larger the acceleration value, the faster the algorithm. Each successive value providing roughly +~3% to speed.
-    //compressedLen = LZ4_compress_fast((const char*)data, (char*)compressedBuffer, len, compressedBufferLen, acceleration);
-
-    compressedLen = LZ4_compress_fast_extState(lz4_state_memory, (const char*)data, (char*)compressedBuffer, len, compressedBufferLen, acceleration);        
 }
 
 void OutputNode::CompressZSTD(int id, uint8_t * data, uint32_t len)

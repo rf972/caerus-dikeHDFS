@@ -685,14 +685,22 @@ public class DikeTpchClient
 
                 public void readColumnZSTD(DataInputStream dis) throws  IOException {
                     int nbytes;
+                    byte [] cb = null;
+                    Boolean is_compressed;
                     
                     dis.readFully(header.array(), 0, header.capacity());
                     nbytes = header.getInt(HEADER_COMPRESSED_LEN);                    
                     //System.out.format("readColumn[%d] %d header size %d ", colId, nbytes, header.capacity());
                     //System.out.format("readColumn[%d] type %d ratio %f \n", colId, header.getInt(HEADER_DATA_TYPE), 1.0 * header.getInt(HEADER_DATA_LEN) /  header.getInt(HEADER_COMPRESSED_LEN));                    
-
-                    byte [] cb = new byte [nbytes];
-                    dis.readFully(cb, 0, nbytes);                    
+                    if(nbytes > 0) {
+                        is_compressed = true;
+                    } else {
+                        is_compressed = false;
+                    }
+                    if(is_compressed) {
+                        cb = new byte [nbytes];
+                        dis.readFully(cb, 0, nbytes);
+                    } 
 
                     //System.out.format("readColumn[%d] %d decompressedSize %d \n", colId, nbytes, Zstd.decompressedSize(compressedBuffer));                    
 
@@ -700,12 +708,20 @@ public class DikeTpchClient
                     if(TYPE_FIXED_LEN_BYTE_ARRAY == header.getInt(HEADER_DATA_TYPE)){
                         fixedTextLen = header.getInt(HEADER_TYPE_SIZE);                                                
                         dataSize = header.getInt(HEADER_DATA_LEN);
-                        Zstd.decompress(text_buffer, cb);
                         record_count = (int) (dataSize / fixedTextLen);
+                        if(is_compressed){
+                            Zstd.decompress(text_buffer, cb);
+                        } else {                            
+                            dis.readFully(text_buffer, 0, (int)dataSize);
+                        }
                     } else {
                         fixedTextLen = 0;                        
-                        dataSize = header.getInt(HEADER_DATA_LEN);                        
-                        Zstd.decompress(byteBuffer.array(), cb);
+                        dataSize = header.getInt(HEADER_DATA_LEN);
+                        if(is_compressed){
+                            Zstd.decompress(byteBuffer.array(), cb);
+                        } else {
+                            dis.readFully(byteBuffer.array(), 0, (int)dataSize);
+                        }
                         //System.out.format("readColumn[%d] Zstd.decompress %d bytes \n", colId, nbytes);                        
                         record_count = (int) (dataSize / 8);
                     }
@@ -722,11 +738,15 @@ public class DikeTpchClient
                         //System.out.format("readColumn[%d] type %d ratio %f \n", colId, header.getInt(HEADER_DATA_TYPE), 1.0 * header.getInt(HEADER_DATA_LEN) /  header.getInt(HEADER_COMPRESSED_LEN));
 
                         nbytes = header.getInt(HEADER_COMPRESSED_LEN);
-                        cb = new byte [nbytes];
-                        dis.readFully(cb, 0, nbytes);                            
-                        
                         dataSize = header.getInt(HEADER_DATA_LEN);
-                        Zstd.decompress(text_buffer, cb);
+
+                        if(nbytes > 0){
+                            cb = new byte [nbytes];
+                            dis.readFully(cb, 0, nbytes);
+                            Zstd.decompress(text_buffer, cb);
+                        } else {
+                            dis.readFully(text_buffer, 0, (int)dataSize);
+                        }
                         text_size = dataSize;
                    }
                    //System.out.format("\n");
@@ -813,12 +833,15 @@ public class DikeTpchClient
             while(true) {
                 try {
                     for( int i = 0 ; i < nCols; i++) {
+                        columVector[i].readColumnZSTD(dis);
+                        /*
                         if(compressionEnabled) {
                             //columVector[i].readRawData(dis);
                             columVector[i].readColumnZSTD(dis);
                         } else {
                             columVector[i].readColumn(dis);
                         }
+                        */
                     }
                     
                     if(traceRecordCount < traceRecordMax) {                        
