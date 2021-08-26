@@ -277,7 +277,10 @@ bool OutputNode::Step()
     Column * col = 0;
     int64_t be_value;
     for( int i  = 0; i < inFrame->columns.size(); i++){
-        col = inFrame->columns[i];        
+        col = inFrame->columns[i];
+        if(col->row_count == 0){
+            continue;
+        }
         int64_t data_size;
         switch (col->data_type) {
             case Column::DataType::INT64:

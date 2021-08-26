@@ -45,6 +45,15 @@ void GreaterThan(T * column, T value, int len, uint8_t * result) {
     }
 }
 
+template<typename T>
+void EqualTo(T * column, T value, int len, uint8_t * result) {
+    for(int c = 0; c < len; c++) {
+        if(result[c]) { // Skip zeroes in result vector
+            if(!(column[c] == value)) { result[c] = 0;}
+        }
+    }
+}
+
 void LessThanOrEqual(Column * column, std::string & value, uint8_t * result) {    
     int i;
     parquet::ByteArray ba_value;
@@ -133,6 +142,26 @@ void GreaterThan(Column * column, std::string & value, uint8_t * result) {
     } // Loop over all rows
 }
 
+void EqualTo(Column * column, std::string & value, uint8_t * result) {    
+    int i;
+    parquet::ByteArray ba_value;
+    ba_value.ptr = (const uint8_t*)value.c_str();
+    ba_value.len = value.length();    
+    for(int c = 0; c < column->row_count; c++) {
+        if(result[c]) { // Skip zeroes in result vector
+            parquet::ByteArray * ref = &column->ba_values[c];
+            int len  = std::min(ba_value.len, ref->len);
+            for ( i = 0; i < len; i++){
+                if(ba_value.ptr[i] != ref->ptr[i]) { break; }
+            }
+            if(i < len) { // Data mismatch was found
+               result[c] = 0;
+            } else { // All compared characters match 
+                if (ref->len != ba_value.len) {  result[c] = 0; } // Size mismatch 
+            }
+        }
+    } // Loop over all rows
+}
 
 class Filter {
     public:
@@ -155,6 +184,7 @@ class Filter {
         _LT = 2, // LessThan
         _GE = 3, // GreaterThanOrEqual
         _GT = 4, // GreaterThan
+        _EQ = 5, // EqualTo
     };
 
     int expression = 0;
@@ -170,6 +200,8 @@ class Filter {
             expression = _GE;
         }else if(expr.compare("GreaterThan") == 0){
             expression = _GT;
+        } else if(expr.compare("EqualTo") == 0){
+            expression = _EQ;
         } else {
             std::cout << "Uknown expression : " << expr << std::endl;
         }
@@ -264,6 +296,9 @@ class Filter {
             case _GT:
             GreaterThan(inFrame->columns[columnMap[LEFT]], value, result); // Other sides not supported yet
             break;            
+            case _EQ:
+            EqualTo(inFrame->columns[columnMap[LEFT]], value, result); // Other sides not supported yet
+            break;            
 
         }
     }
@@ -272,18 +307,20 @@ class Filter {
         int len = inFrame->columns[columnMap[LEFT]]->row_count;
         switch(expression){
             case _LE:
-            LessThanOrEqual(data, value, len, result); // Other sides not supported yet
+            LessThanOrEqual(data, value, len, result); 
             break;
             case _LT:
-            LessThan(data, value, len, result); // Other sides not supported yet
+            LessThan(data, value, len, result); 
             break;
             case _GE:
-            GreaterThanOrEqual(data, value, len, result); // Other sides not supported yet
+            GreaterThanOrEqual(data, value, len, result); 
             break;
             case _GT:
-            GreaterThan(data, value, len, result); // Other sides not supported yet
+            GreaterThan(data, value, len, result); 
             break;            
-
+            case _EQ:
+            EqualTo(data, value, len, result); 
+            break;     
         }
     }
     void Step(Frame * inFrame, int64_t value, uint8_t * result) {
@@ -291,17 +328,20 @@ class Filter {
         int len = inFrame->columns[columnMap[LEFT]]->row_count;
         switch(expression){
             case _LE:
-            LessThanOrEqual(data, value, len, result); // Other sides not supported yet
+            LessThanOrEqual(data, value, len, result); 
             break;
             case _LT:
-            LessThan(data, value, len, result); // Other sides not supported yet
+            LessThan(data, value, len, result); 
             break;
             case _GE:
-            GreaterThanOrEqual(data, value, len, result); // Other sides not supported yet
+            GreaterThanOrEqual(data, value, len, result); 
             break;
             case _GT:
-            GreaterThan(data, value, len, result); // Other sides not supported yet
-            break;                       
+            GreaterThan(data, value, len, result); 
+            break;
+            case _EQ:
+            EqualTo(data, value, len, result); 
+            break;     
         }
     }    
 };
