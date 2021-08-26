@@ -127,6 +127,7 @@ public class DikeTpchClient
         switch(Integer.parseInt(testNumber)) {
             case 1:
                 fname = "/lineitem_srg.parquet";
+                //fname = "/lineitem_10.parquet";
                 param = getQ1Param(fname);
             break;
             case 6:
@@ -184,7 +185,8 @@ public class DikeTpchClient
 
         argBuilder = Json.createObjectBuilder().add("ColumnReference", "l_shipdate");        
         filterBuilder.add("Left", argBuilder);
-        argBuilder = Json.createObjectBuilder().add("Literal", "1998-09-02");        
+        argBuilder = Json.createObjectBuilder().add("Literal", "1998-09-02");
+        //argBuilder = Json.createObjectBuilder().add("Literal", "2998-09-02"); // Nothing to filter out
         filterBuilder.add("Right", argBuilder);
         filterArrayBuilder.add(filterBuilder);
 
