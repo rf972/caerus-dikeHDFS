@@ -167,6 +167,9 @@ class Column {
                 break;
             }
         }
+        if(index == -1){ // Nothing to filter out
+            return;
+        }
         for(int i = index + 1; i < row_count; i++) {
             if(filter[i]) { // Valid data
                 values[index] = values[i];
