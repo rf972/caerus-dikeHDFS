@@ -9,6 +9,7 @@ class Filter;
 
 class FilterNode : public Node {
     public:
+
     uint8_t * result = NULL;
     std::vector<Filter *> filterArray;
     FilterNode(Poco::JSON::Object::Ptr pObject, DikeProcessorConfig & dikeProcessorConfig, DikeIO * output);
