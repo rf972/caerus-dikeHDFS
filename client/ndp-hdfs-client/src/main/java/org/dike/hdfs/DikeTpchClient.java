@@ -118,10 +118,15 @@ public class DikeTpchClient
         conf.addResource(hdfsCoreSitePath);
         conf.addResource(hdfsHDFSSitePath);
 
-        Path webhdfsPath = new Path("webhdfs://dikehdfs:9870/");
+
         Path dikehdfsPath = new Path("ndphdfs://dikehdfs:9860/");
-        Path hdfsPath = new Path("hdfs://dikehdfs:9000/");
-            
+        //Path dikehdfsPath = new Path("ndphdfs://DP3:9860/");
+        
+        String dikePathEnv = System.getenv("DIKE_PATH");
+        if(dikePathEnv != null){
+            dikehdfsPath = new Path("ndphdfs://" + dikePathEnv + ":9860/");
+        }
+
         String fname = "";
         String param = "";
         switch(Integer.parseInt(testNumber)) {
@@ -139,7 +144,7 @@ public class DikeTpchClient
                 fname = "/lineitem_srg.parquet";
                 param = getQ10_l_Param(fname);
             break;
-            
+
             case 21:
                 fname = "/lineitem_srg.parquet";
                 param = getQ21Param(fname);
@@ -1143,3 +1148,5 @@ public class DikeTpchClient
 // export DIKE_TRACE_RECORD_MAX=36865
 // export DIKE_COMPRESSION=ZSTD
 // export DIKE_COMPRESSION_LEVEL=-10
+// export DIKE_PATH=DP3
+
