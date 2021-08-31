@@ -10,7 +10,7 @@ namespace lambda {
 class Filter;
 
 template<typename T>
-void LessThanOrEqual(T * column, T value, int len, uint8_t * result) {
+void LessThanOrEqual(T * column, T & value, int len, uint8_t * result) {
     for(int c = 0; c < len; c++) {
         if(result[c]) { // Skip zeroes in result vector
             if(!(column[c] <= value)) { result[c] = 0;}
@@ -19,7 +19,7 @@ void LessThanOrEqual(T * column, T value, int len, uint8_t * result) {
 }
 
 template<typename T>
-void LessThan(T * column, T value, int len, uint8_t * result) {
+void LessThan(T * column, T & value, int len, uint8_t * result) {
     for(int c = 0; c < len; c++) {
         if(result[c]) { // Skip zeroes in result vector
             if(!(column[c] < value)) { result[c] = 0;}
@@ -28,7 +28,7 @@ void LessThan(T * column, T value, int len, uint8_t * result) {
 }
 
 template<typename T>
-void GreaterThanOrEqual(T * column, T value, int len, uint8_t * result) {
+void GreaterThanOrEqual(T * column, T & value, int len, uint8_t * result) {
     for(int c = 0; c < len; c++) {
         if(result[c]) { // Skip zeroes in result vector
             if(!(column[c] >= value)) { result[c] = 0;}
@@ -37,7 +37,7 @@ void GreaterThanOrEqual(T * column, T value, int len, uint8_t * result) {
 }
 
 template<typename T>
-void GreaterThan(T * column, T value, int len, uint8_t * result) {
+void GreaterThan(T * column, T & value, int len, uint8_t * result) {
     for(int c = 0; c < len; c++) {
         if(result[c]) { // Skip zeroes in result vector
             if(!(column[c] > value)) { result[c] = 0;}
@@ -46,7 +46,7 @@ void GreaterThan(T * column, T value, int len, uint8_t * result) {
 }
 
 template<typename T>
-void EqualTo(T * column, T value, int len, uint8_t * result) {
+void EqualTo(T * column, T & value, int len, uint8_t * result) {
     for(int c = 0; c < len; c++) {
         if(result[c]) { // Skip zeroes in result vector
             if(!(column[c] == value)) { result[c] = 0;}
@@ -54,113 +54,66 @@ void EqualTo(T * column, T value, int len, uint8_t * result) {
     }
 }
 
-void LessThanOrEqual(Column * column, std::string & value, uint8_t * result) {    
-    int i;
-    parquet::ByteArray ba_value;
-    ba_value.ptr = (const uint8_t*)value.c_str();
-    ba_value.len = value.length();    
-    for(int c = 0; c < column->row_count; c++) {
+void Contains(std::string * column, std::string & value, int len, uint8_t * result) {
+    for(int c = 0; c < len; c++) {
         if(result[c]) { // Skip zeroes in result vector
-            parquet::ByteArray * ref = &column->ba_values[c];
-            int len  = std::min(ba_value.len, ref->len);
-            for ( i = 0; i < len; i++){
-                if(ba_value.ptr[i] != ref->ptr[i]) { break; }
-            }
-            if(i < len) { // Data mismatch was found
-                if(!(ref->ptr[i] <= ba_value.ptr[i])) { result[c] = 0; }
-            } else { // All compared characters match 
-                if (!(ref->len <= ba_value.len)) {  // Size mismatch 
-                    result[c] = 0;
-                }
-            }
+            if(column[c].find(value) == std::string::npos) { result[c] = 0;}
         }
-    } // Loop over all rows
+    }
 }
 
-void LessThan(Column * column, std::string & value, uint8_t * result) {    
-    int i;
-    parquet::ByteArray ba_value;
-    ba_value.ptr = (const uint8_t*)value.c_str();
-    ba_value.len = value.length();    
-    for(int c = 0; c < column->row_count; c++) {
+// Columnar comparison
+template<typename T>
+void LessThanOrEqual(T * columnA, T * columnB, int len, uint8_t * result) {
+    for(int c = 0; c < len; c++) {
         if(result[c]) { // Skip zeroes in result vector
-            parquet::ByteArray * ref = &column->ba_values[c];
-            int len  = std::min(ba_value.len, ref->len);
-            for ( i = 0; i < len; i++){
-                if(ba_value.ptr[i] != ref->ptr[i]) { break; }
-            }
-            if(i < len) { // Data mismatch was found
-                if(!(ref->ptr[i] < ba_value.ptr[i])) { result[c] = 0; }
-            } else { // All compared characters match 
-                if (!(ref->len < ba_value.len)) {  result[c] = 0; } // Size mismatch 
-            }
+            if(!(columnA[c] <= columnB[c])) { result[c] = 0;}
         }
-    } // Loop over all rows
+    }
 }
 
-void GreaterThanOrEqual(Column * column, std::string & value, uint8_t * result) {    
-    int i;
-    parquet::ByteArray ba_value;
-    ba_value.ptr = (const uint8_t*)value.c_str();
-    ba_value.len = value.length();    
-    for(int c = 0; c < column->row_count; c++) {
+template<typename T>
+void LessThan(T * columnA, T * columnB, int len, uint8_t * result) {
+    for(int c = 0; c < len; c++) {
         if(result[c]) { // Skip zeroes in result vector
-            parquet::ByteArray * ref = &column->ba_values[c];
-            int len  = std::min(ba_value.len, ref->len);
-            for ( i = 0; i < len; i++){
-                if(ba_value.ptr[i] != ref->ptr[i]) { break; }
-            }
-            if(i < len) { // Data mismatch was found
-                if(!(ref->ptr[i] >= ba_value.ptr[i])) { result[c] = 0; }
-            } else { // All compared characters match 
-                if (!(ref->len >= ba_value.len)) {  // Size mismatch 
-                    result[c] = 0;
-                }
-            }
+            if(!(columnA[c] < columnB[c])) { result[c] = 0;}
         }
-    } // Loop over all rows
+    }
 }
 
-void GreaterThan(Column * column, std::string & value, uint8_t * result) {    
-    int i;
-    parquet::ByteArray ba_value;
-    ba_value.ptr = (const uint8_t*)value.c_str();
-    ba_value.len = value.length();    
-    for(int c = 0; c < column->row_count; c++) {
+template<typename T>
+void GreaterThanOrEqual(T * columnA, T * columnB, int len, uint8_t * result) {
+    for(int c = 0; c < len; c++) {
         if(result[c]) { // Skip zeroes in result vector
-            parquet::ByteArray * ref = &column->ba_values[c];
-            int len  = std::min(ba_value.len, ref->len);
-            for ( i = 0; i < len; i++){
-                if(ba_value.ptr[i] != ref->ptr[i]) { break; }
-            }
-            if(i < len) { // Data mismatch was found
-                if(!(ref->ptr[i] > ba_value.ptr[i])) { result[c] = 0; }
-            } else { // All compared characters match 
-                if (!(ref->len > ba_value.len)) {  result[c] = 0; } // Size mismatch 
-            }
+            if(!(columnA[c] >= columnB[c])) { result[c] = 0;}
         }
-    } // Loop over all rows
+    }
 }
 
-void EqualTo(Column * column, std::string & value, uint8_t * result) {    
-    int i;
-    parquet::ByteArray ba_value;
-    ba_value.ptr = (const uint8_t*)value.c_str();
-    ba_value.len = value.length();    
-    for(int c = 0; c < column->row_count; c++) {
+template<typename T>
+void GreaterThan(T * columnA, T * columnB, int len, uint8_t * result) {
+    for(int c = 0; c < len; c++) {
         if(result[c]) { // Skip zeroes in result vector
-            parquet::ByteArray * ref = &column->ba_values[c];
-            int len  = std::min(ba_value.len, ref->len);
-            for ( i = 0; i < len; i++){
-                if(ba_value.ptr[i] != ref->ptr[i]) { break; }
-            }
-            if(i < len) { // Data mismatch was found
-               result[c] = 0;
-            } else { // All compared characters match 
-                if (ref->len != ba_value.len) {  result[c] = 0; } // Size mismatch 
-            }
+            if(!(columnA[c] > columnB[c])) { result[c] = 0;}
         }
-    } // Loop over all rows
+    }
+}
+
+template<typename T>
+void EqualTo(T * columnA, T * columnB, int len, uint8_t * result) {
+    for(int c = 0; c < len; c++) {
+        if(result[c]) { // Skip zeroes in result vector
+            if(!(columnA[c] == columnB[c])) { result[c] = 0;}
+        }
+    }
+}
+
+void Contains(std::string * columnA, std::string * columnB, int len, uint8_t * result) {
+    for(int c = 0; c < len; c++) {
+        if(result[c]) { // Skip zeroes in result vector
+            if(columnA[c].find(columnB[c]) == std::string::npos) { result[c] = 0;}
+        }
+    }
 }
 
 class Filter {
@@ -185,6 +138,7 @@ class Filter {
         _GE = 3, // GreaterThanOrEqual
         _GT = 4, // GreaterThan
         _EQ = 5, // EqualTo
+        _CT = 6, // Contains
     };
 
     int expression = 0;
@@ -202,6 +156,8 @@ class Filter {
             expression = _GT;
         } else if(expr.compare("EqualTo") == 0){
             expression = _EQ;
+        } else if(expr.compare("Contains") == 0){
+            expression = _CT;
         } else {
             std::cout << "Uknown expression : " << expr << std::endl;
         }
@@ -267,41 +223,67 @@ class Filter {
     }
 
     void Step(Frame * inFrame, uint8_t * result) {
-        switch(data_type) {
-            case Column::DataType::INT64:            
-            Step(inFrame, int64_value, result);
-            break;
-            case Column::DataType::DOUBLE:            
-            Step(inFrame, double_value, result);
-            break;
-            case Column::DataType::BYTE_ARRAY:
-            Step(inFrame, values[RIGHT], result); // Other sides not supported yet
-            break;
-            default:
-            std::cout << "Uknown data_type " << data_type << std::endl;
-        }        
-    }
-
-    void Step(Frame * inFrame, std::string & value, uint8_t * result) {
-        switch(expression){
-            case _LE:
-            LessThanOrEqual(inFrame->columns[columnMap[LEFT]], value, result); // Other sides not supported yet
-            break;
-            case _LT:
-            LessThan(inFrame->columns[columnMap[LEFT]], value, result); // Other sides not supported yet
-            break;
-            case _GE:
-            GreaterThanOrEqual(inFrame->columns[columnMap[LEFT]], value, result); // Other sides not supported yet
-            break;
-            case _GT:
-            GreaterThan(inFrame->columns[columnMap[LEFT]], value, result); // Other sides not supported yet
-            break;            
-            case _EQ:
-            EqualTo(inFrame->columns[columnMap[LEFT]], value, result); // Other sides not supported yet
-            break;            
-
+        if(columnNames[RIGHT].length() > 0){
+            switch(data_type) {
+                case Column::DataType::INT64:            
+                Step(inFrame->columns[columnMap[LEFT]]->int64_values, 
+                     inFrame->columns[columnMap[RIGHT]]->int64_values,
+                     inFrame->columns[columnMap[LEFT]]->row_count,
+                     result);
+                break;
+                case Column::DataType::DOUBLE:            
+                Step(inFrame->columns[columnMap[LEFT]]->double_values, 
+                     inFrame->columns[columnMap[RIGHT]]->double_values, 
+                     inFrame->columns[columnMap[LEFT]]->row_count,
+                     result);
+                break;
+                case Column::DataType::BYTE_ARRAY:            
+                Step(inFrame->columns[columnMap[LEFT]]->string_values, 
+                     inFrame->columns[columnMap[RIGHT]]->string_values, 
+                     inFrame->columns[columnMap[LEFT]]->row_count,
+                     result);
+                break;
+                default:
+                std::cout << "Uknown data_type " << data_type << std::endl;
+            }
+        } else {
+            switch(data_type) {
+                case Column::DataType::INT64:            
+                Step(inFrame, int64_value, result);
+                break;
+                case Column::DataType::DOUBLE:            
+                Step(inFrame, double_value, result);
+                break;
+                case Column::DataType::BYTE_ARRAY:            
+                Step(inFrame, values[RIGHT], result);
+                break;
+                default:
+                std::cout << "Uknown data_type " << data_type << std::endl;
+            }
         }
     }
+
+    template<typename T>
+    void Step(T * columnA, T * columnB, int len, uint8_t * result) {        
+        switch(expression){
+            case _LE:
+            LessThanOrEqual(columnA, columnB, len, result); 
+            break;
+            case _LT:
+            LessThan(columnA, columnB, len, result); 
+            break;
+            case _GE:
+            GreaterThanOrEqual(columnA, columnB, len, result); 
+            break;
+            case _GT:
+            GreaterThan(columnA, columnB, len, result); 
+            break;            
+            case _EQ:
+            EqualTo(columnA, columnB, len, result); 
+            break;     
+        }
+    }
+
     void Step(Frame * inFrame, double value, uint8_t * result) {
         double * data = inFrame->columns[columnMap[LEFT]]->double_values;
         int len = inFrame->columns[columnMap[LEFT]]->row_count;
@@ -323,6 +305,7 @@ class Filter {
             break;     
         }
     }
+
     void Step(Frame * inFrame, int64_t value, uint8_t * result) {
         int64_t * data = inFrame->columns[columnMap[LEFT]]->int64_values;
         int len = inFrame->columns[columnMap[LEFT]]->row_count;
@@ -343,7 +326,32 @@ class Filter {
             EqualTo(data, value, len, result); 
             break;     
         }
-    }    
+    }
+
+    void Step(Frame * inFrame, std::string & value, uint8_t * result) {
+        std::string * data = inFrame->columns[columnMap[LEFT]]->string_values;
+        int len = inFrame->columns[columnMap[LEFT]]->row_count;
+        switch(expression){
+            case _LE:
+            LessThanOrEqual(data, value, len, result); 
+            break;
+            case _LT:
+            LessThan(data, value, len, result); 
+            break;
+            case _GE:
+            GreaterThanOrEqual(data, value, len, result); 
+            break;
+            case _GT:
+            GreaterThan(data, value, len, result); 
+            break;
+            case _EQ:
+            EqualTo(data, value, len, result); 
+            break;
+            case _CT:
+            Contains(data, value, len, result); 
+            break;
+        }
+    }        
 };
 } // namespace lambda
 

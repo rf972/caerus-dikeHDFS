@@ -37,9 +37,10 @@ class Column {
     int64_t * int64_values = NULL;
     double *  double_values = NULL;
     parquet::ByteArray * ba_values = NULL;
+    std::string * string_values = NULL;
 
-    uint8_t * textBuffer = NULL; // Shadow buffer 
-    uint8_t * textBufferPtr = NULL; // Pointer to memory inside textBuffer
+    //uint8_t * textBuffer = NULL; // Shadow buffer 
+    //uint8_t * textBufferPtr = NULL; // Pointer to memory inside textBuffer
 
     uint64_t row_count = 0; // Number of valid rows in this column    
     
@@ -66,7 +67,8 @@ class Column {
             break;
             case BYTE_ARRAY:
             ba_values = new parquet::ByteArray [Column::config::MAX_SIZE];
-            textBuffer = new uint8_t[MAX_TEXT_SIZE];
+            string_values = new std::string [Column::config::MAX_SIZE];
+            //textBuffer = new uint8_t[MAX_TEXT_SIZE];
             break;
             default:
             std::cout << "Uknown data_type " << data_type << std::endl;
@@ -98,7 +100,8 @@ class Column {
                 parquet::ByteArrayReader* ba_reader = static_cast<parquet::ByteArrayReader*>(reader.get());
                 while(row_count < read_size) {
                     ba_reader->ReadBatch(read_size - row_count, 0, 0, &ba_values[row_count], &values_read);                    
-                    fillTextBuffer(row_count, values_read);                    
+                    //fillTextBuffer(row_count, values_read);
+                    UpdateStringValues(row_count, values_read);
                     row_count += values_read;
                     //std::cout << "Read Column " << id <<  " " << name << " row_count " << row_count << std::endl;
                 }
@@ -109,6 +112,14 @@ class Column {
         return row_count;
     }
 
+    void UpdateStringValues(int offset, int len) {
+        for (int i = offset; i < offset + len; i++) {
+            string_values[i] = std::string((const char*)ba_values[i].ptr, ba_values[i].len);
+            ba_values[i].ptr = (const uint8_t*)string_values[i].c_str();
+        }
+    }
+
+#if 0
     void fillTextBuffer(int offset, int size) {
         if(offset == 0) {
             textBufferPtr = textBuffer;
@@ -122,6 +133,8 @@ class Column {
             textBufferPtr += ba_values[i].len;
         }
     }
+#endif
+
     ~Column() {
         if(!initialized){
             return;
@@ -136,7 +149,8 @@ class Column {
         break;
         case BYTE_ARRAY:
         delete [] ba_values;
-        delete [] textBuffer;
+        delete [] string_values;
+        //delete [] textBuffer;
         break;
         }        
     }
