@@ -31,6 +31,8 @@ echo "Starting Data Node ..."
 export LD_LIBRARY_PATH=$LD_LIBRARY_PATH:$HADOOP_HOME/lib/native
 export CLASSPATH=$(bin/hadoop classpath) 
 
+export HADOOP_CONF_DIR=$HADOOP_HOME/etc/hadoop
+
 sleep 1
 /server/dikeHDFS &
 

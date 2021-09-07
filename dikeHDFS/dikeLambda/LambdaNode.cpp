@@ -4,7 +4,11 @@
 #include <Poco/zlib.h>
 
 #include <lz4.h>
-#include <zstd.h>   
+#include <zstd.h>
+
+#include <omp.h>
+
+#include "LambdaFileReader.hpp"
 
 #include "LambdaNode.hpp"
 #include "LambdaFilterNode.hpp"
@@ -21,10 +25,12 @@ InputNode::InputNode(Poco::JSON::Object::Ptr pObject, DikeProcessorConfig & dike
     hdfs_req.read(ss);
 
     Poco::URI uri = Poco::URI(hdfs_req.getURI());
-    Poco::URI::QueryParameters uriParams = uri.getQueryParameters();        
+    Poco::URI::QueryParameters uriParams = uri.getQueryParameters();
+    std::string rpcAddress;
     for(int i = 0; i < uriParams.size(); i++){
         if(uriParams[i].first.compare("namenoderpcaddress") == 0){
-            std::string rpcAddress = uriParams[i].second;
+            rpcAddress = uriParams[i].second;
+            //std::cout << "namenoderpcaddress : " << rpcAddress << std::endl;
             auto pos = rpcAddress.find(':');
             hdfsConnectionConfig.host = rpcAddress.substr(0, pos);
             hdfsConnectionConfig.port = std::stoi(rpcAddress.substr(pos + 1, rpcAddress.length()));
@@ -37,8 +43,12 @@ InputNode::InputNode(Poco::JSON::Object::Ptr pObject, DikeProcessorConfig & dike
     int rowGroupIndex = std::stoi(dikeProcessorConfig["Configuration.RowGroupIndex"]);
 
     Poco::Thread * current = Poco::Thread::current();
-    int threadId = current->id();        
-            
+    int threadId = current->id();
+
+    std::string fullPath = "hdfs://" + rpcAddress + fileName;
+    //std::cout << "fullPath : " << fullPath << std::endl;
+
+#ifdef LEGACY_HDFS
     if (hadoopFileSystemMap.count(threadId)) {
         //std::cout << " LambdaParquetReader id " << threadId << " reuse FS connection "<< std::endl;
         fs = hadoopFileSystemMap[threadId];        
@@ -47,28 +57,42 @@ InputNode::InputNode(Poco::JSON::Object::Ptr pObject, DikeProcessorConfig & dike
         arrow::io::HadoopFileSystem::Connect(&hdfsConnectionConfig, &fs);
         hadoopFileSystemMap[threadId] = fs;        
     }
-                                    
-    fs->OpenReadable(fileName, &inputFile);                        
+                                        
+    fs->OpenReadable(fileName, &inputFile);
+#else
+    //inputFile = std::shared_ptr<ReadableFile>(new ReadableFile(fullPath));
+#endif
 
     if (fileMetaDataMap.count(fileName)) {
         if (0 == fileLastAccessTimeMap[fileName].compare(dikeProcessorConfig["Configuration.LastAccessTime"])){
             //std::cout << " LambdaParquetReader reuse fileMetaData "<< std::endl;
+            inputFile = inputFileMap[fileName];
             fileMetaData = fileMetaDataMap[fileName];                
         } else {
             //std::cout << " LambdaParquetReader read fileMetaData "<< std::endl;
+            inputFile = std::move(std::shared_ptr<ReadableFile>(new ReadableFile(fullPath)));
+            inputFileMap[fileName] = inputFile;
+
             fileMetaData = std::move(parquet::ReadMetaData(inputFile));
             fileMetaDataMap[fileName] = fileMetaData;
             fileLastAccessTimeMap[fileName] = dikeProcessorConfig["Configuration.LastAccessTime"];                
         }            
     } else {
         //std::cout << " LambdaParquetReader read fileMetaData "<< std::endl;
+        inputFile = std::move(std::shared_ptr<ReadableFile>(new ReadableFile(fullPath)));
+        inputFileMap[fileName] = inputFile;
+
         fileMetaData = std::move(parquet::ReadMetaData(inputFile));
         fileMetaDataMap[fileName] = fileMetaData;
         fileLastAccessTimeMap[fileName] = dikeProcessorConfig["Configuration.LastAccessTime"];            
     }
     
     schemaDescriptor = fileMetaData->schema();
-    parquetFileReader = std::move(parquet::ParquetFileReader::Open(inputFile, parquet::default_reader_properties(), fileMetaData));
+    parquet::ReaderProperties readerProperties = parquet::default_reader_properties();
+    //readerProperties.enable_buffered_stream();
+    readerProperties.set_buffer_size(1<<20);
+
+    parquetFileReader = std::move(parquet::ParquetFileReader::Open(inputFile, readerProperties, fileMetaData));
     rowGroupReader = std::move(parquetFileReader->RowGroup(rowGroupIndex));
 
     numRows = rowGroupReader->metadata()->num_rows();
@@ -93,15 +117,23 @@ void InputNode::Init()
     // This will send update request down to graph
     UpdateColumnMap(frame);
 
-    for(int i = 0; i < columnCount; i++){
-        if(frame->columns[i]->useCount > 0) {
-            //std::cout << "Create reader for Column " << i << std::endl;
-            columnReaders[i] = std::move(rowGroupReader->Column(i));
-            frame->columns[i]->Init(); // This will allocate memory buffers
-        } else {
-            columnReaders[i] = NULL;
+    //omp_set_dynamic(1);
+    //omp_set_num_threads(4);        
+    //#pragma omp parallel
+    {
+        //std::cout << "Create readers with " << omp_get_num_threads() << " threads dynamic " << omp_get_dynamic() << std::endl;
+        //#pragma omp for
+        for(int i = 0; i < columnCount; i++) {
+            if(frame->columns[i]->useCount > 0) {
+                //std::cout << "Create reader for Column " << i << " tid " << omp_get_thread_num() << std::endl;
+                columnReaders[i] = std::move(rowGroupReader->Column(i));
+                frame->columns[i]->Init(); // This will allocate memory buffers
+            } else {
+                columnReaders[i] = NULL;
+            }
         }
     }
+
     freeFrame(frame); // this will put this frame on framePool
 
     // Create few additional frames
@@ -122,7 +154,7 @@ void InputNode::Init()
 }
 
 bool InputNode::Step()
-{    
+{        
     //std::cout << "InputNode::Step " << stepCount << std::endl;
     if(done) { return done; }
     stepCount++;
@@ -145,12 +177,17 @@ bool InputNode::Step()
     } else {
         //std::cout << "We got frame from pool" << std::endl;
     }
+    std::chrono::high_resolution_clock::time_point t1 =  std::chrono::high_resolution_clock::now();
 
-    for(int i = 0; i < columnCount; i++){
-        if(columnReaders[i]) {
-            //std::cout << "Read Column " << colId <<  " " << frame->columns[i]->name << std::endl;
-            frame->columns[i]->Read(columnReaders[i], size); 
-        }       
+    //#pragma omp parallel
+    {
+        //#pragma omp for
+        for(int i = 0; i < columnCount; i++){
+            if(columnReaders[i]) {
+                //std::cout << "Read Column " << colId <<  " " << frame->columns[i]->name << std::endl;
+                frame->columns[i]->Read(columnReaders[i], size); 
+            }       
+        }
     }
 
     rowCount += size;
@@ -159,6 +196,9 @@ bool InputNode::Step()
         done = true;
     }
     nextNode->putFrame(frame); // Send frame down to graph
+
+    std::chrono::high_resolution_clock::time_point t2 =  std::chrono::high_resolution_clock::now();
+    runTime += t2 - t1;
     return done;
 }
 
@@ -211,7 +251,7 @@ void ProjectionNode::UpdateColumnMap(Frame * inFrame)
 }
 
 bool ProjectionNode::Step()
-{
+{    
     //std::cout << "ProjectionNode::Step " << stepCount << std::endl;
     if(done) { return done; }
     stepCount++;
@@ -227,6 +267,7 @@ bool ProjectionNode::Step()
         outFrame = new Frame(this); // Allocate new frame with data
         outFrame->columns.resize(columnCount);
     }
+    std::chrono::high_resolution_clock::time_point t1 =  std::chrono::high_resolution_clock::now();
 
     outFrame->parentFrame = inFrame;
 
@@ -241,6 +282,8 @@ bool ProjectionNode::Step()
     }
 
     nextNode->putFrame(outFrame); // Send frame down to graph
+    std::chrono::high_resolution_clock::time_point t2 =  std::chrono::high_resolution_clock::now();
+    runTime += t2 - t1;    
     return done;
 }
 
@@ -265,7 +308,7 @@ void OutputNode::UpdateColumnMap(Frame * frame)
 }
 
 bool OutputNode::Step()
-{    
+{        
     if(done) { return done; }
     
     Frame * inFrame = getFrame();
@@ -273,6 +316,8 @@ bool OutputNode::Step()
 
     //std::cout << "OutputNode::Step " << stepCount << " Rows " << inFrame->columns[0]->row_count << std::endl;
     stepCount++;
+    
+    std::chrono::high_resolution_clock::time_point t1 =  std::chrono::high_resolution_clock::now();
 
     Column * col = 0;
     int64_t be_value;
@@ -334,6 +379,8 @@ bool OutputNode::Step()
     }
     
     inFrame->Free();
+    std::chrono::high_resolution_clock::time_point t2 =  std::chrono::high_resolution_clock::now();
+    runTime += t2 - t1;        
     return done;
 }
 
@@ -397,3 +444,5 @@ Node * lambda::CreateNode(Poco::JSON::Object::Ptr pObject, DikeProcessorConfig &
 std::map<int, std::shared_ptr<arrow::io::HadoopFileSystem> > lambda::InputNode::hadoopFileSystemMap;
 std::map< std::string, std::shared_ptr<parquet::FileMetaData> >  lambda::InputNode::fileMetaDataMap;
 std::map< std::string, std::string > lambda::InputNode::fileLastAccessTimeMap;
+std::map< std::string, std::shared_ptr<ReadableFile> >  lambda::InputNode::inputFileMap;
+

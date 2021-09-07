@@ -222,7 +222,7 @@ class Filter {
         }        
     }
 
-    void Step(Frame * inFrame, uint8_t * result) {
+    void Step(Frame * inFrame, uint8_t * result) {        
         if(columnNames[RIGHT].length() > 0){
             switch(data_type) {
                 case Column::DataType::INT64:            
@@ -392,16 +392,18 @@ void FilterNode::UpdateColumnMap(Frame * inFrame)
 
 bool FilterNode::Step()
 {
+    
     //std::cout << "FilterNode::Step " << stepCount << std::endl;
     if(done) { return done; }
     stepCount++;
 
-    Frame * inFrame = getFrame();    
+    Frame * inFrame = getFrame();
     if(inFrame == NULL) {
         std::cout << "Input queue is empty " << std::endl;
         return done;
     }
-
+    
+    std::chrono::high_resolution_clock::time_point t1 =  std::chrono::high_resolution_clock::now();
     memset(result, 1,  Column::config::MAX_SIZE);
 
     for(int i = 0; i < filterArray.size(); i++){
@@ -414,6 +416,9 @@ bool FilterNode::Step()
         done = true;
     }
 
-    nextNode->putFrame(inFrame); // Send frame down to graph    
+    nextNode->putFrame(inFrame); // Send frame down to graph
+    std::chrono::high_resolution_clock::time_point t2 =  std::chrono::high_resolution_clock::now();
+    runTime += t2 - t1;        
+
     return done;
 }

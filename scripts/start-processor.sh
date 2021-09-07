@@ -20,6 +20,8 @@ set -e # exit on error
 export LD_LIBRARY_PATH=$LD_LIBRARY_PATH:$HADOOP_HOME/lib/native
 export CLASSPATH=$(bin/hadoop classpath) 
 
+export HADOOP_CONF_DIR=$HADOOP_HOME/etc/hadoop
+
 /server/dikeHDFS &
 
 if [ "$RUNNING_MODE" = "daemon" ]; then

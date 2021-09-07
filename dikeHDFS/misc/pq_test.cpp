@@ -19,13 +19,19 @@
 class DikeReadableFile : public arrow::io::RandomAccessFile {    
  public:
     std::shared_ptr<arrow::Buffer> buffer;
+   
+    std::unique_ptr<orc::InputStream> stream;
+    uint64_t fileLength;
+    
+    arrow::MemoryPool* pool_ = arrow::default_memory_pool();
 
-    DikeReadableFile() { 
-      std::cout << __FUNCTION__ << " : " << __LINE__ << std::endl;
+    DikeReadableFile(std::string path) {        
+        stream = orc::readFile(path);
+        fileLength =  static_cast<uint64_t>(stream->getLength());
     }
 
     ~DikeReadableFile() override { 
-      std::cout << __FUNCTION__ << " : " << __LINE__ << std::endl;
+      std::cout << __FUNCTION__ << " : " << __LINE__ << std::endl;      
     }
 
     arrow::Status Close() override { 
@@ -49,13 +55,19 @@ class DikeReadableFile : public arrow::io::RandomAccessFile {
     }
 
     arrow::Result<int64_t> ReadAt(int64_t position, int64_t nbytes, void* out) override { 
-      std::cout << __FUNCTION__ << " : " << __LINE__ << std::endl;
-      return 0;
+      //std::cout << __FUNCTION__ << " : " << __LINE__ << " bytes " << nbytes << " offset " << position << std::endl;
+      stream->read(out, nbytes, position);      
+      return nbytes;
     }
 
-    arrow::Result<std::shared_ptr<arrow::Buffer>> ReadAt(int64_t position, int64_t nbytes) override { 
-      std::cout << __FUNCTION__ << " : " << __LINE__ << std::endl;
-      return std::move(buffer);
+    arrow::Result<std::shared_ptr<arrow::Buffer>> ReadAt(int64_t position, int64_t nbytes) override {
+        if(position + nbytes > fileLength){
+            std::cout << " Invalid read size " << nbytes << std::endl;
+        }
+        //std::cout << __FUNCTION__ << " : " << __LINE__ << " bytes " << nbytes << " offset " << position << std::endl;        
+        ARROW_ASSIGN_OR_RAISE(auto buffer, AllocateResizableBuffer(nbytes, pool_));
+        stream->read( buffer->mutable_data(), nbytes, position);
+        return std::move(buffer);         
     }
 
     arrow::Status Seek(int64_t position) override { 
@@ -69,8 +81,8 @@ class DikeReadableFile : public arrow::io::RandomAccessFile {
     }
 
     arrow::Result<int64_t> GetSize() override { 
-      std::cout << __FUNCTION__ << " : " << __LINE__ << std::endl;
-      return 0;
+      std::cout << __FUNCTION__ << " : " << __LINE__ << " return " << fileLength << std::endl;
+      return fileLength;
     }
 };
 
@@ -79,6 +91,7 @@ int main(int argc, char ** argv)
 {
     arrow::Status st;    
 
+#if 0
     // https://gist.github.com/hurdad/06058a22ca2b56e25d63aaa6f3a9108f
 	arrow::io::HdfsConnectionConfig conf;
 	conf.host = "dikehdfs";		
@@ -88,11 +101,14 @@ int main(int argc, char ** argv)
 	std::shared_ptr<arrow::io::HadoopFileSystem> fs;
 	st = arrow::io::HadoopFileSystem::Connect(&conf, &fs);
 	std::cout << st.ToString() << std::endl;
+#endif
 
     //std::shared_ptr<arrow::io::HdfsReadableFile> inputFile;
     //st = fs->OpenReadable("/lineitem.parquet", &inputFile);
     //std::cout << st.ToString() << std::endl;
-    std::shared_ptr<DikeReadableFile> inputFile = std::shared_ptr<DikeReadableFile>(new DikeReadableFile());;
+    std::shared_ptr<DikeReadableFile> inputFile = 
+    //std::shared_ptr<DikeReadableFile>(new DikeReadableFile("hdfs://dikehdfs:9000/lineitem.parquet"));
+    std::shared_ptr<DikeReadableFile>(new DikeReadableFile("hdfs://dikehdfs:9000/lineitem_srg.parquet"));
     
     std::shared_ptr<parquet::FileMetaData> fileMetaData;    
     fileMetaData = parquet::ReadMetaData(inputFile);
@@ -101,13 +117,17 @@ int main(int argc, char ** argv)
     auto schema = fileMetaData->schema();
 
     for(auto i = 0; i < schema->num_columns(); i++) {
-        auto col = (parquet::schema::PrimitiveNode*)schema->GetColumnRoot(i);
-        
+        auto col = (parquet::schema::PrimitiveNode*)schema->GetColumnRoot(i);        
         std::cout << col->name() << ",";
     }
     std::cout << std::endl;
 
-    std::unique_ptr<parquet::ParquetFileReader> parquetFileReader = parquet::ParquetFileReader::Open(inputFile, parquet::default_reader_properties(), fileMetaData);
+    parquet::ReaderProperties readerProperties = parquet::default_reader_properties();
+    //readerProperties.enable_buffered_stream();
+    readerProperties.set_buffer_size(1<<20);
+    std::cout << "Buffered stream " << readerProperties.is_buffered_stream_enabled() << " " << readerProperties.buffer_size() << std::endl;
+
+    std::unique_ptr<parquet::ParquetFileReader> parquetFileReader = parquet::ParquetFileReader::Open(inputFile, readerProperties, fileMetaData);
     std::shared_ptr<parquet::RowGroupReader> rowGroupReader = parquetFileReader->RowGroup(0);
     const parquet::RowGroupMetaData* rowGroupMetaData = rowGroupReader->metadata();
     int colId;
@@ -164,12 +184,11 @@ int main(int argc, char ** argv)
 
     std::cout << "rowCount " << rowCount << " out of " << rowGroupMetaData->num_rows() <<std::endl;
 
-    colId = 15;
+    colId = 11;
     col = (parquet::schema::PrimitiveNode*)schema->GetColumnRoot(colId);
     physicalType = col->physical_type();
     columnReader = rowGroupReader->Column(colId);
     parquet::ByteArrayReader* ba_reader = static_cast<parquet::ByteArrayReader*>(columnReader.get());
-    std::shared_ptr<parquet::ColumnReader> r =  (std::shared_ptr<parquet::ColumnReader>)ba_reader;
 
     std::cout << "Column " << colId << " type is " << parquet::TypeToString(physicalType) << std::endl;
     rowCount = 0;
@@ -180,7 +199,7 @@ int main(int argc, char ** argv)
         //rows_read = int64_reader->ReadBatch(1, &definition_level, &repetition_level, &value, &values_read);
         rows_read = ba_reader->ReadBatch(1, NULL, NULL, &value, &values_read);
         
-        if(rowCount < 5){
+        if(rowCount < 10){
             std::cout << std::string((const char *)value.ptr, value.len) << std::endl;
             //std::cout << value.len << std::endl;
         }
@@ -194,5 +213,8 @@ int main(int argc, char ** argv)
 #if 0
 export LD_LIBRARY_PATH=$LD_LIBRARY_PATH:$HADOOP_HOME/lib/native
 export CLASSPATH=$($HADOOP_HOME/bin/hadoop classpath) 
-gcc -g -O0 pq_test.cpp -o pq_test -lstdc++  -lpthread -lm -larrow -lparquet
+
+export HADOOP_CONF_DIR=$HADOOP_HOME/etc/hadoop
+gcc -g -O0 pq_test.cpp -o pq_test -lstdc++  -lpthread -lm -larrow -llz4 -lparquet -L/usr/local/lib -lorc -lm -lz -lhdfspp_static -lprotobuf -lsasl2 -lcrypto
+// -lsnappy -lzstd -llz4
 #endif

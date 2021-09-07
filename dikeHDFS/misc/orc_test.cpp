@@ -11,10 +11,12 @@ int main(int argc, char const *argv[])
     orc::ReaderOptions reader_opts;
     std::unique_ptr<orc::Reader> reader;
      
-    //std::unique_ptr<orc::InputStream> is = orc::readFile(path);
-
-    //reader = orc::createReader(orc::readFile(path), reader_opts);
+    std::unique_ptr<orc::InputStream> stream = orc::readFile(path);
+    uint64_t fileLength =  static_cast<uint64_t>(stream->getLength());
+    std::cout << "fileLength " << fileLength << std::endl;
+        
     reader = orc::createReader(orc::readHdfsFile(path), reader_opts);
+    //reader = orc::createReader(stream, reader_opts);
 
     std::cout << "Number Of Stripes : " << reader->getNumberOfStripes() << std::endl;    
     for(int i = 0; i < reader->getNumberOfStripes(); i++) {
@@ -23,8 +25,8 @@ int main(int argc, char const *argv[])
     }
 
     orc::RowReaderOptions row_reader_opts;
-    //std::list<uint64_t> read_cols = { 5, 6, 7, 8, 9, 10 };
-    std::list<uint64_t> read_cols = { 11 };
+    std::list<uint64_t> read_cols = { 5, 6, 7, 8, 9, 10, 11 };
+    //std::list<uint64_t> read_cols = { 11 };
     row_reader_opts.include(read_cols);
     std::unique_ptr<orc::RowReader> row_reader;
     row_reader = reader->createRowReader(row_reader_opts);
@@ -96,4 +98,3 @@ long *lengths = col4->length.data();
 -- Installing: /usr/local/bin/orc-statistics
 #endif
 
-/mnt/usb-SanDisk_Ultra_128GB/tmp/orc-1.6.9

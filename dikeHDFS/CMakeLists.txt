@@ -27,9 +27,15 @@ target_include_directories(dikeHDFS PUBLIC
 
 #SET(AWS_LIBS -laws-c-event-stream  -laws-checksums -laws-c-common -laws-c-io -laws-c-cal -ls2n -lssl -lcrypto -laws-c-common )
 SET(PARQUET_LIBS -larrow -lparquet)
-SET(COMPRESSION_LIBS -llz4 -lzstd)
+SET(COMPRESSION_LIBS -llz4 -lzstd -lsnappy)
+SET(ORC_LIBS -L/usr/local/lib -lorc -lm -lz -lhdfspp_static -lprotobuf -lsasl2 -lcrypto)
+
+#set( CMAKE_VERBOSE_MAKEFILE on )
+
+find_package(OpenMP REQUIRED)
 
 target_link_libraries(dikeHDFS PUBLIC 
+    OpenMP::OpenMP_CXX
     -lstdc++
     Poco::Foundation
     Poco::Util
@@ -40,5 +46,7 @@ target_link_libraries(dikeHDFS PUBLIC
     "-lpthread -lm"
     ${PARQUET_LIBS}
     ${COMPRESSION_LIBS}
+    ${ORC_LIBS}
     "-L${CMAKE_SOURCE_DIR}/../build/Release/lib"
-    )
+)
+    

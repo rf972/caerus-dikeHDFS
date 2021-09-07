@@ -15,6 +15,7 @@
 
 #include <zstd.h>   
 
+#include "LambdaFileReader.hpp"
 #include "DikeUtil.hpp"
 #include "LambdaProcessor.hpp"
 #include "LambdaFrame.hpp"
@@ -48,6 +49,8 @@ class Node {
 
     // Statistics
     int stepCount = 0;
+    std::chrono::duration<double, std::milli> runTime = std::chrono::milliseconds(0);
+    
 
     Node(Poco::JSON::Object::Ptr pObject, DikeProcessorConfig & dikeProcessorConfig, DikeIO * output) {
         name = pObject->getValue<std::string>("Name");
@@ -142,7 +145,13 @@ class InputNode : public Node {
     public:
     std::shared_ptr<arrow::io::HadoopFileSystem> fs;
     static std::map< int, std::shared_ptr<arrow::io::HadoopFileSystem> > hadoopFileSystemMap;
+#ifdef LEGACY_HDFS    
     std::shared_ptr<arrow::io::HdfsReadableFile> inputFile;
+#else
+    std::shared_ptr<ReadableFile> inputFile;
+    static std::map< std::string, std::shared_ptr<ReadableFile> > inputFileMap;
+#endif
+
     std::shared_ptr<parquet::FileMetaData> fileMetaData;
     static std::map< std::string, std::shared_ptr<parquet::FileMetaData> > fileMetaDataMap;
     const parquet::SchemaDescriptor* schemaDescriptor;

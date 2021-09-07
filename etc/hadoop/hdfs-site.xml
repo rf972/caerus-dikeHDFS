@@ -38,6 +38,12 @@
       <description>Block Replication factor</description>
     </property>
 
+    <property>
+      <name>dfs.stream-buffer-size</name>
+      <value>65536</value>
+      <description>Block Replication factor</description>
+    </property>
+
     <!--
     <property>
       <name>dfs.permissions.enabled</name>

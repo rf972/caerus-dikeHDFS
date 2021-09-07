@@ -77,12 +77,21 @@ int LambdaProcessor::Run(DikeProcessorConfig & dikeProcessorConfig, DikeIO * out
 
     outputThread.join();
 
+    std::chrono::high_resolution_clock::time_point t2 =  std::chrono::high_resolution_clock::now();
+    std::chrono::duration<double, std::milli> run_time = t2 - t1;        
+ 
     if (verbose) {
-        std::chrono::high_resolution_clock::time_point t2 =  std::chrono::high_resolution_clock::now();
-        std::chrono::duration<double, std::milli> run_time = t2 - t1;        
-        std::cout << "Records " << record_counter;
-        std::cout << " run_time " << run_time.count()/ 1000 << " sec" << std::endl;
-        
+       std::cout << "Records " << record_counter;
+       std::cout << " run_time " << run_time.count()/ 1000 << " sec" << std::endl;        
+
+        std::chrono::duration<double, std::milli> totalRunTime = std::chrono::milliseconds(0);
+        for(int i = 0; i < nodeVector.size(); i++){
+            std::cout << "Node " << nodeVector[i]->name << " runTime " << nodeVector[i]->runTime.count()/ 1000 <<std::endl;
+            totalRunTime += nodeVector[i]->runTime;        
+        }
+
+        std::cout << "CPU totalRunTime " << totalRunTime.count()/ 1000 << " sec" << std::endl;
+        std::cout << "Actual run_time " << run_time.count()/ 1000 << " sec" << std::endl;
     }
 
     for(int i = 0; i < nodeVector.size(); i++){

@@ -877,7 +877,7 @@ public class DikeTpchClient
                 System.out.println(String.valueOf(i) + " : " + String.valueOf(dataTypes[i]));
             }
 
-            final int BATCH_SIZE = 8192;
+            final int BATCH_SIZE = 256 << 10;
             final int TYPE_INT64 = 2;
             final int TYPE_DOUBLE = 5;
             final int TYPE_BYTE_ARRAY = 6;
