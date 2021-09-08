@@ -316,6 +316,7 @@ bool OutputNode::Step()
 
     //std::cout << "OutputNode::Step " << stepCount << " Rows " << inFrame->columns[0]->row_count << std::endl;
     stepCount++;
+    recordsOut += inFrame->columns[0]->row_count;
     
     std::chrono::high_resolution_clock::time_point t1 =  std::chrono::high_resolution_clock::now();
 

@@ -50,8 +50,9 @@ class Node {
     // Statistics
     int stepCount = 0;
     std::chrono::duration<double, std::milli> runTime = std::chrono::milliseconds(0);
+    uint64_t recordsIn = 0;
+    uint64_t recordsOut = 0;
     
-
     Node(Poco::JSON::Object::Ptr pObject, DikeProcessorConfig & dikeProcessorConfig, DikeIO * output) {
         name = pObject->getValue<std::string>("Name");
         std::string typeStr = pObject->getValue<std::string>("Type");        

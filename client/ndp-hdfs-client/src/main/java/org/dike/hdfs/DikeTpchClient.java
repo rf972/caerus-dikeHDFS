@@ -145,6 +145,11 @@ public class DikeTpchClient
                 param = getQ10_l_Param(fname);
             break;
 
+            case 12:
+                fname = "/lineitem_srg.parquet";
+                param = getQ12Param(fname);
+            break;
+
             case 21:
                 fname = "/lineitem_srg.parquet";
                 param = getQ21Param(fname);
@@ -717,6 +722,141 @@ public class DikeTpchClient
         return strw.toString();
     }
 
+public static String getQ12Param(String name)    
+    {
+        try {
+        XMLOutputFactory xmlof = XMLOutputFactory.newInstance();
+        StringWriter strw = new StringWriter();
+        XMLStreamWriter xmlw = xmlof.createXMLStreamWriter(strw);
+        xmlw.writeStartDocument();
+        xmlw.writeStartElement("Processor");
+        
+        xmlw.writeStartElement("Name");
+        xmlw.writeCharacters("Lambda");
+        xmlw.writeEndElement(); // Name
+        
+        xmlw.writeStartElement("Configuration");
+
+        xmlw.writeStartElement("DAG");
+        JsonObjectBuilder dagBuilder = Json.createObjectBuilder();
+        dagBuilder.add("Name", "DAG Projection");
+
+        JsonArrayBuilder nodeArrayBuilder = Json.createArrayBuilder();
+
+        JsonObjectBuilder inputNodeBuilder = Json.createObjectBuilder();
+        inputNodeBuilder.add("Name", "InputNode");
+        inputNodeBuilder.add("Type", "_INPUT");
+        inputNodeBuilder.add("File", name);
+        nodeArrayBuilder.add(inputNodeBuilder.build());
+        
+        JsonObjectBuilder filterNodeBuilder = Json.createObjectBuilder();
+        filterNodeBuilder.add("Name", "TpchQ12 Filter");
+        filterNodeBuilder.add("Type", "_FILTER");
+        JsonArrayBuilder filterArrayBuilder = Json.createArrayBuilder();        
+
+        JsonObjectBuilder filterBuilder = Json.createObjectBuilder().add("Expression", "LessThan");   
+        filterBuilder.add("Left", Json.createObjectBuilder().add("ColumnReference", "l_commitdate"));        
+        filterBuilder.add("Right", Json.createObjectBuilder().add("ColumnReference", "l_receiptdate"));
+        filterArrayBuilder.add(filterBuilder);
+
+        filterBuilder = Json.createObjectBuilder().add("Expression", "LessThan");   
+        filterBuilder.add("Left", Json.createObjectBuilder().add("ColumnReference", "l_shipdate"));        
+        filterBuilder.add("Right", Json.createObjectBuilder().add("ColumnReference", "l_commitdate"));
+        filterArrayBuilder.add(filterBuilder);
+
+
+        filterBuilder = Json.createObjectBuilder().add("Expression", "Or");
+            JsonObjectBuilder l1 = Json.createObjectBuilder().add("Expression", "EqualTo");
+            l1.add("Left", Json.createObjectBuilder().add("ColumnReference", "l_shipmode"));
+            l1.add("Right", Json.createObjectBuilder().add("Literal", "MAIL"));
+
+            JsonObjectBuilder r1 = Json.createObjectBuilder().add("Expression", "EqualTo");
+            r1.add("Left", Json.createObjectBuilder().add("ColumnReference", "l_shipmode"));
+            r1.add("Right", Json.createObjectBuilder().add("Literal", "SHIP"));
+        filterBuilder.add("Left", l1);        
+        filterBuilder.add("Right", r1);
+        filterArrayBuilder.add(filterBuilder);
+
+        filterBuilder = Json.createObjectBuilder().add("Expression", "GreaterThanOrEqual");   
+        filterBuilder.add("Left", Json.createObjectBuilder().add("ColumnReference", "l_receiptdate"));        
+        filterBuilder.add("Right", Json.createObjectBuilder().add("Literal", "1994-01-01"));
+        filterArrayBuilder.add(filterBuilder);
+
+        filterBuilder = Json.createObjectBuilder().add("Expression", "LessThan");   
+        filterBuilder.add("Left", Json.createObjectBuilder().add("ColumnReference", "l_receiptdate"));        
+        filterBuilder.add("Right", Json.createObjectBuilder().add("Literal", "1995-01-01"));
+        filterArrayBuilder.add(filterBuilder);
+
+        filterNodeBuilder.add("FilterArray", filterArrayBuilder);
+        
+        nodeArrayBuilder.add(filterNodeBuilder.build()); 
+
+        JsonObjectBuilder projectionNodeBuilder = Json.createObjectBuilder();
+        projectionNodeBuilder.add("Name", "TpchQ12 Project");
+        projectionNodeBuilder.add("Type", "_PROJECTION");
+        JsonArrayBuilder projectionArrayBuilder = Json.createArrayBuilder();        
+        projectionArrayBuilder.add("l_orderkey");
+        projectionArrayBuilder.add("l_shipdate");
+        projectionArrayBuilder.add("l_commitdate");
+        projectionArrayBuilder.add("l_receiptdate");
+        projectionArrayBuilder.add("l_shipmode");
+
+        projectionNodeBuilder.add("ProjectionArray", projectionArrayBuilder);
+
+        nodeArrayBuilder.add(projectionNodeBuilder.build());
+
+        JsonObjectBuilder optputNodeBuilder = Json.createObjectBuilder();
+        optputNodeBuilder.add("Name", "OutputNode");
+        optputNodeBuilder.add("Type", "_OUTPUT");        
+
+        String compressionType = "None";
+        String compressionTypeEnv = System.getenv("DIKE_COMPRESSION");
+        if(compressionTypeEnv != null){
+            compressionType = compressionTypeEnv;
+        }
+        optputNodeBuilder.add("CompressionType", compressionType);
+
+        String compressionLevel = "1";
+        String compressionLevelEnv = System.getenv("DIKE_COMPRESSION_LEVEL");
+        if(compressionLevelEnv != null){
+            compressionLevel = compressionLevelEnv;
+        }
+        optputNodeBuilder.add("CompressionLevel", compressionLevel);
+        nodeArrayBuilder.add(optputNodeBuilder.build());        
+
+        dagBuilder.add("NodeArray", nodeArrayBuilder);
+
+        // For now we will assume simple pipe with ordered connections
+        JsonObject dag = dagBuilder.build();
+
+        StringWriter stringWriter = new StringWriter();
+        JsonWriter writer = Json.createWriter(stringWriter);
+        writer.writeObject(dag);
+        writer.close();
+
+        xmlw.writeCharacters(stringWriter.getBuffer().toString());
+        xmlw.writeEndElement(); // DAG
+
+        xmlw.writeStartElement("RowGroupIndex");
+        xmlw.writeCharacters("0");
+        xmlw.writeEndElement(); // RowGroupIndex
+
+        xmlw.writeStartElement("LastAccessTime");
+        xmlw.writeCharacters("1624464464409");
+        xmlw.writeEndElement(); // LastAccessTime
+
+        xmlw.writeEndElement(); // Configuration
+        xmlw.writeEndElement(); // Processor
+        xmlw.writeEndDocument();
+        xmlw.close();
+        return strw.toString();
+        } catch (Exception ex) {
+            System.out.println("Error occurred: ");
+            ex.printStackTrace();            
+        }
+        return null;        
+    }    
+
     public static String getQ21Param(String name)    
     {
         try {
@@ -1140,6 +1280,8 @@ public class DikeTpchClient
 // java -classpath target/ndp-hdfs-client-1.0-jar-with-dependencies.jar org.dike.hdfs.DikeTpchClient 5
 // Q10
 // java -classpath target/ndp-hdfs-client-1.0-jar-with-dependencies.jar org.dike.hdfs.DikeTpchClient 10
+// Q12
+// java -classpath target/ndp-hdfs-client-1.0-jar-with-dependencies.jar org.dike.hdfs.DikeTpchClient 12
 // Q21
 // java -classpath target/ndp-hdfs-client-1.0-jar-with-dependencies.jar org.dike.hdfs.DikeTpchClient 21
 

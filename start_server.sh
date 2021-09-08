@@ -70,6 +70,7 @@ DOCKER_RUN="docker run --rm=true ${DOCKER_IT} \
   -v ${ROOT_DIR}/server:/server \
   -w ${HADOOP_HOME} \
   -e HADOOP_HOME=${HADOOP_HOME} \
+  -e HADOOP_CONF_DIR==${HADOOP_HOME}/etc/hadoop \
   -e RUNNING_MODE=${RUNNING_MODE} \
   -u ${USER_ID} \
   --network dike-net \
