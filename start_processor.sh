@@ -45,17 +45,10 @@ rm -f ${ROOT_DIR}/volume/status/*
 # Can be used to transfer data to HDFS
 mkdir -p ${ROOT_DIR}/data
 
-CMD="bin/start-hadoop.sh"
+CMD="bin/start-processor.sh"
 RUNNING_MODE="daemon"
 
-if [ "$#" -ge 1 ] ; then
-  CMD="$*"
-  RUNNING_MODE="interactive"
-fi
-
-if [ "$RUNNING_MODE" = "interactive" ]; then
-  DOCKER_IT="-i -t"
-fi
+PROCESSOR_NAME="DP$1"
 
 DOCKER_RUN="docker run --rm=true ${DOCKER_IT} \
   -v ${ROOT_DIR}/data:/data \
@@ -66,15 +59,14 @@ DOCKER_RUN="docker run --rm=true ${DOCKER_IT} \
   -v ${ROOT_DIR}/volume/logs:${HADOOP_HOME}/logs \
   -v ${ROOT_DIR}/etc/hadoop/core-site.xml:${HADOOP_HOME}/etc/hadoop/core-site.xml \
   -v ${ROOT_DIR}/etc/hadoop/hdfs-site.xml:${HADOOP_HOME}/etc/hadoop/hdfs-site.xml \
-  -v ${ROOT_DIR}/scripts/start-hadoop.sh:${HADOOP_HOME}/bin/start-hadoop.sh \
+  -v ${ROOT_DIR}/scripts/start-processor.sh:${HADOOP_HOME}/bin/start-processor.sh \
   -v ${ROOT_DIR}/server:/server \
   -w ${HADOOP_HOME} \
   -e HADOOP_HOME=${HADOOP_HOME} \
-  -e HADOOP_CONF_DIR==${HADOOP_HOME}/etc/hadoop \
   -e RUNNING_MODE=${RUNNING_MODE} \
   -u ${USER_ID} \
   --network dike-net \
-  --name dikehdfs --hostname dikehdfs \
+  --name ${PROCESSOR_NAME} --hostname ${PROCESSOR_NAME} \
   hadoop-${HADOOP_VERSION}-ndp-${USER_NAME} ${CMD}"
 
 #echo "$DOCKER_RUN"
@@ -82,12 +74,6 @@ if [ "$RUNNING_MODE" = "interactive" ]; then
   eval "${DOCKER_RUN}"
 else
   eval "${DOCKER_RUN}" &
-  while [ ! -f "${ROOT_DIR}/volume/status/HADOOP_STATE" ]; do
-    sleep 1  
-  done
-
-  cat "${ROOT_DIR}/volume/status/HADOOP_STATE"
-  #docker exec dikehdfs /server/dikeHDFS &
 fi
 
 popd

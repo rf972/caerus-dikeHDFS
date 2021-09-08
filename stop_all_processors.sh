@@ -1,4 +1,4 @@
-#!/bin/bash
+#!/usr/bin/env bash
 
 # Licensed to the Apache Software Foundation (ASF) under one or more
 # contributor license agreements.  See the NOTICE file distributed with
@@ -15,32 +15,8 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-set -e # exit on error
+set -e               # exit on error
+source config.sh
 
-rm -f /opt/volume/status/HADOOP_STATE
+docker ps --filter name=DP* --filter status=running -aq | xargs docker stop
 
-if [ ! -f /opt/volume/namenode/current/VERSION ]; then
-    "${HADOOP_HOME}/bin/hdfs" namenode -format
-fi
-
-echo "Starting Name Node ..."
-"${HADOOP_HOME}/bin/hdfs" --daemon start namenode
-echo "Starting Data Node ..."
-"${HADOOP_HOME}/bin/hdfs" --daemon start datanode
-
-export LD_LIBRARY_PATH=$LD_LIBRARY_PATH:$HADOOP_HOME/lib/native
-export CLASSPATH=$(bin/hadoop classpath) 
-
-export HADOOP_CONF_DIR=$HADOOP_HOME/etc/hadoop
-
-sleep 1
-/server/dikeHDFS &
-
-echo "HADOOP_READY"
-echo "HADOOP_READY" > /opt/volume/status/HADOOP_STATE
-
-echo "RUNNING_MODE $RUNNING_MODE"
-
-if [ "$RUNNING_MODE" = "daemon" ]; then
-    sleep infinity
-fi

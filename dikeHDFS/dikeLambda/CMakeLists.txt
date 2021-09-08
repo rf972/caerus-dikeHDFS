@@ -1,4 +1,5 @@
-cmake_minimum_required(VERSION 3.0.0)
+cmake_minimum_required(VERSION 3.10)
+
 project(dikeLambda VERSION 0.1.0)
 
 add_library(libdikeLambda STATIC TpchQ1.cpp 
@@ -16,4 +17,6 @@ include_directories(
         ${CMAKE_SOURCE_DIR}/external/poco/JSON/include
         )
 
-target_compile_options(libdikeLambda PRIVATE )
+find_package(OpenMP REQUIRED)
+
+target_compile_options(libdikeLambda PRIVATE -fopenmp )

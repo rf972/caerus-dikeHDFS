@@ -124,6 +124,9 @@ class Filter {
     int64_t int64_value = 0;
     double double_value = 0;
 
+    std::array<Filter *, 2> subFilterArray = { { NULL, NULL} };
+    std::array<uint8_t *, 2> resultArray = { { NULL, NULL} };    
+
     std::array<std::string, 2> columnNames;
     std::array<std::string, 2> values;
     int columnMap[2] = {-1, -1};
@@ -139,6 +142,7 @@ class Filter {
         _GT = 4, // GreaterThan
         _EQ = 5, // EqualTo
         _CT = 6, // Contains
+        _OR = 7, // Or
     };
 
     int expression = 0;
@@ -158,43 +162,80 @@ class Filter {
             expression = _EQ;
         } else if(expr.compare("Contains") == 0){
             expression = _CT;
+        } else if(expr.compare("Or") == 0){
+            expression = _OR;
         } else {
             std::cout << "Uknown expression : " << expr << std::endl;
         }
 
         Poco::JSON::Object::Ptr side;
-        side = pObject->getObject("Left");
-        if(side->has("Literal")) {
-            values[LEFT] = side->getValue<std::string>("Literal");   
-        } else if(side->has("ColumnReference")) {
-            columnNames[LEFT] = side->getValue<std::string>("ColumnReference");
-        }    
+        if(expression == _OR) {
+            if(verbose){
+                std::cout << "Filter ( " << std::endl;
+            }
+            side = pObject->getObject("Left");
+            subFilterArray[LEFT] = new Filter(side, verbose);
+            resultArray[LEFT] = new uint8_t [Column::config::MAX_SIZE];
+            if(verbose){
+                std::cout << expr << std::endl;
+            }
+            side = pObject->getObject("Right");
+            subFilterArray[RIGHT] = new Filter(side, verbose);
+            resultArray[RIGHT] = new uint8_t [Column::config::MAX_SIZE];
+            if(verbose){
+                std::cout << ") " << std::endl;
+            }            
+        } else {            
+            side = pObject->getObject("Left");
+            if(side->has("Literal")) {
+                values[LEFT] = side->getValue<std::string>("Literal");   
+            } else if(side->has("ColumnReference")) {
+                columnNames[LEFT] = side->getValue<std::string>("ColumnReference");
+            }    
 
-        side = pObject->getObject("Right");
-        if(side->has("Literal")) {
-            values[RIGHT] = side->getValue<std::string>("Literal");   
-        } else if(side->has("ColumnReference")) {
-            columnNames[RIGHT] = side->getValue<std::string>("ColumnReference");
+            side = pObject->getObject("Right");
+            if(side->has("Literal")) {
+                values[RIGHT] = side->getValue<std::string>("Literal");   
+            } else if(side->has("ColumnReference")) {
+                columnNames[RIGHT] = side->getValue<std::string>("ColumnReference");
+            }
+
+            if(verbose){
+                std::cout << "Filter ";
+                if(columnNames[LEFT].length() > 0){
+                    std::cout << columnNames[LEFT] + " ";
+                } else {
+                    std::cout << values[LEFT] << " ";
+                }
+                std::cout << expr << " ";
+                if(columnNames[RIGHT].length() > 0){
+                    std::cout << columnNames[RIGHT] + " ";
+                } else {
+                    std::cout << values[RIGHT] << " ";
+                }
+                std::cout << std::endl;
+            }
         }
+    }
 
-        if(verbose){
-            std::cout << "Filter ";
-            if(columnNames[LEFT].length() > 0){
-                std::cout << columnNames[LEFT] + " ";
-            } else {
-                std::cout << values[LEFT] << " ";
-            }
-            std::cout << expr << " ";
-            if(columnNames[RIGHT].length() > 0){
-                std::cout << columnNames[RIGHT] + " ";
-            } else {
-                std::cout << values[RIGHT] << " ";
-            }
-             std::cout << std::endl;
+    ~Filter() {
+        for(int i = 0; i < subFilterArray.size(); i++) {
+            delete subFilterArray[i];
+        }
+        for(int i = 0; i < resultArray.size(); i++) {
+            delete resultArray[i];
         }
     }
 
     void UpdateColumnMap(Frame * inFrame) {
+
+        if(expression == _OR) {
+            for(int i = 0; i < subFilterArray.size(); i++) {
+                subFilterArray[i]->UpdateColumnMap(inFrame);
+            }
+            return;
+        }
+
         for(int i = 0; i < inFrame->columns.size(); i++){
             for(int j = 0; j < 2; j++){
                 if(inFrame->columns[i]->name.compare(columnNames[j]) == 0) {
@@ -223,6 +264,18 @@ class Filter {
     }
 
     void Step(Frame * inFrame, uint8_t * result) {
+        if(expression == _OR) {
+            memset(resultArray[LEFT], 1,  Column::config::MAX_SIZE);
+            memset(resultArray[RIGHT], 1,  Column::config::MAX_SIZE);
+            subFilterArray[LEFT]->Step(inFrame, resultArray[LEFT]);
+            subFilterArray[RIGHT]->Step(inFrame, resultArray[RIGHT]);
+            for(int i = 0; i < Column::config::MAX_SIZE; i++) {
+                if(resultArray[LEFT][i] + resultArray[RIGHT][i] == 0){
+                    result[i] = 0;
+                }
+            }
+            return;
+        }
         if(columnNames[RIGHT].length() > 0){
             switch(data_type) {
                 case Column::DataType::INT64:            
@@ -392,16 +445,18 @@ void FilterNode::UpdateColumnMap(Frame * inFrame)
 
 bool FilterNode::Step()
 {
+    
     //std::cout << "FilterNode::Step " << stepCount << std::endl;
     if(done) { return done; }
     stepCount++;
 
-    Frame * inFrame = getFrame();    
+    Frame * inFrame = getFrame();
     if(inFrame == NULL) {
         std::cout << "Input queue is empty " << std::endl;
         return done;
     }
-
+    
+    std::chrono::high_resolution_clock::time_point t1 =  std::chrono::high_resolution_clock::now();
     memset(result, 1,  Column::config::MAX_SIZE);
 
     for(int i = 0; i < filterArray.size(); i++){
@@ -414,6 +469,9 @@ bool FilterNode::Step()
         done = true;
     }
 
-    nextNode->putFrame(inFrame); // Send frame down to graph    
+    nextNode->putFrame(inFrame); // Send frame down to graph
+    std::chrono::high_resolution_clock::time_point t2 =  std::chrono::high_resolution_clock::now();
+    runTime += t2 - t1;        
+
     return done;
 }

@@ -26,7 +26,7 @@ class Column {
     };
 
     enum config {
-        MAX_SIZE = 8192,
+        MAX_SIZE = 64 << 10,
         MAX_TEXT_SIZE = MAX_SIZE * 128,
     };
 

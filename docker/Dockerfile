@@ -131,16 +131,16 @@ ENV ENV_HADOOP_VERSION=$HADOOP_VERSION
 RUN mkdir -p /opt/hadoop
 RUN curl -L https://downloads.apache.org/hadoop/common/hadoop-${ENV_HADOOP_VERSION}/hadoop-${ENV_HADOOP_VERSION}.tar.gz | tar -xz -C /opt/hadoop
 
-###
-#RUN mkdir -p /opt/orc
+
+RUN mkdir -p /opt/orc
 #RUN curl -L https://downloads.apache.org/orc/orc-1.6.9/orc-1.6.9.tar.gz | tar -xz -C /opt/orc
-#RUN cd /opt/orc/orc-1.6.9 \
-#    && mkdir build \
-#    && cd build \
-#    && cmake .. -DBUILD_JAVA=OFF \
-#    && make package \
-#    && make install
-###
+RUN curl -L https://downloads.apache.org/orc/orc-1.6.10/orc-1.6.10.tar.gz | tar -xz -C /opt/orc \
+    && cd /opt/orc/orc-1.6.10 \
+    && mkdir build \
+    && cd build \
+    && cmake .. -DBUILD_JAVA=OFF \
+    && make package \
+    && make install
 
 COPY entry.sh /usr/local/bin/entry.sh
 RUN chmod a+x /usr/local/bin/entry.sh

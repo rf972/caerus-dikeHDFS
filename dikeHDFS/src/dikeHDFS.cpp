@@ -77,7 +77,10 @@ class NameNodeHandler : public DikeHTTPRequestHandler {
     
     if(req.has("ReadParam") && resp.has("Location")) {
       //cout << DikeUtil().Blue() << resp.get("Location") << DikeUtil().Reset() << endl;      
-      Poco::URI uri = Poco::URI(resp.get("Location"));      
+      Poco::URI uri = Poco::URI(resp.get("Location"));
+      string host = req.getHost();
+      host = host.substr(0, host.find(':'));
+      uri.setHost(host); // Client should be redirected back to our address
       uri.setPort(std::stoi(dikeConfig["dike.dfs.ndp.http-port"]));
       resp.set("Location", uri.toString());
       //cout << DikeUtil().Blue() << resp.get("Location") << DikeUtil().Reset() << endl;
