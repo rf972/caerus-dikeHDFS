@@ -94,7 +94,7 @@ int LambdaProcessor::Run(DikeProcessorConfig & dikeProcessorConfig, DikeIO * out
         std::cout << "Actual run_time " << run_time.count()/ 1000 << " sec" << std::endl;
     }
 
-    for(int i = 0; i < nodeVector.size(); i++){
+    for(int i = nodeVector.size() - 1; i >= 0; i--){
         //std::cout << "Deleting Node " << nodeVector[i]->name << std::endl;
         delete nodeVector[i];
     }
