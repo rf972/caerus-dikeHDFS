@@ -185,7 +185,12 @@ bool InputNode::Step()
         for(int i = 0; i < columnCount; i++){
             if(columnReaders[i]) {
                 //std::cout << "Read Column " << colId <<  " " << frame->columns[i]->name << std::endl;
-                frame->columns[i]->Read(columnReaders[i], size); 
+                try {
+                    frame->columns[i]->Read(columnReaders[i], size);
+                } catch(const std::exception& e) {
+                    std::cout << "Caught exception : " << e.what() << std::endl;
+                    std::terminate();
+                }
             }       
         }
     }
