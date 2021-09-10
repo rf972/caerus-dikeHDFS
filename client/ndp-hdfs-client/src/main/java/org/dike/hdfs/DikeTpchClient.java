@@ -135,6 +135,13 @@ public class DikeTpchClient
                 //fname = "/lineitem_10.parquet";
                 param = getQ1Param(fname);
             break;
+            case 3:
+                //fname = "/lineitem_srg.parquet";
+                //fname = "/tpch-test-parquet/lineitem.parquet";
+                //fname = "/tpch-test-parquet/lineitem_1G.parquet";
+                fname = "/lineitem.parquet";
+                param = getQ3Param(fname);
+            break;
             case 6:
                 fname = "/lineitem_srg.parquet";
                 param = getQ6Param(fname);
@@ -284,6 +291,133 @@ public class DikeTpchClient
         return null;        
     }
     
+    public static String getQ3Param(String name)    
+    {
+        /*
+        Configuration.DAG = {
+            "Name":"DAG Projection",
+            "NodeArray":
+            [
+            {"Name":"InputNode","Type":"_INPUT","File":"/tpch-test-parquet/lineitem.parquet/part-00000-053e732d-0f83-4113-a6a0-96b25b6a6735-c000.snappy.parquet"},
+            {"Type":"_FILTER",
+            "FilterArray":
+            [
+                {"Expression":"IsNotNull","Arg":{"ColumnReference":"l_shipdate"}},
+                {"Left":{"ColumnReference":"l_shipdate"},
+                "Expression":"GreaterThan",
+                "Right":{"Literal":"1995-03-15"}},
+                {"Expression":"IsNotNull","Arg":{"ColumnReference":"l_orderkey"}}
+            ],
+            "Name":"TPC-H Test Q03"},
+            {"Name":"TPC-H Test Q03","Type":"_PROJECTION", "ProjectionArray":["l_orderkey","l_extendedprice","l_discount"]},
+            {"Name":"OutputNode","Type":"_OUTPUT","CompressionType":"ZSTD","CompressionLevel":"3"}
+            ]}
+        Configuration.RowGroupIndex = 1
+        */
+        try {
+        XMLOutputFactory xmlof = XMLOutputFactory.newInstance();
+        StringWriter strw = new StringWriter();
+        XMLStreamWriter xmlw = xmlof.createXMLStreamWriter(strw);
+        xmlw.writeStartDocument();
+        xmlw.writeStartElement("Processor");
+        
+        xmlw.writeStartElement("Name");
+        xmlw.writeCharacters("Lambda");
+        xmlw.writeEndElement(); // Name
+        
+        xmlw.writeStartElement("Configuration");
+
+        xmlw.writeStartElement("DAG");
+        JsonObjectBuilder dagBuilder = Json.createObjectBuilder();
+        dagBuilder.add("Name", "DAG Projection");
+
+        JsonArrayBuilder nodeArrayBuilder = Json.createArrayBuilder();
+
+        JsonObjectBuilder inputNodeBuilder = Json.createObjectBuilder();
+        inputNodeBuilder.add("Name", "InputNode");
+        inputNodeBuilder.add("Type", "_INPUT");
+        inputNodeBuilder.add("File", name);
+        nodeArrayBuilder.add(inputNodeBuilder.build());
+        
+        JsonObjectBuilder filterNodeBuilder = Json.createObjectBuilder();
+        filterNodeBuilder.add("Name", "TpchQ3 Filter");
+        filterNodeBuilder.add("Type", "_FILTER");
+        JsonArrayBuilder filterArrayBuilder = Json.createArrayBuilder();        
+
+        JsonObjectBuilder filterBuilder = Json.createObjectBuilder().add("Expression", "GreaterThan");   
+        filterBuilder.add("Left", Json.createObjectBuilder().add("ColumnReference", "l_shipdate"));        
+        filterBuilder.add("Right", Json.createObjectBuilder().add("Literal", "1995-03-15"));
+        filterArrayBuilder.add(filterBuilder);
+
+        filterNodeBuilder.add("FilterArray", filterArrayBuilder);
+        
+        nodeArrayBuilder.add(filterNodeBuilder.build()); 
+
+        JsonObjectBuilder projectionNodeBuilder = Json.createObjectBuilder();
+        projectionNodeBuilder.add("Name", "TpchQ3 Project");
+        projectionNodeBuilder.add("Type", "_PROJECTION");
+        JsonArrayBuilder projectionArrayBuilder = Json.createArrayBuilder();
+
+        projectionArrayBuilder.add("l_orderkey");
+        projectionArrayBuilder.add("l_extendedprice");
+        projectionArrayBuilder.add("l_discount");
+
+        projectionNodeBuilder.add("ProjectionArray", projectionArrayBuilder);
+
+        nodeArrayBuilder.add(projectionNodeBuilder.build());
+
+        JsonObjectBuilder optputNodeBuilder = Json.createObjectBuilder();
+        optputNodeBuilder.add("Name", "OutputNode");
+        optputNodeBuilder.add("Type", "_OUTPUT");        
+
+        String compressionType = "None";
+        String compressionTypeEnv = System.getenv("DIKE_COMPRESSION");
+        if(compressionTypeEnv != null){
+            compressionType = compressionTypeEnv;
+        }
+        optputNodeBuilder.add("CompressionType", compressionType);
+
+        String compressionLevel = "1";
+        String compressionLevelEnv = System.getenv("DIKE_COMPRESSION_LEVEL");
+        if(compressionLevelEnv != null){
+            compressionLevel = compressionLevelEnv;
+        }
+        optputNodeBuilder.add("CompressionLevel", compressionLevel);
+        nodeArrayBuilder.add(optputNodeBuilder.build());        
+
+        dagBuilder.add("NodeArray", nodeArrayBuilder);
+
+        // For now we will assume simple pipe with ordered connections
+        JsonObject dag = dagBuilder.build();
+
+        StringWriter stringWriter = new StringWriter();
+        JsonWriter writer = Json.createWriter(stringWriter);
+        writer.writeObject(dag);
+        writer.close();
+
+        xmlw.writeCharacters(stringWriter.getBuffer().toString());
+        xmlw.writeEndElement(); // DAG
+
+        xmlw.writeStartElement("RowGroupIndex");
+        xmlw.writeCharacters("1");
+        xmlw.writeEndElement(); // RowGroupIndex
+
+        xmlw.writeStartElement("LastAccessTime");
+        xmlw.writeCharacters("1624464464409");
+        xmlw.writeEndElement(); // LastAccessTime
+
+        xmlw.writeEndElement(); // Configuration
+        xmlw.writeEndElement(); // Processor
+        xmlw.writeEndDocument();
+        xmlw.close();
+        return strw.toString();
+        } catch (Exception ex) {
+            System.out.println("Error occurred: ");
+            ex.printStackTrace();            
+        }
+        return null;        
+    }    
+
     public static String getQ6Param(String name)    
     { // SELECT  SUM( l_extendedprice) FROM S3Object WHERE l_shipdate IS NOT NULL AND l_discount >= 0.05 AND l_discount <= 0.07 AND l_quantity < 24.0 AND l_shipdate >= '1994-01-01' AND l_shipdate < '1995-01-01' 
         try {
@@ -1274,6 +1408,8 @@ public static String getQ12Param(String name)
 // mvn package -o
 // Q1
 // java -classpath target/ndp-hdfs-client-1.0-jar-with-dependencies.jar org.dike.hdfs.DikeTpchClient 1
+// Q3
+// java -classpath target/ndp-hdfs-client-1.0-jar-with-dependencies.jar org.dike.hdfs.DikeTpchClient 3
 // Q6
 // java -classpath target/ndp-hdfs-client-1.0-jar-with-dependencies.jar org.dike.hdfs.DikeTpchClient 6
 // Q5
@@ -1289,6 +1425,6 @@ public static String getQ12Param(String name)
 
 // export DIKE_TRACE_RECORD_MAX=36865
 // export DIKE_COMPRESSION=ZSTD
-// export DIKE_COMPRESSION_LEVEL=-10
+// export DIKE_COMPRESSION_LEVEL=3
 // export DIKE_PATH=DP3
 
