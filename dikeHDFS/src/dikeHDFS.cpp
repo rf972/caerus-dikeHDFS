@@ -44,6 +44,15 @@ using namespace Poco::Net;
 using namespace Poco::Util;
 using namespace std;
 
+static int dikeNodeType = 0;
+enum {
+    COMPUTE_NODE = 0,
+    STORAGE_NODE = 1,
+};
+
+static std::atomic<int> dataNodeReqCount(0);
+static int dikeStorageMaxRequests = 2;
+
 class NameNodeHandler : public DikeHTTPRequestHandler {
   public:  
   NameNodeHandler(int verbose, DikeConfig & dikeConfig): DikeHTTPRequestHandler(verbose, dikeConfig){}
@@ -76,13 +85,25 @@ class NameNodeHandler : public DikeHTTPRequestHandler {
     (HTTPResponse &)resp = hdfs_resp;    
     
     if(req.has("ReadParam") && resp.has("Location")) {
-      //cout << DikeUtil().Blue() << resp.get("Location") << DikeUtil().Reset() << endl;      
-      Poco::URI uri = Poco::URI(resp.get("Location"));
-      string host = req.getHost();
-      host = host.substr(0, host.find(':'));
-      uri.setHost(host); // Client should be redirected back to our address
-      uri.setPort(std::stoi(dikeConfig["dike.dfs.ndp.http-port"]));
-      resp.set("Location", uri.toString());
+        //cout << DikeUtil().Blue() << resp.get("Location") << DikeUtil().Reset() << endl;      
+        Poco::URI uri = Poco::URI(resp.get("Location"));
+        int ndpPort = std::stoi(dikeConfig["dike.dfs.ndp.http-port"]);
+        string host = req.getHost();
+        host = host.substr(0, host.find(':'));
+        // On a storage node perform NDP if we have compute capacity
+        if(dikeNodeType == STORAGE_NODE && dataNodeReqCount < dikeStorageMaxRequests) {
+            uri.setHost(host); // Client should be redirected back to our address
+            uri.setPort(ndpPort);
+            resp.set("Location", uri.toString());
+        }
+
+        // On a compute node perform NDP if storage is not doing it
+        if(dikeNodeType == COMPUTE_NODE && ndpPort != uri.getPort()) {
+            uri.setHost(host); // Client should be redirected back to our address
+            uri.setPort(ndpPort);
+            resp.set("Location", uri.toString());            
+        }
+      
       //cout << DikeUtil().Blue() << resp.get("Location") << DikeUtil().Reset() << endl;
     }
 
@@ -144,6 +165,7 @@ public:
         return;
     }
 
+    dataNodeReqCount += 1;
     if(req.has("ReadParam")) {
         resp.setStatus(Poco::Net::HTTPResponse::HTTP_OK);
         resp.setContentLength(Poco::Net::HTTPMessage::UNKNOWN_CONTENT_LENGTH);
@@ -232,6 +254,7 @@ public:
         }
     }    
     
+    dataNodeReqCount -= 1;
     //hdfs_session.close();
     if(verbose) {
       resp.write(cout);
@@ -334,6 +357,17 @@ class DikeServerApp : public ServerApplication
       logger().information(name + " = " + value);
       dikeConfig[name] = value;
     }
+
+    if(dikeConfig.count("dike.node.type") > 0) {
+        dikeNodeType = std::stoi(dikeConfig["dike.node.type"]);
+        std::cout << "dikeNodeType " << dikeNodeType << std::endl;
+    }
+
+    if(dikeConfig.count("dike.storage.max.requests") > 0) {
+        dikeStorageMaxRequests = std::stoi(dikeConfig["dike.storage.max.requests"]);
+        std::cout << "dikeStorageMaxRequests " << dikeStorageMaxRequests << std::endl;
+    }
+    
   }
 
   int main(const vector<string> & argv)

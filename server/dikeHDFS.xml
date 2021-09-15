@@ -30,6 +30,17 @@
         <value>9858</value>
     </property> 
 
+    <property>
+        <!-- 0 - Compute Node (default), 1 Storage Node -->
+        <name>dike.node.type</name>
+        <value>1</value>
+    </property> 
+
+    <property>
+        <!-- Max concurent requests -->
+        <name>dike.storage.max.requests</name>
+        <value>4</value>
+    </property> 
 
     </dike>
 </configuration>
