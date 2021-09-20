@@ -131,8 +131,8 @@ public class DikeTpchClient
         String param = "";
         switch(Integer.parseInt(testNumber)) {
             case 1:
-                fname = "/lineitem_srg.parquet";
-                //fname = "/lineitem_10.parquet";
+                //fname = "/lineitem_srg.parquet";
+                fname = "/tpch-test-parquet/lineitem_1G.parquet";
                 param = getQ1Param(fname);
             break;
             case 3:

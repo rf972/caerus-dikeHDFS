@@ -208,6 +208,10 @@ public:
 
             dikeSQLConfig["Request"] = ss.str();
             dikeSQLConfig["dfs.datanode.http-port"] = dikeConfig["dfs.datanode.http-port"];
+            
+            if(dikeConfig.count("dike.node.type") > 0) {
+                dikeSQLConfig["dike.node.type"] = dikeConfig["dike.node.type"];
+            }
 
             Poco::URI uri = Poco::URI(req.getURI());
             Poco::URI::QueryParameters uriParams = uri.getQueryParameters();
@@ -360,12 +364,12 @@ class DikeServerApp : public ServerApplication
 
     if(dikeConfig.count("dike.node.type") > 0) {
         dikeNodeType = std::stoi(dikeConfig["dike.node.type"]);
-        std::cout << "dikeNodeType " << dikeNodeType << std::endl;
+        //std::cout << "dikeNodeType " << dikeNodeType << std::endl;
     }
 
     if(dikeConfig.count("dike.storage.max.requests") > 0) {
         dikeStorageMaxRequests = std::stoi(dikeConfig["dike.storage.max.requests"]);
-        std::cout << "dikeStorageMaxRequests " << dikeStorageMaxRequests << std::endl;
+        //std::cout << "dikeStorageMaxRequests " << dikeStorageMaxRequests << std::endl;
     }
     
   }
