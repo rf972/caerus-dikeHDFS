@@ -112,6 +112,7 @@ class Node {
         framePoolMutex.lock();
         if(framePool.empty()){
             framePoolMutex.unlock();
+            std::cout << "Frame pool is empty on  Node " << name << std::endl;
             return NULL;
         }
         Frame * frame = framePool.front();
@@ -144,6 +145,7 @@ class Node {
 
 class InputNode : public Node {
     public:
+    std::vector<int> columnMap;
     std::shared_ptr<arrow::io::HadoopFileSystem> fs;
     static std::map< int, std::shared_ptr<arrow::io::HadoopFileSystem> > hadoopFileSystemMap;
 #ifdef LEGACY_HDFS    

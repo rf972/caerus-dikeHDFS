@@ -29,6 +29,7 @@
 #include <algorithm>
 #include <map>
 #include <sstream>
+#include <omp.h>
 
 //#include "S3Handlers.hpp"
 #include "DikeUtil.hpp"
@@ -431,5 +432,14 @@ int main(int argc, char** argv)
 {  
   DikeServerApp app;
   
+
+    #pragma omp parallel
+    {
+        // Each thread prints its identifier
+        // printf("We are %d threads, I am thread %d.\n", omp_get_num_threads(), omp_get_thread_num());
+        #pragma omp single
+        std::cout << "omp_get_num_threads " << omp_get_num_threads() << std::endl;
+    }
+   
   return app.run(argc, argv);
 }
