@@ -112,6 +112,7 @@ class Node {
         framePoolMutex.lock();
         if(framePool.empty()){
             framePoolMutex.unlock();
+            std::cout << "Frame pool is empty on  Node " << name << std::endl;
             return NULL;
         }
         Frame * frame = framePool.front();
@@ -144,8 +145,10 @@ class Node {
 
 class InputNode : public Node {
     public:
+    std::vector<int> columnMap;
     std::shared_ptr<arrow::io::HadoopFileSystem> fs;
     static std::map< int, std::shared_ptr<arrow::io::HadoopFileSystem> > hadoopFileSystemMap;
+    static std::mutex inputFileMutex;
 #ifdef LEGACY_HDFS    
     std::shared_ptr<arrow::io::HdfsReadableFile> inputFile;
 #else
@@ -209,14 +212,22 @@ class OutputNode : public Node {
     uint32_t compressedBufferLen = Column::MAX_TEXT_SIZE + 1024;
     uint8_t lz4_state_memory [32<<10] __attribute__((aligned(128))); // see (int LZ4_sizeofState(void);)
     std::vector<ZSTD_CCtx *> ZSTD_Context;
-    int compressionLevel = 1;
+    int compressionLevel = 3;
+    int dikeNodeType = 0;
 
     OutputNode(Poco::JSON::Object::Ptr pObject, DikeProcessorConfig & dikeProcessorConfig, DikeIO * output) 
         : Node(pObject, dikeProcessorConfig, output) 
     {        
         this->output = output;
 
-        if(pObject->has("CompressionType")){
+        if(dikeProcessorConfig.count("dike.node.type") > 0) {            
+            dikeNodeType = std::stoi(dikeProcessorConfig["dike.node.type"]);
+            if(verbose){
+                std::cout << "dikeNodeType " << dikeNodeType << std::endl;
+            }           
+        }
+
+        if(pObject->has("CompressionType") && dikeNodeType == 1){ // Storage Node
             std::string compressionType = pObject->getValue<std::string>("CompressionType");
             if(verbose){
                 std::cout << "CompressionType " << compressionType << std::endl;

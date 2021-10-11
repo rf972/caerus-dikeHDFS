@@ -63,6 +63,7 @@ InputNode::InputNode(Poco::JSON::Object::Ptr pObject, DikeProcessorConfig & dike
     //inputFile = std::shared_ptr<ReadableFile>(new ReadableFile(fullPath));
 #endif
 
+    inputFileMutex.lock();
     if (fileMetaDataMap.count(fileName)) {
         if (0 == fileLastAccessTimeMap[fileName].compare(dikeProcessorConfig["Configuration.LastAccessTime"])){
             //std::cout << " LambdaParquetReader reuse fileMetaData "<< std::endl;
@@ -86,6 +87,7 @@ InputNode::InputNode(Poco::JSON::Object::Ptr pObject, DikeProcessorConfig & dike
         fileMetaDataMap[fileName] = fileMetaData;
         fileLastAccessTimeMap[fileName] = dikeProcessorConfig["Configuration.LastAccessTime"];            
     }
+    inputFileMutex.unlock();
     
     schemaDescriptor = fileMetaData->schema();
     parquet::ReaderProperties readerProperties = parquet::default_reader_properties();
@@ -104,6 +106,11 @@ InputNode::InputNode(Poco::JSON::Object::Ptr pObject, DikeProcessorConfig & dike
 
 void InputNode::Init() 
 {    
+    std::chrono::high_resolution_clock::time_point t1;
+    if(verbose){
+        t1 =  std::chrono::high_resolution_clock::now();
+    }
+
     Frame * frame = new Frame(this);
     for(int i = 0; i < columnCount; i++){                
         auto columnRoot = (parquet::schema::PrimitiveNode*)schemaDescriptor->GetColumnRoot(i);
@@ -116,24 +123,21 @@ void InputNode::Init()
 
     // This will send update request down to graph
     UpdateColumnMap(frame);
-
-    //omp_set_dynamic(1);
-    //omp_set_num_threads(4);        
-    //#pragma omp parallel
-    {
-        //std::cout << "Create readers with " << omp_get_num_threads() << " threads dynamic " << omp_get_dynamic() << std::endl;
-        //#pragma omp for
-        for(int i = 0; i < columnCount; i++) {
-            if(frame->columns[i]->useCount > 0) {
-                //std::cout << "Create reader for Column " << i << " tid " << omp_get_thread_num() << std::endl;
-                columnReaders[i] = std::move(rowGroupReader->Column(i));
-                frame->columns[i]->Init(); // This will allocate memory buffers
-            } else {
-                columnReaders[i] = NULL;
-            }
+    
+    for(int i = 0; i < columnCount; i++) {
+        if(frame->columns[i]->useCount > 0) {
+            columnMap.push_back(i);
         }
     }
-
+            
+    //#pragma omp parallel for num_threads(4)
+    for(int i = 0; i < columnMap.size(); i++) {            
+        int col = columnMap[i];
+        //std::cout << "Create reader for Column " << col << " tid " << omp_get_thread_num() << std::endl;
+        columnReaders[col] = std::move(rowGroupReader->Column(col));
+        frame->columns[col]->Init(); // This will allocate memory buffers
+    }
+    
     freeFrame(frame); // this will put this frame on framePool
 
     // Create few additional frames
@@ -151,6 +155,12 @@ void InputNode::Init()
         }
         freeFrame(frame); // this will put this frame on framePool
     }
+
+    if(verbose){
+        std::chrono::high_resolution_clock::time_point t2 =  std::chrono::high_resolution_clock::now();
+        std::chrono::duration<double, std::milli> run_time = t2 - t1;   
+        std::cout << "InputNode::Init took " << run_time.count()/ 1000 << " sec" << std::endl;
+    }    
 }
 
 bool InputNode::Step()
@@ -160,39 +170,20 @@ bool InputNode::Step()
     stepCount++;
 
     int size = std::min((int)Column::MAX_SIZE, numRows - rowCount);    
-
     Frame * frame = allocFrame();
-    if(frame == NULL){
-        frame = new Frame(this); // Allocate new frame with data    
-        for(int i = 0; i < columnCount; i++){                        
-            auto columnRoot = (parquet::schema::PrimitiveNode*)schemaDescriptor->GetColumnRoot(i);
-            std::string name = columnRoot->name();            
-            Column * col = new Column(this, i, name,  columnTypes[i]);
-            //std::cout << "Create Column " << i <<  " " << name << std::endl;            
-            frame->Add(col);
-            if(columnReaders[i]) {
-                col->Init(); // This will allocate memory buffers
-            }
-        }
-    } else {
-        //std::cout << "We got frame from pool" << std::endl;
+
+    std::chrono::high_resolution_clock::time_point t1;
+    if(verbose){
+        t1 =  std::chrono::high_resolution_clock::now();
     }
-    std::chrono::high_resolution_clock::time_point t1 =  std::chrono::high_resolution_clock::now();
 
     //#pragma omp parallel
-    {
-        //#pragma omp for
-        for(int i = 0; i < columnCount; i++){
-            if(columnReaders[i]) {
-                //std::cout << "Read Column " << colId <<  " " << frame->columns[i]->name << std::endl;
-                try {
-                    frame->columns[i]->Read(columnReaders[i], size);
-                } catch(const std::exception& e) {
-                    std::cout << "Caught exception : " << e.what() << std::endl;
-                    std::terminate();
-                }
-            }       
-        }
+    {        
+        #pragma omp parallel for num_threads(4)
+        for(int i = 0; i < columnMap.size(); i++) {            
+            int col = columnMap[i];
+            frame->columns[col]->Read(columnReaders[col], size);
+        }        
     }
 
     rowCount += size;
@@ -202,8 +193,10 @@ bool InputNode::Step()
     }
     nextNode->putFrame(frame); // Send frame down to graph
 
-    std::chrono::high_resolution_clock::time_point t2 =  std::chrono::high_resolution_clock::now();
-    runTime += t2 - t1;
+    if(verbose){
+        std::chrono::high_resolution_clock::time_point t2 =  std::chrono::high_resolution_clock::now();
+        runTime += t2 - t1;
+    }
     return done;
 }
 
@@ -272,7 +265,11 @@ bool ProjectionNode::Step()
         outFrame = new Frame(this); // Allocate new frame with data
         outFrame->columns.resize(columnCount);
     }
-    std::chrono::high_resolution_clock::time_point t1 =  std::chrono::high_resolution_clock::now();
+
+    std::chrono::high_resolution_clock::time_point t1;
+    if(verbose){
+        t1 =  std::chrono::high_resolution_clock::now();
+    }
 
     outFrame->parentFrame = inFrame;
 
@@ -287,8 +284,11 @@ bool ProjectionNode::Step()
     }
 
     nextNode->putFrame(outFrame); // Send frame down to graph
-    std::chrono::high_resolution_clock::time_point t2 =  std::chrono::high_resolution_clock::now();
-    runTime += t2 - t1;    
+
+    if(verbose){    
+        std::chrono::high_resolution_clock::time_point t2 =  std::chrono::high_resolution_clock::now();
+        runTime += t2 - t1;    
+    }
     return done;
 }
 
@@ -323,7 +323,10 @@ bool OutputNode::Step()
     stepCount++;
     recordsOut += inFrame->columns[0]->row_count;
     
-    std::chrono::high_resolution_clock::time_point t1 =  std::chrono::high_resolution_clock::now();
+    std::chrono::high_resolution_clock::time_point t1;
+    if(verbose){
+        t1 =  std::chrono::high_resolution_clock::now();
+    }
 
     Column * col = 0;
     int64_t be_value;
@@ -385,8 +388,10 @@ bool OutputNode::Step()
     }
     
     inFrame->Free();
-    std::chrono::high_resolution_clock::time_point t2 =  std::chrono::high_resolution_clock::now();
-    runTime += t2 - t1;        
+    if(verbose){
+        std::chrono::high_resolution_clock::time_point t2 =  std::chrono::high_resolution_clock::now();        
+        runTime += t2 - t1;
+    }
     return done;
 }
 
@@ -451,4 +456,6 @@ std::map<int, std::shared_ptr<arrow::io::HadoopFileSystem> > lambda::InputNode::
 std::map< std::string, std::shared_ptr<parquet::FileMetaData> >  lambda::InputNode::fileMetaDataMap;
 std::map< std::string, std::string > lambda::InputNode::fileLastAccessTimeMap;
 std::map< std::string, std::shared_ptr<ReadableFile> >  lambda::InputNode::inputFileMap;
+std::mutex  lambda::InputNode::inputFileMutex;
+
 

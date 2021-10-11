@@ -131,8 +131,8 @@ public class DikeTpchClient
         String param = "";
         switch(Integer.parseInt(testNumber)) {
             case 1:
-                fname = "/lineitem_srg.parquet";
-                //fname = "/lineitem_10.parquet";
+                //fname = "/lineitem_srg.parquet";
+                fname = "/tpch-test-parquet/lineitem_1G.parquet";
                 param = getQ1Param(fname);
             break;
             case 3:
@@ -155,6 +155,11 @@ public class DikeTpchClient
             case 12:
                 fname = "/lineitem_srg.parquet";
                 param = getQ12Param(fname);
+            break;
+
+           case 14:
+                fname = "/tpch-test-parquet/lineitem.parquet";
+                param = getQ14Param(fname);
             break;
 
             case 21:
@@ -243,14 +248,14 @@ public class DikeTpchClient
         optputNodeBuilder.add("Name", "OutputNode");
         optputNodeBuilder.add("Type", "_OUTPUT");        
 
-        String compressionType = "None";
+        String compressionType = "ZSTD";
         String compressionTypeEnv = System.getenv("DIKE_COMPRESSION");
         if(compressionTypeEnv != null){
             compressionType = compressionTypeEnv;
         }
         optputNodeBuilder.add("CompressionType", compressionType);
 
-        String compressionLevel = "1";
+        String compressionLevel = "2";
         String compressionLevelEnv = System.getenv("DIKE_COMPRESSION_LEVEL");
         if(compressionLevelEnv != null){
             compressionLevel = compressionLevelEnv;
@@ -370,14 +375,14 @@ public class DikeTpchClient
         optputNodeBuilder.add("Name", "OutputNode");
         optputNodeBuilder.add("Type", "_OUTPUT");        
 
-        String compressionType = "None";
+        String compressionType = "ZSTD";
         String compressionTypeEnv = System.getenv("DIKE_COMPRESSION");
         if(compressionTypeEnv != null){
             compressionType = compressionTypeEnv;
         }
         optputNodeBuilder.add("CompressionType", compressionType);
 
-        String compressionLevel = "1";
+        String compressionLevel = "2";
         String compressionLevelEnv = System.getenv("DIKE_COMPRESSION_LEVEL");
         if(compressionLevelEnv != null){
             compressionLevel = compressionLevelEnv;
@@ -514,14 +519,14 @@ public class DikeTpchClient
         optputNodeBuilder.add("Name", "OutputNode");
         optputNodeBuilder.add("Type", "_OUTPUT");        
 
-        String compressionType = "None";
+        String compressionType = "ZSTD";
         String compressionTypeEnv = System.getenv("DIKE_COMPRESSION");
         if(compressionTypeEnv != null){
             compressionType = compressionTypeEnv;
         }
         optputNodeBuilder.add("CompressionType", compressionType);
 
-        String compressionLevel = "1";
+        String compressionLevel = "2";
         String compressionLevelEnv = System.getenv("DIKE_COMPRESSION_LEVEL");
         if(compressionLevelEnv != null){
             compressionLevel = compressionLevelEnv;
@@ -629,14 +634,14 @@ public class DikeTpchClient
         optputNodeBuilder.add("Name", "OutputNode");
         optputNodeBuilder.add("Type", "_OUTPUT");        
 
-        String compressionType = "None";
+        String compressionType = "ZSTD";
         String compressionTypeEnv = System.getenv("DIKE_COMPRESSION");
         if(compressionTypeEnv != null){
             compressionType = compressionTypeEnv;
         }
         optputNodeBuilder.add("CompressionType", compressionType);
 
-        String compressionLevel = "1";
+        String compressionLevel = "2";
         String compressionLevelEnv = System.getenv("DIKE_COMPRESSION_LEVEL");
         if(compressionLevelEnv != null){
             compressionLevel = compressionLevelEnv;
@@ -722,14 +727,14 @@ public class DikeTpchClient
         optputNodeBuilder.add("Name", "OutputNode");
         optputNodeBuilder.add("Type", "_OUTPUT");        
 
-        String compressionType = "None";
+        String compressionType = "ZSTD";
         String compressionTypeEnv = System.getenv("DIKE_COMPRESSION");
         if(compressionTypeEnv != null){
             compressionType = compressionTypeEnv;
         }
         optputNodeBuilder.add("CompressionType", compressionType);
 
-        String compressionLevel = "1";
+        String compressionLevel = "2";
         String compressionLevelEnv = System.getenv("DIKE_COMPRESSION_LEVEL");
         if(compressionLevelEnv != null){
             compressionLevel = compressionLevelEnv;
@@ -808,14 +813,14 @@ public class DikeTpchClient
         optputNodeBuilder.add("Name", "OutputNode");
         optputNodeBuilder.add("Type", "_OUTPUT");        
 
-        String compressionType = "None";
+        String compressionType = "ZSTD";
         String compressionTypeEnv = System.getenv("DIKE_COMPRESSION");
         if(compressionTypeEnv != null){
             compressionType = compressionTypeEnv;
         }
         optputNodeBuilder.add("CompressionType", compressionType);
 
-        String compressionLevel = "1";
+        String compressionLevel = "2";
         String compressionLevelEnv = System.getenv("DIKE_COMPRESSION_LEVEL");
         if(compressionLevelEnv != null){
             compressionLevel = compressionLevelEnv;
@@ -943,14 +948,14 @@ public static String getQ12Param(String name)
         optputNodeBuilder.add("Name", "OutputNode");
         optputNodeBuilder.add("Type", "_OUTPUT");        
 
-        String compressionType = "None";
+        String compressionType = "ZSTD";
         String compressionTypeEnv = System.getenv("DIKE_COMPRESSION");
         if(compressionTypeEnv != null){
             compressionType = compressionTypeEnv;
         }
         optputNodeBuilder.add("CompressionType", compressionType);
 
-        String compressionLevel = "1";
+        String compressionLevel = "2";
         String compressionLevelEnv = System.getenv("DIKE_COMPRESSION_LEVEL");
         if(compressionLevelEnv != null){
             compressionLevel = compressionLevelEnv;
@@ -990,6 +995,140 @@ public static String getQ12Param(String name)
         }
         return null;        
     }    
+
+    /* {"Name":"DAG Projection",
+     "NodeArray":[
+     {"Name":"InputNode","Type":"_INPUT","File":"/tpch-test-parquet/lineitem.parquet/part-00000-c498f3b7-c87f-4113-8e2f-0e5e0c99ccd5-c000.snappy.parquet"},
+     {"Type":"_FILTER","FilterArray":[
+         {"Expression":"IsNotNull","Arg":{"ColumnReference":"l_shipdate"}},
+         {"Left":{"ColumnReference":"l_shipdate"},"Expression":"GreaterThanOrEqual","Right":{"Literal":"1995-09-01"}},
+         {"Left":{"ColumnReference":"l_shipdate"},"Expression":"LessThan","Right":{"Literal":"1995-10-01"}},
+         {"Expression":"IsNotNull","Arg":{"ColumnReference":"l_partkey"}}],"Name":"TPC-H Test Q14"},
+     {"Name":"TPC-H Test Q14","Type":"_PROJECTION","ProjectionArray":["l_partkey","l_extendedprice","l_discount"]},
+     {"Name":"OutputNode","Type":"_OUTPUT","CompressionType":"None","CompressionLevel":"-100"}]}
+    */
+    public static String getQ14Param(String name)    
+    {
+        try {
+        XMLOutputFactory xmlof = XMLOutputFactory.newInstance();
+        StringWriter strw = new StringWriter();
+        XMLStreamWriter xmlw = xmlof.createXMLStreamWriter(strw);
+        xmlw.writeStartDocument();
+        xmlw.writeStartElement("Processor");
+        
+        xmlw.writeStartElement("Name");
+        xmlw.writeCharacters("Lambda");
+        xmlw.writeEndElement(); // Name
+        
+        xmlw.writeStartElement("Configuration");
+
+        xmlw.writeStartElement("DAG");
+        JsonObjectBuilder dagBuilder = Json.createObjectBuilder();
+        dagBuilder.add("Name", "DAG Projection");
+
+        JsonArrayBuilder nodeArrayBuilder = Json.createArrayBuilder();
+
+        JsonObjectBuilder inputNodeBuilder = Json.createObjectBuilder();
+        inputNodeBuilder.add("Name", "InputNode");
+        inputNodeBuilder.add("Type", "_INPUT");
+        inputNodeBuilder.add("File", name);
+        nodeArrayBuilder.add(inputNodeBuilder.build());
+        
+        JsonObjectBuilder filterNodeBuilder = Json.createObjectBuilder();
+        filterNodeBuilder.add("Name", "TpchQ14 Filter");
+        filterNodeBuilder.add("Type", "_FILTER");
+        JsonArrayBuilder filterArrayBuilder = Json.createArrayBuilder();
+
+        JsonObjectBuilder filterBuilder = Json.createObjectBuilder();
+        filterBuilder.add("Expression", "IsNotNull");
+        JsonObjectBuilder argBuilder = Json.createObjectBuilder();
+        argBuilder.add("ColumnReference", "l_shipdate");
+        filterBuilder.add("Arg", argBuilder);        
+        filterArrayBuilder.add(filterBuilder);
+
+        filterBuilder = Json.createObjectBuilder().add("Expression", "GreaterThanOrEqual");
+        argBuilder = Json.createObjectBuilder().add("ColumnReference", "l_shipdate");        
+        filterBuilder.add("Left", argBuilder);
+        argBuilder = Json.createObjectBuilder().add("Literal", "1995-09-01");
+        filterBuilder.add("Right", argBuilder);
+        filterArrayBuilder.add(filterBuilder);
+
+        filterBuilder = Json.createObjectBuilder().add("Expression", "LessThan");
+        argBuilder = Json.createObjectBuilder().add("ColumnReference", "l_shipdate");        
+        filterBuilder.add("Left", argBuilder);
+        argBuilder = Json.createObjectBuilder().add("Literal", "1995-10-01");
+        filterBuilder.add("Right", argBuilder);
+        filterArrayBuilder.add(filterBuilder);
+
+        filterNodeBuilder.add("FilterArray", filterArrayBuilder);
+        
+        nodeArrayBuilder.add(filterNodeBuilder.build()); 
+
+        JsonObjectBuilder projectionNodeBuilder = Json.createObjectBuilder();
+        projectionNodeBuilder.add("Name", "TpchQ14 Project");
+        projectionNodeBuilder.add("Type", "_PROJECTION");
+        JsonArrayBuilder projectionArrayBuilder = Json.createArrayBuilder();
+        projectionArrayBuilder.add("l_partkey");
+        projectionArrayBuilder.add("l_extendedprice");
+        projectionArrayBuilder.add("l_discount");
+
+        projectionNodeBuilder.add("ProjectionArray", projectionArrayBuilder);
+
+        nodeArrayBuilder.add(projectionNodeBuilder.build());
+
+        JsonObjectBuilder optputNodeBuilder = Json.createObjectBuilder();
+        optputNodeBuilder.add("Name", "OutputNode");
+        optputNodeBuilder.add("Type", "_OUTPUT");        
+
+        String compressionType = "ZSTD";
+        String compressionTypeEnv = System.getenv("DIKE_COMPRESSION");
+        if(compressionTypeEnv != null){
+            compressionType = compressionTypeEnv;
+        }
+        optputNodeBuilder.add("CompressionType", compressionType);
+
+        String compressionLevel = "2";
+        String compressionLevelEnv = System.getenv("DIKE_COMPRESSION_LEVEL");
+        if(compressionLevelEnv != null){
+            compressionLevel = compressionLevelEnv;
+        }
+        optputNodeBuilder.add("CompressionLevel", compressionLevel);
+        nodeArrayBuilder.add(optputNodeBuilder.build());        
+
+        dagBuilder.add("NodeArray", nodeArrayBuilder);
+
+        // For now we will assume simple pipe with ordered connections
+        JsonObject dag = dagBuilder.build();
+
+        StringWriter stringWriter = new StringWriter();
+        JsonWriter writer = Json.createWriter(stringWriter);
+        writer.writeObject(dag);
+        writer.close();
+
+        xmlw.writeCharacters(stringWriter.getBuffer().toString());
+        xmlw.writeEndElement(); // DAG
+
+        xmlw.writeStartElement("RowGroupIndex");
+        xmlw.writeCharacters("100");
+        xmlw.writeEndElement(); // RowGroupIndex
+
+        xmlw.writeStartElement("LastAccessTime");
+        xmlw.writeCharacters("1624464464409");
+        xmlw.writeEndElement(); // LastAccessTime
+
+        xmlw.writeEndElement(); // Configuration
+        xmlw.writeEndElement(); // Processor
+        xmlw.writeEndDocument();
+        xmlw.close();
+        return strw.toString();
+        } catch (Exception ex) {
+            System.out.println("Error occurred: ");
+            ex.printStackTrace();            
+        }
+        return null;        
+    }
+
+
 
     public static String getQ21Param(String name)    
     {
@@ -1058,14 +1197,14 @@ public static String getQ12Param(String name)
         optputNodeBuilder.add("Name", "OutputNode");
         optputNodeBuilder.add("Type", "_OUTPUT");        
 
-        String compressionType = "None";
+        String compressionType = "ZSTD";
         String compressionTypeEnv = System.getenv("DIKE_COMPRESSION");
         if(compressionTypeEnv != null){
             compressionType = compressionTypeEnv;
         }
         optputNodeBuilder.add("CompressionType", compressionType);
 
-        String compressionLevel = "1";
+        String compressionLevel = "2";
         String compressionLevelEnv = System.getenv("DIKE_COMPRESSION_LEVEL");
         if(compressionLevelEnv != null){
             compressionLevel = compressionLevelEnv;
@@ -1340,35 +1479,12 @@ public static String getQ12Param(String name)
 
             for( int i = 0 ; i < nCols; i++) {
                 columVector[i] = new ColumVector(i, dataTypes[i]);
-            }
-            
-            Boolean compressionEnabled = false;
-            String compressionTypeEnv = System.getenv("DIKE_COMPRESSION");
-
-            if(compressionTypeEnv != null){
-                if(compressionTypeEnv.equals("ZSTD")){
-                    compressionEnabled = true;                    
-                }
-            }
-
-            if(compressionEnabled){
-                System.out.println("Compression ENABLED ");
-            } else {
-                System.out.println("Compression DISABLED ");
-            }
+            }            
 
             while(true) {
                 try {
                     for( int i = 0 ; i < nCols; i++) {
                         columVector[i].readColumnZSTD(dis);
-                        /*
-                        if(compressionEnabled) {
-                            //columVector[i].readRawData(dis);
-                            columVector[i].readColumnZSTD(dis);
-                        } else {
-                            columVector[i].readColumn(dis);
-                        }
-                        */
                     }
                     
                     if(traceRecordCount < traceRecordMax) {                        
@@ -1418,6 +1534,8 @@ public static String getQ12Param(String name)
 // java -classpath target/ndp-hdfs-client-1.0-jar-with-dependencies.jar org.dike.hdfs.DikeTpchClient 10
 // Q12
 // java -classpath target/ndp-hdfs-client-1.0-jar-with-dependencies.jar org.dike.hdfs.DikeTpchClient 12
+// Q14
+// java -classpath target/ndp-hdfs-client-1.0-jar-with-dependencies.jar org.dike.hdfs.DikeTpchClient 14
 // Q21
 // java -classpath target/ndp-hdfs-client-1.0-jar-with-dependencies.jar org.dike.hdfs.DikeTpchClient 21
 

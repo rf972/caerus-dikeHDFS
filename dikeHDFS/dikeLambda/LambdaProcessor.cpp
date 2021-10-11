@@ -76,11 +76,11 @@ int LambdaProcessor::Run(DikeProcessorConfig & dikeProcessorConfig, DikeIO * out
     }
 
     outputThread.join();
-
-    std::chrono::high_resolution_clock::time_point t2 =  std::chrono::high_resolution_clock::now();
-    std::chrono::duration<double, std::milli> run_time = t2 - t1;        
  
-    if (verbose) {        
+    if (verbose) {
+        std::chrono::high_resolution_clock::time_point t2 =  std::chrono::high_resolution_clock::now();
+        std::chrono::duration<double, std::milli> run_time = t2 - t1;        
+
         std::cout << "Records " << outputNode->recordsOut;
         std::cout << " run_time " << run_time.count()/ 1000 << " sec" << std::endl;        
 
