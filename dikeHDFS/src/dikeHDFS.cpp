@@ -28,6 +28,7 @@
 #include <iostream>
 #include <algorithm>
 #include <map>
+#include <mutex>
 #include <sstream>
 #include <omp.h>
 
@@ -55,7 +56,10 @@ static std::atomic<int> dataNodeReqCount(0);
 static int dikeStorageMaxRequests = 2;
 
 class NameNodeHandler : public DikeHTTPRequestHandler {
-  public:  
+  public:
+  static std::mutex lock;
+  static std::map<std::string, HTTPResponse> responseMap;
+
   NameNodeHandler(int verbose, DikeConfig & dikeConfig): DikeHTTPRequestHandler(verbose, dikeConfig){}
 
   virtual void handleRequest(Poco::Net::HTTPServerRequest &req, Poco::Net::HTTPServerResponse &resp)
@@ -64,28 +68,57 @@ class NameNodeHandler : public DikeHTTPRequestHandler {
     if(verbose){
       cout << DikeUtil().Yellow() << DikeUtil().Now() << " NN Start " << DikeUtil().Reset() << endl;      
     }
-    
-    /* Instantiate a copy of original request */
-    HTTPRequest hdfs_req((HTTPRequest)req);
 
-    /* Redirect to HDFS port */
-    hdfs_req.setHost(dikeConfig["dfs.namenode.http-address"]);
+    std::string reqUri = req.getURI();
+    //cout << "URI " << uri << endl;
 
-    if(verbose) {      
-      cout << hdfs_req.getURI() << endl;
-      hdfs_req.write(cout);
+    lock.lock();
+    if(req.has("ReadParam") && responseMap.count(reqUri)) { // We have cached response
+        (HTTPResponse &)resp = responseMap[reqUri];
+        lock.unlock();
+        if(verbose) {
+            cout << "Use cached responce " << reqUri << endl;
+        }
+    } else {
+        lock.unlock();
+        /* Instantiate a copy of original request */
+        HTTPRequest hdfs_req((HTTPRequest)req);
+
+        /* Redirect to HDFS port */
+        hdfs_req.setHost(dikeConfig["dfs.namenode.http-address"]);
+
+        if(verbose) {      
+            cout << hdfs_req.getURI() << endl;
+            hdfs_req.write(cout);
+        }
+
+        /* Open HDFS session */    
+        SocketAddress namenodeSocketAddress = SocketAddress(dikeConfig["dfs.namenode.http-address"]);
+        HTTPClientSession session(namenodeSocketAddress);
+        std::ostream& toHDFS = session.sendRequest(hdfs_req);
+        Poco::StreamCopier::copyStream(fromClient, toHDFS, 8192);  
+        HTTPResponse hdfs_resp;
+        std::istream& fromHDFS = session.receiveResponse(hdfs_resp);
+        (HTTPResponse &)resp = hdfs_resp;
+
+        if(req.has("ReadParam") && resp.has("Location")) {
+            if(dikeNodeType == STORAGE_NODE ) { // Np caching on NCP
+                if(verbose) {
+                    cout << "Cache HDFS responce at " << reqUri << endl;
+                }
+                lock.lock();
+                (HTTPResponse &)responseMap[reqUri] = resp;
+                lock.unlock();
+            }
+        } else { // Not pushdowns request
+            ostream& toClient = resp.send();
+            Poco::StreamCopier::copyStream(fromHDFS, toClient, 8192);
+            toClient.flush();
+            return;
+        }
     }
-
-    /* Open HDFS session */    
-    SocketAddress namenodeSocketAddress = SocketAddress(dikeConfig["dfs.namenode.http-address"]);
-    HTTPClientSession session(namenodeSocketAddress);
-    std::ostream& toHDFS = session.sendRequest(hdfs_req);
-    Poco::StreamCopier::copyStream(fromClient, toHDFS, 8192);  
-    HTTPResponse hdfs_resp;
-    std::istream& fromHDFS = session.receiveResponse(hdfs_resp);
-    (HTTPResponse &)resp = hdfs_resp;    
     
-    if(req.has("ReadParam") && resp.has("Location")) {
+    if(req.has("ReadParam") && resp.has("Location")) {        
         //cout << DikeUtil().Blue() << resp.get("Location") << DikeUtil().Reset() << endl;      
         Poco::URI uri = Poco::URI(resp.get("Location"));
         int ndpPort = std::stoi(dikeConfig["dike.dfs.ndp.http-port"]);
@@ -109,15 +142,13 @@ class NameNodeHandler : public DikeHTTPRequestHandler {
     }
 
     if(verbose) {
-      resp.write(cout);
-    }
-    ostream& toClient = resp.send();
-    Poco::StreamCopier::copyStream(fromHDFS, toClient, 8192);
-    toClient.flush();
-
-    if(verbose) {
+      resp.write(cout);    
       cout << DikeUtil().Yellow() << DikeUtil().Now() << " NN End " << DikeUtil().Reset() << endl;
     }
+
+    ostream& toClient = resp.send();
+    //Poco::StreamCopier::copyStream(fromHDFS, toClient, 8192);
+    toClient.flush();
   }   
 };
 
@@ -430,16 +461,17 @@ class DikeServerApp : public ServerApplication
 
 int main(int argc, char** argv)
 {  
-  DikeServerApp app;
+    DikeServerApp app;
   
-
     #pragma omp parallel
     {
-        // Each thread prints its identifier
-        // printf("We are %d threads, I am thread %d.\n", omp_get_num_threads(), omp_get_thread_num());
         #pragma omp single
         std::cout << "omp_get_num_threads " << omp_get_num_threads() << std::endl;
     }
    
-  return app.run(argc, argv);
+    return app.run(argc, argv);
 }
+
+std::mutex NameNodeHandler::lock;
+std::map<std::string, HTTPResponse> NameNodeHandler::responseMap;
+

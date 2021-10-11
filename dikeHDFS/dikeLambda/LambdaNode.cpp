@@ -63,6 +63,7 @@ InputNode::InputNode(Poco::JSON::Object::Ptr pObject, DikeProcessorConfig & dike
     //inputFile = std::shared_ptr<ReadableFile>(new ReadableFile(fullPath));
 #endif
 
+    inputFileMutex.lock();
     if (fileMetaDataMap.count(fileName)) {
         if (0 == fileLastAccessTimeMap[fileName].compare(dikeProcessorConfig["Configuration.LastAccessTime"])){
             //std::cout << " LambdaParquetReader reuse fileMetaData "<< std::endl;
@@ -86,6 +87,7 @@ InputNode::InputNode(Poco::JSON::Object::Ptr pObject, DikeProcessorConfig & dike
         fileMetaDataMap[fileName] = fileMetaData;
         fileLastAccessTimeMap[fileName] = dikeProcessorConfig["Configuration.LastAccessTime"];            
     }
+    inputFileMutex.unlock();
     
     schemaDescriptor = fileMetaData->schema();
     parquet::ReaderProperties readerProperties = parquet::default_reader_properties();
@@ -127,21 +129,15 @@ void InputNode::Init()
             columnMap.push_back(i);
         }
     }
-
-    //omp_set_dynamic(1);
-    //omp_set_num_threads(4);        
-    //#pragma omp parallel
-    {
-        //std::cout << "Create readers with " << omp_get_num_threads() << " threads dynamic " << omp_get_dynamic() << std::endl;
-        #pragma omp parallel for num_threads(4)
-        for(int i = 0; i < columnMap.size(); i++) {            
-            int col = columnMap[i];
-            //std::cout << "Create reader for Column " << col << " tid " << omp_get_thread_num() << std::endl;
-            columnReaders[col] = std::move(rowGroupReader->Column(col));
-            frame->columns[col]->Init(); // This will allocate memory buffers
-        }
+            
+    //#pragma omp parallel for num_threads(4)
+    for(int i = 0; i < columnMap.size(); i++) {            
+        int col = columnMap[i];
+        //std::cout << "Create reader for Column " << col << " tid " << omp_get_thread_num() << std::endl;
+        columnReaders[col] = std::move(rowGroupReader->Column(col));
+        frame->columns[col]->Init(); // This will allocate memory buffers
     }
-
+    
     freeFrame(frame); // this will put this frame on framePool
 
     // Create few additional frames
@@ -460,4 +456,6 @@ std::map<int, std::shared_ptr<arrow::io::HadoopFileSystem> > lambda::InputNode::
 std::map< std::string, std::shared_ptr<parquet::FileMetaData> >  lambda::InputNode::fileMetaDataMap;
 std::map< std::string, std::string > lambda::InputNode::fileLastAccessTimeMap;
 std::map< std::string, std::shared_ptr<ReadableFile> >  lambda::InputNode::inputFileMap;
+std::mutex  lambda::InputNode::inputFileMutex;
+
 

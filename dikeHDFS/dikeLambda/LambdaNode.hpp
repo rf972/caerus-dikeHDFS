@@ -148,6 +148,7 @@ class InputNode : public Node {
     std::vector<int> columnMap;
     std::shared_ptr<arrow::io::HadoopFileSystem> fs;
     static std::map< int, std::shared_ptr<arrow::io::HadoopFileSystem> > hadoopFileSystemMap;
+    static std::mutex inputFileMutex;
 #ifdef LEGACY_HDFS    
     std::shared_ptr<arrow::io::HdfsReadableFile> inputFile;
 #else
