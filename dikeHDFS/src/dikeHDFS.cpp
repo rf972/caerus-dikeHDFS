@@ -422,7 +422,7 @@ class DikeServerApp : public ServerApplication
     loadDikeConfig();
 
     dataNodeParams->setKeepAlive(false);
-    dataNodeParams->setMaxThreads(16);
+    dataNodeParams->setMaxThreads(32);
     dataNodeParams->setMaxQueued(128);
         
     HTTPServer nameNode(new NameNodeHandlerFactory(verbose, dikeConfig),                         

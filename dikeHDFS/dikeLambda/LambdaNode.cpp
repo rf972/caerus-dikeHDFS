@@ -42,26 +42,9 @@ InputNode::InputNode(Poco::JSON::Object::Ptr pObject, DikeProcessorConfig & dike
     std::string fileName = path.substr(11, path.length()); // skip "/webhdfs/v1"
     int rowGroupIndex = std::stoi(dikeProcessorConfig["Configuration.RowGroupIndex"]);
 
-    Poco::Thread * current = Poco::Thread::current();
-    int threadId = current->id();
-
     std::string fullPath = "hdfs://" + rpcAddress + fileName;
-    //std::cout << "fullPath : " << fullPath << std::endl;
 
-#ifdef LEGACY_HDFS
-    if (hadoopFileSystemMap.count(threadId)) {
-        //std::cout << " LambdaParquetReader id " << threadId << " reuse FS connection "<< std::endl;
-        fs = hadoopFileSystemMap[threadId];        
-    } else {
-        //std::cout << " LambdaParquetReader id " << threadId << " create FS connection "<< std::endl;
-        arrow::io::HadoopFileSystem::Connect(&hdfsConnectionConfig, &fs);
-        hadoopFileSystemMap[threadId] = fs;        
-    }
-                                        
-    fs->OpenReadable(fileName, &inputFile);
-#else
-    //inputFile = std::shared_ptr<ReadableFile>(new ReadableFile(fullPath));
-#endif
+    //inputFile = std::move(std::shared_ptr<ReadableFile>(new ReadableFile(fullPath)));
 
     inputFileMutex.lock();
     if (fileMetaDataMap.count(fileName)) {
