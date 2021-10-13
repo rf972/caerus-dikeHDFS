@@ -46,6 +46,7 @@ class Node {
 
     bool done = false;
     int verbose = 0;
+    bool initialized = false;
 
     // Statistics
     int stepCount = 0;
@@ -78,7 +79,7 @@ class Node {
         this->nextNode = node;
     }
 
-    virtual void Init() { }
+    virtual void Init(int rowGroupIndex) { }
 
     virtual void UpdateColumnMap(Frame * frame) {
         //std::cout << "UpdateColumnMap " << name  << std::endl;
@@ -169,7 +170,7 @@ class InputNode : public Node {
     InputNode(Poco::JSON::Object::Ptr pObject, DikeProcessorConfig & dikeProcessorConfig, DikeIO * output);
     virtual ~InputNode();
 
-    virtual void Init() override;
+    virtual void Init(int rowGroupIndex) override;
     virtual bool Step() override;
 };
 

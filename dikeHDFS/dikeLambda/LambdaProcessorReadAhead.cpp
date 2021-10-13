@@ -19,13 +19,25 @@
 
 using namespace lambda;
 
-int LambdaProcessor::Run(DikeProcessorConfig & dikeProcessorConfig, DikeIO * output)
+int LambdaProcessorReadAhead::Run(DikeProcessorConfig & dikeProcessorConfig, DikeIO * output)
+{
+    this->dikeProcessorConfig = dikeProcessorConfig;
+    this->output = output;
+
+    LambdaProcessor lambdaProcessor;
+    lambdaProcessor.Run(dikeProcessorConfig, output);
+
+    //startWorker();
+    return 0;
+}
+
+void LambdaProcessorReadAhead::Worker()
 {
     std::vector<Node *> nodeVector;
     verbose = std::stoi(dikeProcessorConfig["system.verbose"]);
 
     if (verbose) {
-        std::cout << "LambdaProcessor::Run" << std::endl;
+        std::cout << "LambdaProcessorReadAhead::Run" << std::endl;
         std::cout << dikeProcessorConfig["Configuration.DAG"] << std::endl;
     }
 
@@ -55,10 +67,9 @@ int LambdaProcessor::Run(DikeProcessorConfig & dikeProcessorConfig, DikeIO * out
     for(int i = 0; i < nodeVector.size() - 1; i++) {
         nodeVector[i]->Connect(nodeVector[i+1]);
     }
-
-    int rowGroupIndex = std::stoi(dikeProcessorConfig["Configuration.RowGroupIndex"]);
-
+    
     // Initialize Nodes
+    int rowGroupIndex = std::stoi(dikeProcessorConfig["Configuration.RowGroupIndex"]);
     for(int i = 0; i < nodeVector.size(); i++) {
         nodeVector[i]->Init(rowGroupIndex);
     }
@@ -100,6 +111,4 @@ int LambdaProcessor::Run(DikeProcessorConfig & dikeProcessorConfig, DikeIO * out
         //std::cout << "Deleting Node " << nodeVector[i]->name << std::endl;
         delete nodeVector[i];
     }
-
-    return(0);
 }

@@ -12,4 +12,25 @@ class LambdaProcessor : public DikeProcessor {
     virtual void Worker() override {};
 };
 
+class LambdaProcessorReadAhead : public LambdaProcessor {    
+    public:
+    DikeProcessorConfig dikeProcessorConfig;
+    DikeIO * output;
+    LambdaProcessorReadAhead(){};
+
+    virtual int Run(DikeProcessorConfig & dikeProcessorConfig, DikeIO * output) override;
+    virtual void Worker() override;
+};
+
+class LambdaProcessorFactory : public LambdaProcessor {    
+    public:
+    DikeProcessorConfig dikeProcessorConfig;
+    DikeIO * output;
+    LambdaProcessorFactory(){};
+
+    virtual int Run(DikeProcessorConfig & dikeProcessorConfig, DikeIO * output) override;
+    virtual void Worker() override {};
+};
+
+
 #endif /* LAMBDA_PROCESSOR */
