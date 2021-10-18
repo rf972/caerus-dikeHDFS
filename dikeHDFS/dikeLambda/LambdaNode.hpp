@@ -17,7 +17,7 @@
 
 #include "LambdaFileReader.hpp"
 #include "DikeUtil.hpp"
-#include "LambdaProcessor.hpp"
+#include "DikeProcessor.hpp"
 #include "LambdaFrame.hpp"
 
 namespace lambda {
@@ -162,7 +162,8 @@ class InputNode : public Node {
 
     int rowCount = 0; // How many rows we processed
     int numRows = 0;  // Total number of rows 
-    int columnCount = 0;    
+    int columnCount = 0;
+    int rowGroupCount = 0;
     std::shared_ptr<parquet::ColumnReader> * columnReaders;
     
     Column::DataType * columnTypes;
@@ -198,11 +199,17 @@ class ProjectionNode : public Node {
 
 class OutputNode : public Node {
     public:
+    enum {
+        HEADER_LEN = 4*sizeof(int)
+    };
     bool compressionEnabled = false;
 
     DikeIO * output = NULL;
     uint8_t * lenBuffer = NULL;
+    uint8_t * resultLenBuffer = NULL;
+
     uint8_t * dataBuffer = NULL;
+    uint8_t * resultDataBuffer = NULL;
 
     uint8_t * compressedBuffer = NULL;
     int64_t compressedLen = 0;
@@ -232,21 +239,24 @@ class OutputNode : public Node {
             if(compressionType.compare("ZSTD") == 0){
                 compressionEnabled = true;
                 compressionLevel = pObject->getValue<int>("CompressionLevel");
-                compressedBufferLen = ZSTD_compressBound(Column::MAX_TEXT_SIZE);
+                compressedBufferLen = ZSTD_compressBound(Column::MAX_TEXT_SIZE) + HEADER_LEN; 
                 compressedBuffer = new uint8_t [compressedBufferLen]; // Max text lenght + compression header                
             }
         }
 
-        lenBuffer = new uint8_t [Column::MAX_SIZE];
-        dataBuffer = new uint8_t [Column::MAX_TEXT_SIZE]; // Max text lenght        
+        resultLenBuffer = new uint8_t [Column::MAX_SIZE + HEADER_LEN];
+        lenBuffer = resultLenBuffer + HEADER_LEN;
+
+        resultDataBuffer = new uint8_t [Column::MAX_TEXT_SIZE + HEADER_LEN];  // Max text lenght
+        dataBuffer = resultDataBuffer + HEADER_LEN;        
     }
 
     virtual ~OutputNode(){
-        if(lenBuffer){
-            delete [] lenBuffer;
+        if(resultLenBuffer){
+            delete [] resultLenBuffer;
         }
-        if(dataBuffer){
-            delete [] dataBuffer;
+        if(resultDataBuffer){
+            delete [] resultDataBuffer;
         }
         if(compressedBuffer){
             delete [] compressedBuffer;
@@ -258,9 +268,10 @@ class OutputNode : public Node {
 
     virtual void UpdateColumnMap(Frame * frame) override;
     virtual bool Step() override;
-    void CompressZlib(uint8_t * data, uint32_t len, bool is_binary);
-    void CompressLZ4(uint8_t * data, uint32_t len);
-    void CompressZSTD(int id, uint8_t * data, uint32_t len);
+    //void CompressZlib(uint8_t * data, uint32_t len, bool is_binary);
+    //void CompressLZ4(uint8_t * data, uint32_t len);
+    //void CompressZSTD(int id, uint8_t * data, uint32_t len);
+    void CompressZSTD(int id, uint8_t * data_in, uint32_t len, uint8_t * data_out);
 
     void TranslateBE64(void * in_data, uint8_t * out_data, uint32_t len);
     void Send(void * data, uint32_t len, bool is_binary);

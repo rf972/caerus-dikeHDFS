@@ -19,96 +19,53 @@
 
 using namespace lambda;
 
-int LambdaProcessorReadAhead::Run(DikeProcessorConfig & dikeProcessorConfig, DikeIO * output)
+void LambdaProcessorReadAhead::Init(DikeProcessorConfig & dikeProcessorConfig, DikeIO * output)
 {
-    this->dikeProcessorConfig = dikeProcessorConfig;
-    this->output = output;
+    std::string resp("LambdaProcessorReadAhead::Init " + dikeProcessorConfig["ID"] );
+    std::cout << resp << std::endl;
 
-    LambdaProcessor lambdaProcessor;
-    lambdaProcessor.Run(dikeProcessorConfig, output);
+    output->write(resp.c_str(), resp.length());
+    return;
 
-    //startWorker();
+    LambdaProcessor * lambdaProcessor = new LambdaProcessor;
+    lambdaProcessor->Init(dikeProcessorConfig, output);
+    rowGroupCount = lambdaProcessor->rowGroupCount;
+
+    lambdaResultVector = new LambdaResultVector(rowGroupCount, 2);
+
+    std::thread workerThread = std::thread([=] { Worker(lambdaProcessor); });
+}
+
+int LambdaProcessorReadAhead::Run(DikeProcessorConfig & dikeProcessorConfig, DikeIO * output)
+{    
+    int rowGroupIndex = std::stoi(dikeProcessorConfig["Configuration.RowGroupIndex"]);
+    std::string resp("LambdaProcessorReadAhead::Run " + dikeProcessorConfig["ID"] );
+    std::cout << resp << " " << rowGroupIndex << std::endl;
+    return 0;
+    
+    LambdaResult * res = lambdaResultVector->resultVector[rowGroupIndex];
+    lambdaResultVector->lock.lock();
+    if (res->state == LambdaResult::READY) {
+        res->state = LambdaResult::DONE;
+        lambdaResultVector->lock.unlock();
+        // Send results to output        
+        for(int i = 0; i < res->buffers.size(); i++){
+            output->write((const char * )res->buffers[i]->ptr, res->buffers[i]->len);
+        }
+    } else {
+        lambdaResultVector->lock.unlock();
+    }
+
     return 0;
 }
 
-void LambdaProcessorReadAhead::Worker()
-{
-    std::vector<Node *> nodeVector;
-    verbose = std::stoi(dikeProcessorConfig["system.verbose"]);
-
-    if (verbose) {
-        std::cout << "LambdaProcessorReadAhead::Run" << std::endl;
-        std::cout << dikeProcessorConfig["Configuration.DAG"] << std::endl;
-    }
-
-    Poco::JSON::Parser parser;
-    Poco::Dynamic::Var result = parser.parse(dikeProcessorConfig["Configuration.DAG"]);
-    Poco::JSON::Object::Ptr pObject = result.extract<Poco::JSON::Object::Ptr>();
-    if (verbose) {
-        std::string dagName = pObject->getValue<std::string>("Name");
-        std::cout << dagName << std::endl;
-    }
-
-    Poco::JSON::Array::Ptr nodeArray = pObject->getArray("NodeArray");
-    if (verbose) {
-        std::cout << "Creating pipe with " << nodeArray->size() << " nodes " << std::endl;
-    }
-    for(int i = 0; i < nodeArray->size(); i++){
-        nodeVector.push_back(CreateNode(nodeArray->getObject(i), dikeProcessorConfig, output));
-    }
-
-    if (0 && verbose) {
-        for(int i = 0; i < nodeVector.size(); i++) {
-            std::cout << "nodeVector[" << i << "]->name " << nodeVector[i]->name << std::endl;
-        }
-    }
-
-    // Connect Nodes
-    for(int i = 0; i < nodeVector.size() - 1; i++) {
-        nodeVector[i]->Connect(nodeVector[i+1]);
-    }
-    
-    // Initialize Nodes
-    int rowGroupIndex = std::stoi(dikeProcessorConfig["Configuration.RowGroupIndex"]);
-    for(int i = 0; i < nodeVector.size(); i++) {
-        nodeVector[i]->Init(rowGroupIndex);
-    }
-
-    std::chrono::high_resolution_clock::time_point t1 =  std::chrono::high_resolution_clock::now();
-
-    // Start output worker
-    Node * outputNode = nodeVector[nodeVector.size() - 1];    
-    std::thread outputThread = outputNode->startWorker();
-
-    bool done = false;
-    while(!done)     
-    {
-        for(int i = 0; i < nodeVector.size() - 1 ; i++) {
-            done = nodeVector[i]->Step();
-        }        
-    }
-
-    outputThread.join();
- 
-    if (verbose) {
-        std::chrono::high_resolution_clock::time_point t2 =  std::chrono::high_resolution_clock::now();
-        std::chrono::duration<double, std::milli> run_time = t2 - t1;        
-
-        std::cout << "Records " << outputNode->recordsOut;
-        std::cout << " run_time " << run_time.count()/ 1000 << " sec" << std::endl;        
-
-        std::chrono::duration<double, std::milli> totalRunTime = std::chrono::milliseconds(0);
-        for(int i = 0; i < nodeVector.size(); i++){
-            std::cout << "Node " << nodeVector[i]->name << " runTime " << nodeVector[i]->runTime.count()/ 1000 <<std::endl;
-            totalRunTime += nodeVector[i]->runTime;        
-        }
-
-        std::cout << "CPU totalRunTime " << totalRunTime.count()/ 1000 << " sec" << std::endl;
-        std::cout << "Actual run_time " << run_time.count()/ 1000 << " sec" << std::endl;
-    }
-
-    for(int i = nodeVector.size() - 1; i >= 0; i--){
-        //std::cout << "Deleting Node " << nodeVector[i]->name << std::endl;
-        delete nodeVector[i];
-    }
+void LambdaProcessorReadAhead::Worker(LambdaProcessor * lambdaProcessor)
+{    
+    int result_index = 0;
+    // wait on lambdaResultVector->sem
+    // Lock lambdaResultVector
+    // Find next index to operate
+    // Crank lambdaProcessor
+    // Repeat 
 }
+

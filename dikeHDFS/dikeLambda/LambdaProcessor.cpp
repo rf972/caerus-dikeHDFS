@@ -19,16 +19,14 @@
 
 using namespace lambda;
 
-int LambdaProcessor::Run(DikeProcessorConfig & dikeProcessorConfig, DikeIO * output)
-{
-    std::vector<Node *> nodeVector;
+void LambdaProcessor::Init(DikeProcessorConfig & dikeProcessorConfig, DikeIO * output)
+{    
     verbose = std::stoi(dikeProcessorConfig["system.verbose"]);
 
     if (verbose) {
-        std::cout << "LambdaProcessor::Run" << std::endl;
+        std::cout << "LambdaProcessor::Init" << std::endl;
         std::cout << dikeProcessorConfig["Configuration.DAG"] << std::endl;
     }
-
     Poco::JSON::Parser parser;
     Poco::Dynamic::Var result = parser.parse(dikeProcessorConfig["Configuration.DAG"]);
     Poco::JSON::Object::Ptr pObject = result.extract<Poco::JSON::Object::Ptr>();
@@ -63,6 +61,12 @@ int LambdaProcessor::Run(DikeProcessorConfig & dikeProcessorConfig, DikeIO * out
         nodeVector[i]->Init(rowGroupIndex);
     }
 
+    // Get rowGroupCount from INPUT node
+    rowGroupCount = ((InputNode *)nodeVector[0])->rowGroupCount;
+}
+
+int LambdaProcessor::Run(DikeProcessorConfig & dikeProcessorConfig, DikeIO * output)
+{
     std::chrono::high_resolution_clock::time_point t1 =  std::chrono::high_resolution_clock::now();
 
     // Start output worker

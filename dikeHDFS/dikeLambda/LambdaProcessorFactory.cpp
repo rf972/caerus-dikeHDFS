@@ -21,13 +21,27 @@ using namespace lambda;
 
 int LambdaProcessorFactory::Run(DikeProcessorConfig & dikeProcessorConfig, DikeIO * output)
 {
-    this->dikeProcessorConfig = dikeProcessorConfig;
-    this->output = output;
+    verbose = std::stoi(dikeProcessorConfig["system.verbose"]);
 
-    LambdaProcessor lambdaProcessor;
-    lambdaProcessor.Run(dikeProcessorConfig, output);
+    if(verbose) {
+        std::cout << dikeProcessorConfig["Name"] << " " << dikeProcessorConfig["ID"] << std::endl;
+    }
 
-    //startWorker();
+    if (dikeProcessorConfig["Name"].compare("Lambda") == 0) { // Lambda request
+        if(processorMap.count(dikeProcessorConfig["ID"]) > 0) { // We have Read Ahead Processor running
+            processorMap[dikeProcessorConfig["ID"]]->Run(dikeProcessorConfig, output);
+        } else { // Normal handling
+            LambdaProcessor lambdaProcessor;
+            lambdaProcessor.Init(dikeProcessorConfig, output);
+            lambdaProcessor.Run(dikeProcessorConfig, output);
+        }
+    }  else  if (dikeProcessorConfig["Name"].compare("LambdaReadAhead") == 0) { // Lambda Read Ahead request
+        // Allocate Read Ahead Processor
+        LambdaProcessorReadAhead * lambdaProcessorReadAhead = new LambdaProcessorReadAhead;
+        lambdaProcessorReadAhead->Init(dikeProcessorConfig, output);
+        processorMap[dikeProcessorConfig["ID"]] = lambdaProcessorReadAhead;        
+    } 
     return 0;
 }
 
+std::map<std::string, LambdaProcessorReadAhead *> LambdaProcessorFactory::processorMap;

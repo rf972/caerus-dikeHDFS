@@ -262,7 +262,7 @@ public:
             cout << DikeUtil().Blue();
         }
         
-        DikeProcessor * dikeProcessor = NULL;
+        LambdaProcessorFactory * dikeProcessor = NULL;
         DikeProcessorConfig dikeSQLConfig;
 
         std::istringstream readParamStream(readParam.c_str());      
@@ -276,11 +276,18 @@ public:
             dikeSQLConfig["system.verbose"] = std::to_string(verbose);
 
             dikeSQLConfig["Name"] = cfg->getString("Name");
-            if(verbose) {
-                cout << "Name = " + dikeSQLConfig["Name"] << endl;
+            if(cfg->has("ID")) {
+                dikeSQLConfig["ID"] = cfg->getString("ID");
+            } else {
+                dikeSQLConfig["ID"] = "Uknown ID";
             }
 
-            dikeProcessor = (DikeProcessor *) new LambdaProcessorFactory;
+            if(verbose) {
+                cout << "Name = " << dikeSQLConfig["Name"] << endl;
+                cout << "ID = " << dikeSQLConfig["ID"] << endl;
+            }
+
+            dikeProcessor = new LambdaProcessorFactory;
 
             dikeSQLConfig["Request"] = ss.str();
             dikeSQLConfig["dfs.datanode.http-port"] = dikeConfig["dfs.datanode.http-port"];

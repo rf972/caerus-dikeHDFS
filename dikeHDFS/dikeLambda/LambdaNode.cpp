@@ -39,8 +39,7 @@ InputNode::InputNode(Poco::JSON::Object::Ptr pObject, DikeProcessorConfig & dike
         }            
     }
     std::string path = uri.getPath();
-    std::string fileName = path.substr(11, path.length()); // skip "/webhdfs/v1"
-    int rowGroupIndex = std::stoi(dikeProcessorConfig["Configuration.RowGroupIndex"]);
+    std::string fileName = path.substr(11, path.length()); // skip "/webhdfs/v1"    
 
     std::string fullPath = "hdfs://" + rpcAddress + fileName;
 
@@ -79,6 +78,7 @@ InputNode::InputNode(Poco::JSON::Object::Ptr pObject, DikeProcessorConfig & dike
 
     parquetFileReader = std::move(parquet::ParquetFileReader::Open(inputFile, readerProperties, fileMetaData));
     columnCount = schemaDescriptor->num_columns();
+    rowGroupCount = fileMetaData->num_row_groups();
     
     columnReaders = new std::shared_ptr<parquet::ColumnReader> [columnCount];
     columnTypes = new Column::DataType[columnCount];    
@@ -91,7 +91,7 @@ void InputNode::Init(int rowGroupIndex)
         t1 =  std::chrono::high_resolution_clock::now();
     }
     
-    if (!initialized) {
+    if (!initialized) {        
         Frame * frame = new Frame(this);
         for(int i = 0; i < columnCount; i++){                
             auto columnRoot = (parquet::schema::PrimitiveNode*)schemaDescriptor->GetColumnRoot(i);
@@ -132,13 +132,13 @@ void InputNode::Init(int rowGroupIndex)
     }
 
     initialized = true;
-    done = false;
+    done = false;    
     rowGroupReader = std::move(parquetFileReader->RowGroup(rowGroupIndex));
     numRows = rowGroupReader->metadata()->num_rows();
     //#pragma omp parallel for num_threads(4)
     for(int i = 0; i < columnMap.size(); i++) {
         int c = columnMap[i];
-        std::cout << "Create reader for Column " << c  << std::endl;
+        //std::cout << "Create reader for Column " << c  << std::endl;
         columnReaders[c] = std::move(rowGroupReader->Column(c));        
     }        
 
@@ -385,22 +385,27 @@ bool OutputNode::Step()
 
 void OutputNode::Send(int id, Column::DataType data_type, int type_size, void * data, uint32_t len)
 {
-    int header[4];
-    header[0] = htobe32(data_type); // TYPE
-    header[1] = htobe32(type_size); // TYPE SIZE
-    header[2] = htobe32(len); // DATA LEN
-    header[3] = htobe32(0); // COMPRESSED LEN
-
     int64_t be_value;
     if(compressionEnabled && len > 1024) { // There is no need to compress small chunks of data
-        //CompressLZ4((uint8_t *)data, len);
-        CompressZSTD(id, (uint8_t *)data, len);
+        int * header = (int *)compressedBuffer;
+        header[0] = htobe32(data_type); // TYPE
+        header[1] = htobe32(type_size); // TYPE SIZE
+        header[2] = htobe32(len); // DATA LEN
+        header[3] = htobe32(0); // COMPRESSED LEN
+        uint8_t * data_out = compressedBuffer + HEADER_LEN;
+        
+        CompressZSTD(id, (uint8_t *)data, len, data_out);
         header[3] = htobe32(compressedLen); // COMPRESSED LEN
-        output->write((const char *)header, (uint32_t)(4*sizeof(uint32_t)));
-        output->write((const char *)compressedBuffer, compressedLen);
+        
+        output->write((const char *)compressedBuffer, compressedLen + HEADER_LEN);
     } else {        
-        output->write((const char *)header, (uint32_t)(4*sizeof(uint32_t)));
-        output->write((const char *)data, len);
+        int * header = (int *)((uint8_t *)data - HEADER_LEN);
+        header[0] = htobe32(data_type); // TYPE
+        header[1] = htobe32(type_size); // TYPE SIZE
+        header[2] = htobe32(len); // DATA LEN
+        header[3] = htobe32(0); // COMPRESSED LEN
+        
+        output->write((const char *)header, len + HEADER_LEN);
     }
 }
 
@@ -414,11 +419,11 @@ void OutputNode::TranslateBE64(void * in_data, uint8_t * out_data, uint32_t len)
     }
 }
 
-void OutputNode::CompressZSTD(int id, uint8_t * data, uint32_t len)
+void OutputNode::CompressZSTD(int id, uint8_t * data_in, uint32_t len, uint8_t * data_out)
 {
     //compressedLen = ZSTD_compress( compressedBuffer, compressedBufferLen, data, len, 1);
     //compressedLen = ZSTD_compressCCtx(ZSTD_Context[id], compressedBuffer, compressedBufferLen, data, len, -5);
-    compressedLen = ZSTD_compress2(ZSTD_Context[id], compressedBuffer, compressedBufferLen, data, len);
+    compressedLen = ZSTD_compress2(ZSTD_Context[id], data_out, compressedBufferLen, data_in, len);
 }
 
 Node * lambda::CreateNode(Poco::JSON::Object::Ptr pObject, DikeProcessorConfig & dikeProcessorConfig, DikeIO * output) {
