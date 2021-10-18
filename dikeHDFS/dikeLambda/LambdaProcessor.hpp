@@ -11,9 +11,70 @@
 
 class LambdaBuffer {
     public:
-    uint8_t * ptr;
-    uint32_t len; // data len
-    uint32_t size; // memory size
+    uint8_t * ptr = NULL;
+    uint32_t len = 0; // data len
+    uint32_t size = 0; // memory size
+
+    LambdaBuffer(){}
+
+    void resize(uint32_t new_size) {
+        if(size < new_size) {
+            if(ptr != NULL){
+                delete [] ptr;
+            }
+            ptr = new uint8_t [new_size];
+            size = new_size;
+        }
+    }
+
+    void copy(const char * from, uint32_t len) {
+        memcpy(ptr, from, len);
+        this->len = len;
+    }
+
+    ~LambdaBuffer() {
+        if(ptr != NULL){
+            delete [] ptr;
+        }
+    }
+};
+
+class LambdaBufferPool {
+    public:
+    std::mutex lock;
+    std::queue<LambdaBuffer *> queue;
+    LambdaBufferPool(){}
+    ~LambdaBufferPool(){}
+
+    LambdaBuffer * Allocate(uint32_t size) {
+        LambdaBuffer * buffer = NULL;
+        lock.lock();
+        if(!queue.empty()){
+            buffer = queue.front();
+            queue.pop();
+        }
+        lock.unlock();
+        if(buffer == NULL){ // Q was empty
+            buffer = new LambdaBuffer;
+        }
+        buffer->resize(size);
+        return buffer;        
+    }
+
+    void Free(LambdaBuffer * buffer){
+        lock.lock();
+        queue.push(buffer);
+        lock.unlock();
+    }
+    void Free(std::vector<LambdaBuffer *> & buffers) {
+        lock.lock();
+        for(int i = 0; i < buffers.size(); i++){            
+            queue.push(buffers[i]);
+            buffers[i] = NULL;
+        }
+        lock.unlock();
+        buffers.clear();
+    }
 };
 
 class LambdaResult {
@@ -24,8 +85,7 @@ class LambdaResult {
         READY,
         DONE
     };        
-    std::vector<LambdaBuffer *> buffers;
-    std::mutex buffersLock;
+    std::vector<LambdaBuffer *> buffers;    
     int state;
     LambdaResult(int state) {
         this->state = state;
@@ -61,7 +121,8 @@ class LambdaProcessor{
     LambdaProcessor(){}
 
     void Init(DikeProcessorConfig & dikeProcessorConfig, DikeIO * output);
-    int Run(DikeProcessorConfig & dikeProcessorConfig, DikeIO * output);    
+    int Run(int rowGroupIndex, DikeIO * output);
+    void Finish();
 };
 
 class LambdaProcessorReadAhead {    

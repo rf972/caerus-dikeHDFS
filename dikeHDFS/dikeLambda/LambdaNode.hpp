@@ -79,7 +79,9 @@ class Node {
         this->nextNode = node;
     }
 
-    virtual void Init(int rowGroupIndex) { }
+    virtual void Init(int rowGroupIndex) { 
+        done = false;
+    }
 
     virtual void UpdateColumnMap(Frame * frame) {
         //std::cout << "UpdateColumnMap " << name  << std::endl;
@@ -120,6 +122,7 @@ class Node {
         framePool.pop();
         framePoolMutex.unlock();
         //std::cout << "Pop frame  " << frame <<  " Node " << name << std::endl;
+        frame->lastFrame = false;
         return frame;           
     }
 
@@ -217,7 +220,7 @@ class OutputNode : public Node {
     uint8_t lz4_state_memory [32<<10] __attribute__((aligned(128))); // see (int LZ4_sizeofState(void);)
     std::vector<ZSTD_CCtx *> ZSTD_Context;
     int compressionLevel = 3;
-    int dikeNodeType = 0;
+    int dikeNodeType = 0;    
 
     OutputNode(Poco::JSON::Object::Ptr pObject, DikeProcessorConfig & dikeProcessorConfig, DikeIO * output) 
         : Node(pObject, dikeProcessorConfig, output) 

@@ -54,20 +54,18 @@ void LambdaProcessor::Init(DikeProcessorConfig & dikeProcessorConfig, DikeIO * o
         nodeVector[i]->Connect(nodeVector[i+1]);
     }
 
-    int rowGroupIndex = std::stoi(dikeProcessorConfig["Configuration.RowGroupIndex"]);
+    // Get rowGroupCount from INPUT node
+    rowGroupCount = ((InputNode *)nodeVector[0])->rowGroupCount;
+}
+
+int LambdaProcessor::Run(int rowGroupIndex, DikeIO * output)
+{
+    std::chrono::high_resolution_clock::time_point t1 =  std::chrono::high_resolution_clock::now();   
 
     // Initialize Nodes
     for(int i = 0; i < nodeVector.size(); i++) {
         nodeVector[i]->Init(rowGroupIndex);
     }
-
-    // Get rowGroupCount from INPUT node
-    rowGroupCount = ((InputNode *)nodeVector[0])->rowGroupCount;
-}
-
-int LambdaProcessor::Run(DikeProcessorConfig & dikeProcessorConfig, DikeIO * output)
-{
-    std::chrono::high_resolution_clock::time_point t1 =  std::chrono::high_resolution_clock::now();
 
     // Start output worker
     Node * outputNode = nodeVector[nodeVector.size() - 1];    
@@ -100,10 +98,13 @@ int LambdaProcessor::Run(DikeProcessorConfig & dikeProcessorConfig, DikeIO * out
         std::cout << "Actual run_time " << run_time.count()/ 1000 << " sec" << std::endl;
     }
 
+    return(0);
+}
+
+void LambdaProcessor::Finish()
+{
     for(int i = nodeVector.size() - 1; i >= 0; i--){
         //std::cout << "Deleting Node " << nodeVector[i]->name << std::endl;
         delete nodeVector[i];
     }
-
-    return(0);
 }

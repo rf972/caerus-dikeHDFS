@@ -132,9 +132,10 @@ void InputNode::Init(int rowGroupIndex)
     }
 
     initialized = true;
-    done = false;    
+    done = false;
     rowGroupReader = std::move(parquetFileReader->RowGroup(rowGroupIndex));
     numRows = rowGroupReader->metadata()->num_rows();
+    rowCount = 0;
     //#pragma omp parallel for num_threads(4)
     for(int i = 0; i < columnMap.size(); i++) {
         int c = columnMap[i];
@@ -145,7 +146,7 @@ void InputNode::Init(int rowGroupIndex)
     if(verbose){
         std::chrono::high_resolution_clock::time_point t2 =  std::chrono::high_resolution_clock::now();
         std::chrono::duration<double, std::milli> run_time = t2 - t1;   
-        std::cout << "InputNode::Init took " << run_time.count()/ 1000 << " sec" << std::endl;
+        std::cout << "InputNode::Init " << rowGroupIndex << " took " << run_time.count()/ 1000 << " sec" << std::endl;
     }    
 }
 
@@ -208,6 +209,10 @@ InputNode::~InputNode()
 
 void ProjectionNode::UpdateColumnMap(Frame * inFrame) 
 {
+    if(initialized) {
+        return;
+    }
+
     for(int i = 0; i < columnCount; i++){
         for(int j = 0; j < inFrame->columns.size(); j++){
             if(projection[i].compare(inFrame->columns[j]->name) == 0){
@@ -233,7 +238,8 @@ void ProjectionNode::UpdateColumnMap(Frame * inFrame)
             outFrame->columns[i] = inFrame->columns[columnMap[i]];
         }
         freeFrame(outFrame); // this will put this frame on framePool
-    }    
+    }
+    initialized = true;
 }
 
 bool ProjectionNode::Step()
@@ -265,7 +271,7 @@ bool ProjectionNode::Step()
         //std::cout << "Mapping Column " << i <<  " to " << columnMap[i] << std::endl;
         outFrame->columns[i] = inFrame->columns[columnMap[i]]; 
     }
-
+    
     if(inFrame->lastFrame){
         outFrame->lastFrame = true;
         done = true;
@@ -282,6 +288,9 @@ bool ProjectionNode::Step()
 
 void OutputNode::UpdateColumnMap(Frame * frame) 
 {
+    if (initialized) {
+        return;
+    }
     // This is our first write, so buffer should have enough space
     int64_t be_value = htobe64(frame->columns.size());
     output->write((const char *)&be_value, (uint32_t)sizeof(int64_t));
@@ -298,6 +307,7 @@ void OutputNode::UpdateColumnMap(Frame * frame)
             //ZSTD_CCtx_setParameter(ZSTD_Context[i], ZSTD_c_strategy, ZSTD_fast);
         }
     }
+    initialized = true;
 }
 
 bool OutputNode::Step()

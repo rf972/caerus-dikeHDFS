@@ -33,7 +33,10 @@ int LambdaProcessorFactory::Run(DikeProcessorConfig & dikeProcessorConfig, DikeI
         } else { // Normal handling
             LambdaProcessor lambdaProcessor;
             lambdaProcessor.Init(dikeProcessorConfig, output);
-            lambdaProcessor.Run(dikeProcessorConfig, output);
+            int rowGroupIndex = std::stoi(dikeProcessorConfig["Configuration.RowGroupIndex"]);
+            lambdaProcessor.Run(rowGroupIndex, output);
+            //lambdaProcessor.Run(rowGroupIndex+1, output);
+            lambdaProcessor.Finish();
         }
     }  else  if (dikeProcessorConfig["Name"].compare("LambdaReadAhead") == 0) { // Lambda Read Ahead request
         // Allocate Read Ahead Processor
