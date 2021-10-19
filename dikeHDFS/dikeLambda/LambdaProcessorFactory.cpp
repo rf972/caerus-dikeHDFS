@@ -43,7 +43,15 @@ int LambdaProcessorFactory::Run(DikeProcessorConfig & dikeProcessorConfig, DikeI
         LambdaProcessorReadAhead * lambdaProcessorReadAhead = new LambdaProcessorReadAhead;
         lambdaProcessorReadAhead->Init(dikeProcessorConfig, output);
         processorMap[dikeProcessorConfig["ID"]] = lambdaProcessorReadAhead;        
-    } 
+    } else  if (dikeProcessorConfig["Name"].compare("LambdaClearAll") == 0) { // Lambda Clear All 
+        for (std::pair<std::string, LambdaProcessorReadAhead *> it : processorMap) {
+            std::cout << "Deleting " << it.first << std::endl;
+            delete it.second;
+        }
+        processorMap.clear();
+        std::string resp("All clear");
+        output->write(resp.c_str(), resp.length());
+    }
     return 0;
 }
 

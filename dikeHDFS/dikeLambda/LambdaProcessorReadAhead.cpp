@@ -43,8 +43,8 @@ class LambdaResultOutput : public DikeIO {
 
 void LambdaProcessorReadAhead::Init(DikeProcessorConfig & dikeProcessorConfig, DikeIO * output)
 {
-    std::string resp("LambdaProcessorReadAhead::Init " + dikeProcessorConfig["ID"] );
-    std::cout << resp << std::endl;
+    std::string resp("LambdaProcessorReadAhead::Init [" + dikeProcessorConfig["ID"] + "]");
+    //std::cout << resp << std::endl;
 
     output->write(resp.c_str(), resp.length());
 
@@ -61,24 +61,27 @@ void LambdaProcessorReadAhead::Init(DikeProcessorConfig & dikeProcessorConfig, D
 int LambdaProcessorReadAhead::Run(DikeProcessorConfig & dikeProcessorConfig, DikeIO * output)
 {    
     int rowGroupIndex = std::stoi(dikeProcessorConfig["Configuration.RowGroupIndex"]);
-    std::string resp("LambdaProcessorReadAhead::Run " + dikeProcessorConfig["ID"] );
-    std::cout << resp << " " << rowGroupIndex << std::endl;    
+    //std::string resp("LambdaProcessorReadAhead::Run [" + dikeProcessorConfig["ID"] + "]");
+    //std::cout << resp << " " << rowGroupIndex << std::endl;    
     
     LambdaResult * res = lambdaResultVector->resultVector[rowGroupIndex];
+    sem_wait(&res->sem); // This will change when we will support NCP
     lambdaResultVector->lock.lock();
     if (res->state == LambdaResult::READY) {
         res->state = LambdaResult::DONE;
         lambdaResultVector->lock.unlock();
-        std::cout << "LambdaProcessorReadAhead::Run Sending results for " << rowGroupIndex << std::endl;
+        //std::cout << "LambdaProcessorReadAhead::Run Sending results for " << rowGroupIndex << std::endl;
         // Send results to output        
         for(int i = 0; i < res->buffers.size(); i++){
             output->write((const char * )res->buffers[i]->ptr, res->buffers[i]->len);
         }
+        //std::cout << "LambdaProcessorReadAhead::Run Sending for " << rowGroupIndex << " completed " << std::endl;
         LambdaResultOutput::lambdaBufferPool.Free(res->buffers);
     } else {
         lambdaResultVector->lock.unlock();
     }
 
+    //std::cout << "Wake up worker " << std::endl;
     sem_post(&lambdaResultVector->sem);
 
     return 0;
@@ -90,6 +93,9 @@ void LambdaProcessorReadAhead::Worker(LambdaProcessor * lambdaProcessor)
     do {
         // wait on lambdaResultVector->sem
         sem_wait(&lambdaResultVector->sem);
+        if(done) {
+            continue;
+        }
         // Lock lambdaResultVector
         lambdaResultVector->lock.lock();
         // Find next index to operate
@@ -103,22 +109,24 @@ void LambdaProcessorReadAhead::Worker(LambdaProcessor * lambdaProcessor)
         }
         lambdaResultVector->lock.unlock();
         if(result_index >= 0){
-            std::cout << "LambdaProcessorReadAhead::Worker Run on " << result_index << std::endl;
+            //std::cout << "LambdaProcessorReadAhead::Worker Run on " << result_index << std::endl;
             // Crank lambdaProcessor
             LambdaResultOutput output = LambdaResultOutput(lambdaResultVector->resultVector[result_index]);
             lambdaProcessor->Run(result_index, &output);
             lambdaResultVector->lock.lock();
             lambdaResultVector->resultVector[result_index]->state = LambdaResult::READY;
             lambdaResultVector->lock.unlock();
+            sem_post(&lambdaResultVector->resultVector[result_index]->sem);
+            //std::cout << "LambdaProcessorReadAhead::Worker Run on " << result_index << " Done " << std::endl;
         }
-    } while(result_index >= 0); // Repeat 
+    } while(result_index >= 0 && ! done); // Repeat 
 
     lambdaProcessor->Finish();
 
     // I am not sure this is a godd place to call destructor
     delete lambdaProcessor;
 
-    std::cout << "LambdaProcessorReadAhead::Worker Done" << std::endl;
+    //std::cout << "LambdaProcessorReadAhead::Worker Done" << std::endl;
 }
 
 LambdaBufferPool LambdaResultOutput::lambdaBufferPool;

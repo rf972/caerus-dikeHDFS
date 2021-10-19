@@ -1551,7 +1551,7 @@ public static String getQ12Param(String name)
 // Q21
 // java -classpath target/ndp-hdfs-client-1.0-jar-with-dependencies.jar org.dike.hdfs.DikeTpchClient 21
 
-
+ 
 
 // export DIKE_TRACE_RECORD_MAX=36865
 // export DIKE_COMPRESSION=ZSTD

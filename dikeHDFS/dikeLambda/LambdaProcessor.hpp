@@ -87,8 +87,13 @@ class LambdaResult {
     };        
     std::vector<LambdaBuffer *> buffers;    
     int state;
+    sem_t sem;
     LambdaResult(int state) {
         this->state = state;
+        sem_init(&sem, 0, 0);
+    }
+    ~LambdaResult(){
+        sem_destroy(&sem);
     }
 };
 
@@ -133,9 +138,16 @@ class LambdaProcessorReadAhead {
     int rowGroupCount = 0;
     LambdaResultVector * lambdaResultVector  = NULL;
     std::thread workerThread;
-    
+    bool done = false;
+
     LambdaProcessorReadAhead(){};
     ~LambdaProcessorReadAhead() {
+        std::cout << "~LambdaProcessorReadAhead()" << std::endl;
+        done = true;
+        // Do it for each worker
+        sem_post(&lambdaResultVector->sem);
+        workerThread.join();
+
         if(lambdaResultVector){
             delete lambdaResultVector;
         }

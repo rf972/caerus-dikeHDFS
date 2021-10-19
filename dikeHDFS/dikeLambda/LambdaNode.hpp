@@ -207,6 +207,9 @@ class OutputNode : public Node {
     };
     bool compressionEnabled = false;
 
+    uint64_t schema[128]; // Schema and column count to be reported at Init() time
+    uint32_t nCol = 0;
+
     DikeIO * output = NULL;
     uint8_t * lenBuffer = NULL;
     uint8_t * resultLenBuffer = NULL;
@@ -220,7 +223,7 @@ class OutputNode : public Node {
     uint8_t lz4_state_memory [32<<10] __attribute__((aligned(128))); // see (int LZ4_sizeofState(void);)
     std::vector<ZSTD_CCtx *> ZSTD_Context;
     int compressionLevel = 3;
-    int dikeNodeType = 0;    
+    int dikeNodeType = 0;
 
     OutputNode(Poco::JSON::Object::Ptr pObject, DikeProcessorConfig & dikeProcessorConfig, DikeIO * output) 
         : Node(pObject, dikeProcessorConfig, output) 
@@ -269,6 +272,7 @@ class OutputNode : public Node {
         }
     }
     
+    virtual void Init(int rowGroupIndex) override;
     virtual void UpdateColumnMap(Frame * frame) override;
     virtual bool Step() override;
     //void CompressZlib(uint8_t * data, uint32_t len, bool is_binary);
