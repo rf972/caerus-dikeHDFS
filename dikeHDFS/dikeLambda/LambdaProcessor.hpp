@@ -96,7 +96,8 @@ class LambdaResultVector {
     public:
     std::vector<LambdaResult *> resultVector;
     std::mutex lock;
-    sem_t sem;
+    sem_t sem;    
+
     LambdaResultVector(int resultSize, int batchSize) {
         sem_init(&sem, 0, batchSize);
         resultVector.resize(resultSize, NULL);
@@ -107,6 +108,7 @@ class LambdaResultVector {
         }
     }
     ~LambdaResultVector() {
+        sem_destroy(&sem);
         for(int i = 0; i < resultVector.size(); i++) {
             delete resultVector[i];
         }
@@ -130,6 +132,8 @@ class LambdaProcessorReadAhead {
     int verbose = 0;
     int rowGroupCount = 0;
     LambdaResultVector * lambdaResultVector  = NULL;
+    std::thread workerThread;
+    
     LambdaProcessorReadAhead(){};
     ~LambdaProcessorReadAhead() {
         if(lambdaResultVector){

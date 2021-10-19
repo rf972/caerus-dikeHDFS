@@ -85,7 +85,7 @@ InputNode::InputNode(Poco::JSON::Object::Ptr pObject, DikeProcessorConfig & dike
 }
 
 void InputNode::Init(int rowGroupIndex) 
-{    
+{        
     std::chrono::high_resolution_clock::time_point t1;
     if(verbose){
         t1 =  std::chrono::high_resolution_clock::now();
@@ -291,13 +291,22 @@ void OutputNode::UpdateColumnMap(Frame * frame)
     if (initialized) {
         return;
     }
+    uint64_t schema[1024];
+    uint32_t count = 0;
+
     // This is our first write, so buffer should have enough space
     int64_t be_value = htobe64(frame->columns.size());
-    output->write((const char *)&be_value, (uint32_t)sizeof(int64_t));
+    //output->write((const char *)&be_value, (uint32_t)sizeof(int64_t));
+    schema[count] = be_value;
+    count++;
     for( int i  = 0; i < frame->columns.size(); i++){
         be_value = htobe64(frame->columns[i]->data_type);
-        output->write((const char *)&be_value, (uint32_t)sizeof(int64_t));
+        //output->write((const char *)&be_value, (uint32_t)sizeof(int64_t));
+        schema[count] = be_value;
+        count++;
     }
+    output->write((const char *)schema, count*sizeof(int64_t));
+
     if(compressionEnabled) {
         ZSTD_Context.resize(frame->columns.size());            
 

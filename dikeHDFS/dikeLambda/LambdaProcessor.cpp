@@ -59,16 +59,18 @@ void LambdaProcessor::Init(DikeProcessorConfig & dikeProcessorConfig, DikeIO * o
 }
 
 int LambdaProcessor::Run(int rowGroupIndex, DikeIO * output)
-{
+{    
     std::chrono::high_resolution_clock::time_point t1 =  std::chrono::high_resolution_clock::now();   
+
+    OutputNode * outputNode = (OutputNode *)nodeVector[nodeVector.size() - 1];
+    outputNode->output = output;
 
     // Initialize Nodes
     for(int i = 0; i < nodeVector.size(); i++) {
         nodeVector[i]->Init(rowGroupIndex);
     }
 
-    // Start output worker
-    Node * outputNode = nodeVector[nodeVector.size() - 1];    
+    // Start output worker        
     std::thread outputThread = outputNode->startWorker();
 
     bool done = false;

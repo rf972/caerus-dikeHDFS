@@ -79,7 +79,7 @@ class Node {
         this->nextNode = node;
     }
 
-    virtual void Init(int rowGroupIndex) { 
+    virtual void Init(int rowGroupIndex) {        
         done = false;
     }
 
@@ -268,7 +268,7 @@ class OutputNode : public Node {
             ZSTD_freeCCtx(ZSTD_Context[i]);
         }
     }
-
+    
     virtual void UpdateColumnMap(Frame * frame) override;
     virtual bool Step() override;
     //void CompressZlib(uint8_t * data, uint32_t len, bool is_binary);

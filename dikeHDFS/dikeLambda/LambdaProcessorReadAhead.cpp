@@ -48,14 +48,13 @@ void LambdaProcessorReadAhead::Init(DikeProcessorConfig & dikeProcessorConfig, D
 
     output->write(resp.c_str(), resp.length());
 
-    LambdaProcessor * lambdaProcessor = new LambdaProcessor;
-    dikeProcessorConfig["Configuration.RowGroupIndex"] = "0";
+    LambdaProcessor * lambdaProcessor = new LambdaProcessor;    
     lambdaProcessor->Init(dikeProcessorConfig, output);
     rowGroupCount = lambdaProcessor->rowGroupCount;
 
     lambdaResultVector = new LambdaResultVector(rowGroupCount, 2);
 
-    std::thread workerThread = std::thread([=] { Worker(lambdaProcessor); });
+    workerThread = std::thread([=] { Worker(lambdaProcessor); });
 }
 
 // This will simply send back results
@@ -63,14 +62,14 @@ int LambdaProcessorReadAhead::Run(DikeProcessorConfig & dikeProcessorConfig, Dik
 {    
     int rowGroupIndex = std::stoi(dikeProcessorConfig["Configuration.RowGroupIndex"]);
     std::string resp("LambdaProcessorReadAhead::Run " + dikeProcessorConfig["ID"] );
-    std::cout << resp << " " << rowGroupIndex << std::endl;
-    return 0;
+    std::cout << resp << " " << rowGroupIndex << std::endl;    
     
     LambdaResult * res = lambdaResultVector->resultVector[rowGroupIndex];
     lambdaResultVector->lock.lock();
     if (res->state == LambdaResult::READY) {
         res->state = LambdaResult::DONE;
         lambdaResultVector->lock.unlock();
+        std::cout << "LambdaProcessorReadAhead::Run Sending results for " << rowGroupIndex << std::endl;
         // Send results to output        
         for(int i = 0; i < res->buffers.size(); i++){
             output->write((const char * )res->buffers[i]->ptr, res->buffers[i]->len);
@@ -80,32 +79,46 @@ int LambdaProcessorReadAhead::Run(DikeProcessorConfig & dikeProcessorConfig, Dik
         lambdaResultVector->lock.unlock();
     }
 
+    sem_post(&lambdaResultVector->sem);
+
     return 0;
 }
 
 void LambdaProcessorReadAhead::Worker(LambdaProcessor * lambdaProcessor)
 {    
-    int result_index = -1;
-    // wait on lambdaResultVector->sem
-    sem_wait(&lambdaResultVector->sem);
-    // Lock lambdaResultVector
-    lambdaResultVector->lock.lock();
-    // Find next index to operate
-    for(int i = 0; i < rowGroupCount; i++){
-        LambdaResult * res = lambdaResultVector->resultVector[i];
-        if (res->state == LambdaResult::EMPTY){
-            res->state = LambdaResult::PENDING;
-            result_index = i;
+    int result_index;
+    do {
+        // wait on lambdaResultVector->sem
+        sem_wait(&lambdaResultVector->sem);
+        // Lock lambdaResultVector
+        lambdaResultVector->lock.lock();
+        // Find next index to operate
+        result_index = -1;
+        for(int i = 0; i < rowGroupCount && result_index == -1; i++){
+            LambdaResult * res = lambdaResultVector->resultVector[i];
+            if (res->state == LambdaResult::EMPTY){
+                res->state = LambdaResult::PENDING;
+                result_index = i;
+            }
         }
-    }
-    lambdaResultVector->lock.unlock();
-    if(result_index < 0){
-        // We have nothing to do
-        std::cout << "LambdaProcessorReadAhead::Worker Done" << std::endl;
-        return;
-    }
-    // Crank lambdaProcessor
-    // Repeat 
+        lambdaResultVector->lock.unlock();
+        if(result_index >= 0){
+            std::cout << "LambdaProcessorReadAhead::Worker Run on " << result_index << std::endl;
+            // Crank lambdaProcessor
+            LambdaResultOutput output = LambdaResultOutput(lambdaResultVector->resultVector[result_index]);
+            lambdaProcessor->Run(result_index, &output);
+            lambdaResultVector->lock.lock();
+            lambdaResultVector->resultVector[result_index]->state = LambdaResult::READY;
+            lambdaResultVector->lock.unlock();
+        }
+    } while(result_index >= 0); // Repeat 
+
+    lambdaProcessor->Finish();
+
+    // I am not sure this is a godd place to call destructor
+    delete lambdaProcessor;
+
+    std::cout << "LambdaProcessorReadAhead::Worker Done" << std::endl;
 }
 
 LambdaBufferPool LambdaResultOutput::lambdaBufferPool;

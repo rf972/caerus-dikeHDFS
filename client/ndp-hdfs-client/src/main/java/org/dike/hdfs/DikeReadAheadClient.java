@@ -1487,6 +1487,11 @@ public static String getQ12Param(String name)
                 String line = br.readLine();
                 System.out.println(line);
             }
+            Thread.sleep(2000);
+            if(true){
+                //return;
+            }
+
             FSDataInputStream dataInputStream = dikeFS.open(fileToRead, BUFFER_SIZE, readParam);                    
             DataInputStream dis = new DataInputStream(new BufferedInputStream(dataInputStream, BUFFER_SIZE ));
 
