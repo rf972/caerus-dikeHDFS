@@ -42,5 +42,11 @@
         <value>64</value>
     </property> 
 
+    <property>
+        <!-- Concurent ReadAhead workers per processor -->
+        <name>dike.storage.processor.workers</name>
+        <value>2</value>
+    </property> 
+
     </dike>
 </configuration>

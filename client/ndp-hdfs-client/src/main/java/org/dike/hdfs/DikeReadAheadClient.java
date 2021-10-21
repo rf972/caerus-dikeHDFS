@@ -143,9 +143,14 @@ public class DikeReadAheadClient
                 InitReadAheadProcessor(dikehdfsPath, fname, conf, clearAllParam);
                 InitReadAheadProcessor(dikehdfsPath, fname, conf, readAheadParam);
                 InitReadAheadProcessor(dikehdfsPath, fname, conf, getPartitionsParam);
+                try {                        
+                    Thread.sleep(500);
+                } catch (Exception e) {
+                    System.out.println(e);
+                }                
                 for(int i = 0; i < Integer.parseInt(args[1]); i++) {
                     try {                        
-                        //Thread.sleep(1000);
+                        Thread.sleep(50);
                     } catch (Exception e) {
                         System.out.println(e);
                     }   

@@ -48,13 +48,19 @@ void LambdaProcessorReadAhead::Init(DikeProcessorConfig & dikeProcessorConfig, D
 
     output->write(resp.c_str(), resp.length());
 
-    LambdaProcessor * lambdaProcessor = new LambdaProcessor;    
-    lambdaProcessor->Init(dikeProcessorConfig, output);
-    rowGroupCount = lambdaProcessor->rowGroupCount;
-
-    lambdaResultVector = new LambdaResultVector(rowGroupCount, 2);
-
-    workerThread = std::thread([=] { Worker(lambdaProcessor); });
+    int nWorkers = std::stoi(dikeProcessorConfig["dike.storage.processor.workers"]);
+    workerThread.resize(nWorkers);
+    
+    for(int i = 0; i < workerThread.size(); i++) {
+        LambdaProcessor * lambdaProcessor = new LambdaProcessor;    
+        lambdaProcessor->Init(dikeProcessorConfig, NULL); // TODO get rid of the output
+        
+        if(i == 0){
+            rowGroupCount = lambdaProcessor->rowGroupCount;
+            lambdaResultVector = new LambdaResultVector(rowGroupCount, 2*nWorkers);
+        }
+        workerThread[i] = std::thread([=] { Worker(lambdaProcessor); });
+    }
 }
 
 // This will simply send back results

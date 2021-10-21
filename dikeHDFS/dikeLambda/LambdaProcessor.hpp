@@ -137,16 +137,21 @@ class LambdaProcessorReadAhead {
     int verbose = 0;
     int rowGroupCount = 0;
     LambdaResultVector * lambdaResultVector  = NULL;
-    std::thread workerThread;
+    std::vector<std::thread> workerThread;
     bool done = false;
 
     LambdaProcessorReadAhead(){};
     ~LambdaProcessorReadAhead() {
-        std::cout << "~LambdaProcessorReadAhead()" << std::endl;
+        //std::cout << "~LambdaProcessorReadAhead()" << std::endl;
         done = true;
         // Do it for each worker
-        sem_post(&lambdaResultVector->sem);
-        workerThread.join();
+        for(int i = 0; i < workerThread.size(); i++) {
+            sem_post(&lambdaResultVector->sem);
+        }
+
+        for(int i = 0; i < workerThread.size(); i++) {
+            workerThread[i].join();
+        }
 
         if(lambdaResultVector){
             delete lambdaResultVector;
