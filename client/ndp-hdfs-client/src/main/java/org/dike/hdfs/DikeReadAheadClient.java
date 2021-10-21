@@ -130,6 +130,7 @@ public class DikeReadAheadClient
         String readParam;
         String readAheadParam;
         String clearAllParam;
+        String getPartitionsParam;
 
         switch(Integer.parseInt(testNumber)) {
            case 14:
@@ -137,8 +138,11 @@ public class DikeReadAheadClient
                 String dag = getQ14DAG(fname);
                 clearAllParam = getQ14Param(fname, "LambdaClearAll", 0, "");
                 readAheadParam = getQ14Param(fname, "LambdaReadAhead", 0, dag);
+                getPartitionsParam = getQ14Param(fname, "LambdaInfo", 0, "");
+
                 InitReadAheadProcessor(dikehdfsPath, fname, conf, clearAllParam);
                 InitReadAheadProcessor(dikehdfsPath, fname, conf, readAheadParam);
+                InitReadAheadProcessor(dikehdfsPath, fname, conf, getPartitionsParam);
                 for(int i = 0; i < Integer.parseInt(args[1]); i++) {
                     try {                        
                         //Thread.sleep(1000);
@@ -419,7 +423,7 @@ public class DikeReadAheadClient
 
 // mvn package -o
 // Q14
-// java -classpath target/ndp-hdfs-client-1.0-jar-with-dependencies.jar org.dike.hdfs.DikeReadAheadClient 14 42
+// java -classpath target/ndp-hdfs-client-1.0-jar-with-dependencies.jar org.dike.hdfs.DikeReadAheadClient 14 2
 
 // export DIKE_TRACE_RECORD_MAX=36865
 // export DIKE_COMPRESSION=ZSTD

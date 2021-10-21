@@ -43,6 +43,15 @@ int LambdaProcessorFactory::Run(DikeProcessorConfig & dikeProcessorConfig, DikeI
         LambdaProcessorReadAhead * lambdaProcessorReadAhead = new LambdaProcessorReadAhead;
         lambdaProcessorReadAhead->Init(dikeProcessorConfig, output);
         processorMap[dikeProcessorConfig["ID"]] = lambdaProcessorReadAhead;        
+    } else   if (dikeProcessorConfig["Name"].compare("LambdaInfo") == 0) { // Lambda Info request
+        std::string resp;
+        if(processorMap.count(dikeProcessorConfig["ID"]) > 0) {
+            LambdaProcessorReadAhead * lambdaProcessorReadAhead = processorMap[dikeProcessorConfig["ID"]];            
+            resp = "PartitionCount = " + std::to_string(lambdaProcessorReadAhead->rowGroupCount) + "\n";
+        } else {
+            resp = "Uknown ID " + dikeProcessorConfig["ID"];
+        }
+        output->write(resp.c_str(), resp.length());
     } else  if (dikeProcessorConfig["Name"].compare("LambdaClearAll") == 0) { // Lambda Clear All 
         for (std::pair<std::string, LambdaProcessorReadAhead *> it : processorMap) {
             std::cout << "Deleting " << it.first << std::endl;
