@@ -2,8 +2,10 @@ cmake_minimum_required(VERSION 3.10)
 
 project(dikeLambda VERSION 0.1.0)
 
-add_library(libdikeLambda STATIC TpchQ1.cpp 
-                                 LambdaProcessor.cpp 
+add_library(libdikeLambda STATIC 
+                                 LambdaProcessorFactory.cpp
+                                 LambdaProcessor.cpp
+                                 LambdaProcessorReadAhead.cpp 
                                  LambdaNode.cpp 
                                  LambdaFrame.cpp
                                  LambdaFilterNode.cpp)

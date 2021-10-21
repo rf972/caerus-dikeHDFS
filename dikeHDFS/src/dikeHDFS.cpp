@@ -39,7 +39,6 @@
 #include "DikeStream.hpp"
 #include "DikeHTTPRequestHandler.hpp"
 
-#include "dikeLambda/TpchQ1.hpp"
 #include "dikeLambda/LambdaProcessor.hpp"
 
 using namespace Poco::Net;
@@ -54,6 +53,67 @@ enum {
 
 static std::atomic<int> dataNodeReqCount(0);
 static int dikeStorageMaxRequests = 2;
+
+class NameNodeHandlerNCP : public DikeHTTPRequestHandler {
+  public:
+
+  NameNodeHandlerNCP(int verbose, DikeConfig & dikeConfig): DikeHTTPRequestHandler(verbose, dikeConfig){}
+
+  virtual void handleRequest(Poco::Net::HTTPServerRequest &req, Poco::Net::HTTPServerResponse &resp)
+  {    
+    std::istream& fromClient = req.stream();
+    if(verbose){
+      cout << DikeUtil().Yellow() << DikeUtil().Now() << " NN Start " << DikeUtil().Reset() << endl;      
+    }
+
+    /* Instantiate a copy of original request */
+    HTTPRequest hdfs_req((HTTPRequest)req);
+
+    /* Redirect to HDFS port */
+    hdfs_req.setHost(dikeConfig["dfs.namenode.http-address"]);
+
+    if(verbose) {      
+        cout << hdfs_req.getURI() << endl;
+        hdfs_req.write(cout);
+    }
+
+    /* Open HDFS session */    
+    SocketAddress namenodeSocketAddress = SocketAddress(dikeConfig["dfs.namenode.http-address"]);
+    HTTPClientSession session(namenodeSocketAddress);
+    std::ostream& toHDFS = session.sendRequest(hdfs_req);
+    Poco::StreamCopier::copyStream(fromClient, toHDFS, 8192);  
+    HTTPResponse hdfs_resp;
+    std::istream& fromHDFS = session.receiveResponse(hdfs_resp);
+    (HTTPResponse &)resp = hdfs_resp;    
+    
+    if(req.has("ReadParam") && resp.has("Location")) {        
+        //cout << DikeUtil().Blue() << resp.get("Location") << DikeUtil().Reset() << endl;      
+        Poco::URI uri = Poco::URI(resp.get("Location"));
+        int ndpPort = std::stoi(dikeConfig["dike.dfs.ndp.http-port"]);
+        string host = req.getHost();
+        host = host.substr(0, host.find(':'));
+
+        // On a compute node perform NDP if storage is not doing it
+        if(ndpPort != uri.getPort()) {
+            uri.setHost(host); // Client should be redirected back to our address
+            uri.setPort(ndpPort);
+            resp.set("Location", uri.toString());            
+        }
+      
+      //cout << DikeUtil().Blue() << resp.get("Location") << DikeUtil().Reset() << endl;
+    }
+
+    if(verbose) {
+      resp.write(cout);    
+      cout << DikeUtil().Yellow() << DikeUtil().Now() << " NN End " << DikeUtil().Reset() << endl;
+    }
+
+    ostream& toClient = resp.send();
+    Poco::StreamCopier::copyStream(fromHDFS, toClient, 8192);
+    toClient.flush();
+  }   
+};
+
 
 class NameNodeHandler : public DikeHTTPRequestHandler {
   public:
@@ -101,15 +161,13 @@ class NameNodeHandler : public DikeHTTPRequestHandler {
         std::istream& fromHDFS = session.receiveResponse(hdfs_resp);
         (HTTPResponse &)resp = hdfs_resp;
 
-        if(req.has("ReadParam") && resp.has("Location")) {
-            if(dikeNodeType == STORAGE_NODE ) { // Np caching on NCP
-                if(verbose) {
-                    cout << "Cache HDFS responce at " << reqUri << endl;
-                }
-                lock.lock();
-                (HTTPResponse &)responseMap[reqUri] = resp;
-                lock.unlock();
+        if(req.has("ReadParam") && resp.has("Location")) {            
+            if(verbose) {
+                cout << "Cache HDFS responce at " << reqUri << endl;
             }
+            lock.lock();
+            (HTTPResponse &)responseMap[reqUri] = resp;
+            lock.unlock();            
         } else { // Not pushdowns request
             ostream& toClient = resp.send();
             Poco::StreamCopier::copyStream(fromHDFS, toClient, 8192);
@@ -125,20 +183,12 @@ class NameNodeHandler : public DikeHTTPRequestHandler {
         string host = req.getHost();
         host = host.substr(0, host.find(':'));
         // On a storage node perform NDP if we have compute capacity
-        if(dikeNodeType == STORAGE_NODE && dataNodeReqCount < dikeStorageMaxRequests) {
+        if(dataNodeReqCount < dikeStorageMaxRequests) {
             uri.setHost(host); // Client should be redirected back to our address
             uri.setPort(ndpPort);
             resp.set("Location", uri.toString());
-        }
-
-        // On a compute node perform NDP if storage is not doing it
-        if(dikeNodeType == COMPUTE_NODE && ndpPort != uri.getPort()) {
-            uri.setHost(host); // Client should be redirected back to our address
-            uri.setPort(ndpPort);
-            resp.set("Location", uri.toString());            
-        }
-      
-      //cout << DikeUtil().Blue() << resp.get("Location") << DikeUtil().Reset() << endl;
+        }      
+        //cout << DikeUtil().Blue() << resp.get("Location") << DikeUtil().Reset() << endl;
     }
 
     if(verbose) {
@@ -212,7 +262,7 @@ public:
             cout << DikeUtil().Blue();
         }
         
-        DikeProcessor * dikeProcessor = NULL;
+        LambdaProcessorFactory * dikeProcessor = NULL;
         DikeProcessorConfig dikeSQLConfig;
 
         std::istringstream readParamStream(readParam.c_str());      
@@ -226,17 +276,18 @@ public:
             dikeSQLConfig["system.verbose"] = std::to_string(verbose);
 
             dikeSQLConfig["Name"] = cfg->getString("Name");
-            if(verbose) {
-                cout << "Name = " + dikeSQLConfig["Name"] << endl;
+            if(cfg->has("ID")) {
+                dikeSQLConfig["ID"] = cfg->getString("ID");
+            } else {
+                dikeSQLConfig["ID"] = "Uknown ID";
             }
 
-            if(dikeSQLConfig["Name"].compare("TpchQ1") == 0){
-                dikeProcessor = (DikeProcessor *) new TpchQ1;
-            } else if (dikeSQLConfig["Name"].compare("Lambda") == 0) {
-                dikeProcessor = (DikeProcessor *) new LambdaProcessor;
-            } else {
-                dikeProcessor = (DikeProcessor *) new DikeSQL;
+            if(verbose) {
+                cout << "Name = " << dikeSQLConfig["Name"] << endl;
+                cout << "ID = " << dikeSQLConfig["ID"] << endl;
             }
+
+            dikeProcessor = new LambdaProcessorFactory;
 
             dikeSQLConfig["Request"] = ss.str();
             dikeSQLConfig["dfs.datanode.http-port"] = dikeConfig["dfs.datanode.http-port"];
@@ -272,14 +323,11 @@ public:
 
             ostream& toClient = resp.send();
             toClient.flush();
-#if 1
+
             Poco::Net::HTTPServerRequestImpl & req_impl = (Poco::Net::HTTPServerRequestImpl &)req;          
             Poco::Net::StreamSocket toClientSocket = req_impl.detachSocket();                                
             DikeOut output(&toClientSocket);
-#else
-            DikeOut output(&toClient);
-#endif
-            
+
             dikeProcessor->Run(dikeSQLConfig, &output);       
         } catch (Poco::NotFoundException&) {
             cout << DikeUtil().Red() << "Exeption while parsing readParam" << endl;
@@ -308,7 +356,11 @@ public:
     this->dikeConfig = dikeConfig;
   }
   virtual HTTPRequestHandler* createRequestHandler(const HTTPServerRequest & req) {
-    return new NameNodeHandler(verbose, dikeConfig);
+      if (dikeNodeType == COMPUTE_NODE) {
+        return new NameNodeHandlerNCP(verbose, dikeConfig);
+      } else {
+        return new NameNodeHandler(verbose, dikeConfig);
+      }
   }
 };
 
@@ -325,39 +377,6 @@ public:
     return new DataNodeHandler(verbose, dikeConfig);
   }
 };
-
-#if 0
-class S3GatewayHandlerFactory : public HTTPRequestHandlerFactory {
-public:
-  int verbose = 0;
-  DikeConfig dikeConfig;
-  S3GatewayHandlerFactory(int verbose, DikeConfig& dikeConfig):HTTPRequestHandlerFactory() {
-    this->verbose = verbose;
-    this->dikeConfig = dikeConfig;
-  }
-
-  virtual HTTPRequestHandler* createRequestHandler(const HTTPServerRequest & req) {
-    Poco::URI uri = Poco::URI(req.getURI());
-    if (uri.getQuery() == "select&select-type=2") {
-      return new SelectObjectContent(verbose, dikeConfig);
-    }
-    
-    
-    if(uri.getQuery().find("list-type=2") == 0){
-      return new ListObjectsV2(verbose, dikeConfig);
-    }    
-
-    DikeConfig::iterator it = dikeConfig.find("dike.S3.endpoint.http-address");
-    if(it != dikeConfig.end()) { // S3 proxy is configured
-      return new ProxyHandler(verbose, dikeConfig);
-    }
-
-
-    cout << DikeUtil().Yellow() << "Unsupported query " << uri.getQuery() << DikeUtil().Reset() << endl;
-    return NULL;
-  }
-};
-#endif
 
 class DikeServerApp : public ServerApplication
 {
@@ -402,8 +421,7 @@ class DikeServerApp : public ServerApplication
     if(dikeConfig.count("dike.storage.max.requests") > 0) {
         dikeStorageMaxRequests = std::stoi(dikeConfig["dike.storage.max.requests"]);
         //std::cout << "dikeStorageMaxRequests " << dikeStorageMaxRequests << std::endl;
-    }
-    
+    }    
   }
 
   int main(const vector<string> & argv)
@@ -422,7 +440,7 @@ class DikeServerApp : public ServerApplication
     loadDikeConfig();
 
     dataNodeParams->setKeepAlive(false);
-    dataNodeParams->setMaxThreads(16);
+    dataNodeParams->setMaxThreads(32);
     dataNodeParams->setMaxQueued(128);
         
     HTTPServer nameNode(new NameNodeHandlerFactory(verbose, dikeConfig),                         

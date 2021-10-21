@@ -228,7 +228,6 @@ class Filter {
     }
 
     void UpdateColumnMap(Frame * inFrame) {
-
         if(expression == _OR) {
             for(int i = 0; i < subFilterArray.size(); i++) {
                 subFilterArray[i]->UpdateColumnMap(inFrame);
@@ -245,6 +244,7 @@ class Filter {
                 }
             }
         }
+        
     }
 
     void UpdateDataType(Column::DataType data_type) {
@@ -437,10 +437,14 @@ FilterNode::~FilterNode()
 
 void FilterNode::UpdateColumnMap(Frame * inFrame) 
 {
+    if(initialized){
+        return;
+    }
     for(int i = 0; i < filterArray.size(); i++){
         filterArray[i]->UpdateColumnMap(inFrame);
     }
     Node::UpdateColumnMap(inFrame);
+    initialized = true;
 }
 
 bool FilterNode::Step()

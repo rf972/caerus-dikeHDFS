@@ -39,29 +39,11 @@ InputNode::InputNode(Poco::JSON::Object::Ptr pObject, DikeProcessorConfig & dike
         }            
     }
     std::string path = uri.getPath();
-    std::string fileName = path.substr(11, path.length()); // skip "/webhdfs/v1"
-    int rowGroupIndex = std::stoi(dikeProcessorConfig["Configuration.RowGroupIndex"]);
-
-    Poco::Thread * current = Poco::Thread::current();
-    int threadId = current->id();
+    std::string fileName = path.substr(11, path.length()); // skip "/webhdfs/v1"    
 
     std::string fullPath = "hdfs://" + rpcAddress + fileName;
-    //std::cout << "fullPath : " << fullPath << std::endl;
 
-#ifdef LEGACY_HDFS
-    if (hadoopFileSystemMap.count(threadId)) {
-        //std::cout << " LambdaParquetReader id " << threadId << " reuse FS connection "<< std::endl;
-        fs = hadoopFileSystemMap[threadId];        
-    } else {
-        //std::cout << " LambdaParquetReader id " << threadId << " create FS connection "<< std::endl;
-        arrow::io::HadoopFileSystem::Connect(&hdfsConnectionConfig, &fs);
-        hadoopFileSystemMap[threadId] = fs;        
-    }
-                                        
-    fs->OpenReadable(fileName, &inputFile);
-#else
-    //inputFile = std::shared_ptr<ReadableFile>(new ReadableFile(fullPath));
-#endif
+    //inputFile = std::move(std::shared_ptr<ReadableFile>(new ReadableFile(fullPath)));
 
     inputFileMutex.lock();
     if (fileMetaDataMap.count(fileName)) {
@@ -95,71 +77,76 @@ InputNode::InputNode(Poco::JSON::Object::Ptr pObject, DikeProcessorConfig & dike
     readerProperties.set_buffer_size(1<<20);
 
     parquetFileReader = std::move(parquet::ParquetFileReader::Open(inputFile, readerProperties, fileMetaData));
-    rowGroupReader = std::move(parquetFileReader->RowGroup(rowGroupIndex));
-
-    numRows = rowGroupReader->metadata()->num_rows();
     columnCount = schemaDescriptor->num_columns();
+    rowGroupCount = fileMetaData->num_row_groups();
     
     columnReaders = new std::shared_ptr<parquet::ColumnReader> [columnCount];
     columnTypes = new Column::DataType[columnCount];    
 }
 
-void InputNode::Init() 
-{    
+void InputNode::Init(int rowGroupIndex) 
+{        
     std::chrono::high_resolution_clock::time_point t1;
     if(verbose){
         t1 =  std::chrono::high_resolution_clock::now();
     }
-
-    Frame * frame = new Frame(this);
-    for(int i = 0; i < columnCount; i++){                
-        auto columnRoot = (parquet::schema::PrimitiveNode*)schemaDescriptor->GetColumnRoot(i);
-        std::string name = columnRoot->name();
-        parquet::Type::type physical_type = columnRoot->physical_type();
-        columnTypes[i] = (Column::DataType) physical_type; // TODO type tramslation
-        Column * col = new Column(this, i, name,  columnTypes[i]); 
-        frame->Add(col);
-    }    
-
-    // This will send update request down to graph
-    UpdateColumnMap(frame);
     
-    for(int i = 0; i < columnCount; i++) {
-        if(frame->columns[i]->useCount > 0) {
-            columnMap.push_back(i);
-        }
-    }
-            
-    //#pragma omp parallel for num_threads(4)
-    for(int i = 0; i < columnMap.size(); i++) {            
-        int col = columnMap[i];
-        //std::cout << "Create reader for Column " << col << " tid " << omp_get_thread_num() << std::endl;
-        columnReaders[col] = std::move(rowGroupReader->Column(col));
-        frame->columns[col]->Init(); // This will allocate memory buffers
-    }
-    
-    freeFrame(frame); // this will put this frame on framePool
-
-    // Create few additional frames
-    for(int c = 0; c < 3; c++) {
-        frame = new Frame(this); // Allocate new frame with data    
-        for(int i = 0; i < columnCount; i++){                        
+    if (!initialized) {        
+        Frame * frame = new Frame(this);
+        for(int i = 0; i < columnCount; i++){                
             auto columnRoot = (parquet::schema::PrimitiveNode*)schemaDescriptor->GetColumnRoot(i);
-            std::string name = columnRoot->name();            
-            Column * col = new Column(this, i, name,  columnTypes[i]);
-            //std::cout << "Create Column " << i <<  " " << name << std::endl;            
+            std::string name = columnRoot->name();
+            parquet::Type::type physical_type = columnRoot->physical_type();
+            columnTypes[i] = (Column::DataType) physical_type; // TODO type tramslation
+            Column * col = new Column(this, i, name,  columnTypes[i]); 
             frame->Add(col);
-            if(columnReaders[i]) {
-                col->Init(); // This will allocate memory buffers
-            }        
+        }    
+
+        // This will send update request down to graph
+        UpdateColumnMap(frame);
+        
+        for(int i = 0; i < columnCount; i++) {
+            if(frame->columns[i]->useCount > 0) {
+                columnMap.push_back(i);
+                frame->columns[i]->Init(); // This will allocate memory buffers
+            }
+        }         
+
+        // Create few additional frames
+        for(int j = 0; j < 3; j++) {
+            Frame * f = new Frame(this); // Allocate new frame with data
+            for(int i = 0; i < columnCount; i++){                        
+                auto columnRoot = (parquet::schema::PrimitiveNode*)schemaDescriptor->GetColumnRoot(i);
+                std::string name = columnRoot->name();            
+                Column * col = new Column(this, i, name,  columnTypes[i]);
+                //std::cout << "Create Column " << i <<  " " << name << std::endl;            
+                f->Add(col);
+                if(frame->columns[i]->useCount > 0) {
+                    col->Init(); // This will allocate memory buffers
+                }        
+            }
+            freeFrame(f); // this will put this frame on framePool
         }
+
         freeFrame(frame); // this will put this frame on framePool
     }
+
+    initialized = true;
+    done = false;
+    rowGroupReader = std::move(parquetFileReader->RowGroup(rowGroupIndex));
+    numRows = rowGroupReader->metadata()->num_rows();
+    rowCount = 0;
+    //#pragma omp parallel for num_threads(4)
+    for(int i = 0; i < columnMap.size(); i++) {
+        int c = columnMap[i];
+        //std::cout << "Create reader for Column " << c  << std::endl;
+        columnReaders[c] = std::move(rowGroupReader->Column(c));        
+    }        
 
     if(verbose){
         std::chrono::high_resolution_clock::time_point t2 =  std::chrono::high_resolution_clock::now();
         std::chrono::duration<double, std::milli> run_time = t2 - t1;   
-        std::cout << "InputNode::Init took " << run_time.count()/ 1000 << " sec" << std::endl;
+        std::cout << "InputNode::Init " << rowGroupIndex << " took " << run_time.count()/ 1000 << " sec" << std::endl;
     }    
 }
 
@@ -190,6 +177,8 @@ bool InputNode::Step()
     if(rowCount >= numRows){
         frame->lastFrame = true;
         done = true;
+    } else {
+        frame->lastFrame = false;
     }
     nextNode->putFrame(frame); // Send frame down to graph
 
@@ -220,6 +209,10 @@ InputNode::~InputNode()
 
 void ProjectionNode::UpdateColumnMap(Frame * inFrame) 
 {
+    if(initialized) {
+        return;
+    }
+
     for(int i = 0; i < columnCount; i++){
         for(int j = 0; j < inFrame->columns.size(); j++){
             if(projection[i].compare(inFrame->columns[j]->name) == 0){
@@ -245,7 +238,8 @@ void ProjectionNode::UpdateColumnMap(Frame * inFrame)
             outFrame->columns[i] = inFrame->columns[columnMap[i]];
         }
         freeFrame(outFrame); // this will put this frame on framePool
-    }    
+    }
+    initialized = true;
 }
 
 bool ProjectionNode::Step()
@@ -277,7 +271,7 @@ bool ProjectionNode::Step()
         //std::cout << "Mapping Column " << i <<  " to " << columnMap[i] << std::endl;
         outFrame->columns[i] = inFrame->columns[columnMap[i]]; 
     }
-
+    
     if(inFrame->lastFrame){
         outFrame->lastFrame = true;
         done = true;
@@ -294,15 +288,23 @@ bool ProjectionNode::Step()
 
 void OutputNode::UpdateColumnMap(Frame * frame) 
 {
-    // This is our first write, so buffer should have enough space
-    int64_t be_value = htobe64(frame->columns.size());
-    output->write((const char *)&be_value, (uint32_t)sizeof(int64_t));
-    for( int i  = 0; i < frame->columns.size(); i++){
-        be_value = htobe64(frame->columns[i]->data_type);
-        output->write((const char *)&be_value, (uint32_t)sizeof(int64_t));
-    }
-    if(compressionEnabled) {
-        ZSTD_Context.resize(frame->columns.size());            
+    nCol = frame->columns.size();
+    uint32_t count = 0;
+
+    schema[count ++] = htobe64(nCol);
+
+    for(int i  = 0; i < nCol; i++){
+        schema[count ++] = htobe64(frame->columns[i]->data_type);
+    }    
+}
+
+void OutputNode::Init(int rowGroupIndex)
+{
+    done = false;
+    output->write((const char *)schema, (nCol + 1)*sizeof(int64_t));
+
+    if(compressionEnabled && !initialized) {
+        ZSTD_Context.resize(nCol);            
 
         for (int i = 0; i < ZSTD_Context.size(); i++) {
             ZSTD_Context[i] = ZSTD_createCCtx();
@@ -310,6 +312,7 @@ void OutputNode::UpdateColumnMap(Frame * frame)
             //ZSTD_CCtx_setParameter(ZSTD_Context[i], ZSTD_c_strategy, ZSTD_fast);
         }
     }
+    initialized = true;
 }
 
 bool OutputNode::Step()
@@ -397,22 +400,27 @@ bool OutputNode::Step()
 
 void OutputNode::Send(int id, Column::DataType data_type, int type_size, void * data, uint32_t len)
 {
-    int header[4];
-    header[0] = htobe32(data_type); // TYPE
-    header[1] = htobe32(type_size); // TYPE SIZE
-    header[2] = htobe32(len); // DATA LEN
-    header[3] = htobe32(0); // COMPRESSED LEN
-
     int64_t be_value;
     if(compressionEnabled && len > 1024) { // There is no need to compress small chunks of data
-        //CompressLZ4((uint8_t *)data, len);
-        CompressZSTD(id, (uint8_t *)data, len);
+        int * header = (int *)compressedBuffer;
+        header[0] = htobe32(data_type); // TYPE
+        header[1] = htobe32(type_size); // TYPE SIZE
+        header[2] = htobe32(len); // DATA LEN
+        header[3] = htobe32(0); // COMPRESSED LEN
+        uint8_t * data_out = compressedBuffer + HEADER_LEN;
+        
+        CompressZSTD(id, (uint8_t *)data, len, data_out);
         header[3] = htobe32(compressedLen); // COMPRESSED LEN
-        output->write((const char *)header, (uint32_t)(4*sizeof(uint32_t)));
-        output->write((const char *)compressedBuffer, compressedLen);
+        
+        output->write((const char *)compressedBuffer, compressedLen + HEADER_LEN);
     } else {        
-        output->write((const char *)header, (uint32_t)(4*sizeof(uint32_t)));
-        output->write((const char *)data, len);
+        int * header = (int *)((uint8_t *)data - HEADER_LEN);
+        header[0] = htobe32(data_type); // TYPE
+        header[1] = htobe32(type_size); // TYPE SIZE
+        header[2] = htobe32(len); // DATA LEN
+        header[3] = htobe32(0); // COMPRESSED LEN
+        
+        output->write((const char *)header, len + HEADER_LEN);
     }
 }
 
@@ -426,11 +434,11 @@ void OutputNode::TranslateBE64(void * in_data, uint8_t * out_data, uint32_t len)
     }
 }
 
-void OutputNode::CompressZSTD(int id, uint8_t * data, uint32_t len)
+void OutputNode::CompressZSTD(int id, uint8_t * data_in, uint32_t len, uint8_t * data_out)
 {
     //compressedLen = ZSTD_compress( compressedBuffer, compressedBufferLen, data, len, 1);
     //compressedLen = ZSTD_compressCCtx(ZSTD_Context[id], compressedBuffer, compressedBufferLen, data, len, -5);
-    compressedLen = ZSTD_compress2(ZSTD_Context[id], compressedBuffer, compressedBufferLen, data, len);
+    compressedLen = ZSTD_compress2(ZSTD_Context[id], data_out, compressedBufferLen, data_in, len);
 }
 
 Node * lambda::CreateNode(Poco::JSON::Object::Ptr pObject, DikeProcessorConfig & dikeProcessorConfig, DikeIO * output) {

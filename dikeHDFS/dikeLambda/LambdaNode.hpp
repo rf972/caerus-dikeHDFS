@@ -17,7 +17,7 @@
 
 #include "LambdaFileReader.hpp"
 #include "DikeUtil.hpp"
-#include "LambdaProcessor.hpp"
+#include "DikeProcessor.hpp"
 #include "LambdaFrame.hpp"
 
 namespace lambda {
@@ -46,6 +46,7 @@ class Node {
 
     bool done = false;
     int verbose = 0;
+    bool initialized = false;
 
     // Statistics
     int stepCount = 0;
@@ -78,7 +79,9 @@ class Node {
         this->nextNode = node;
     }
 
-    virtual void Init() { }
+    virtual void Init(int rowGroupIndex) {        
+        done = false;
+    }
 
     virtual void UpdateColumnMap(Frame * frame) {
         //std::cout << "UpdateColumnMap " << name  << std::endl;
@@ -119,6 +122,7 @@ class Node {
         framePool.pop();
         framePoolMutex.unlock();
         //std::cout << "Pop frame  " << frame <<  " Node " << name << std::endl;
+        frame->lastFrame = false;
         return frame;           
     }
 
@@ -145,16 +149,12 @@ class Node {
 
 class InputNode : public Node {
     public:
-    std::vector<int> columnMap;
-    std::shared_ptr<arrow::io::HadoopFileSystem> fs;
+    std::vector<int> columnMap;    
     static std::map< int, std::shared_ptr<arrow::io::HadoopFileSystem> > hadoopFileSystemMap;
     static std::mutex inputFileMutex;
-#ifdef LEGACY_HDFS    
-    std::shared_ptr<arrow::io::HdfsReadableFile> inputFile;
-#else
+
     std::shared_ptr<ReadableFile> inputFile;
     static std::map< std::string, std::shared_ptr<ReadableFile> > inputFileMap;
-#endif
 
     std::shared_ptr<parquet::FileMetaData> fileMetaData;
     static std::map< std::string, std::shared_ptr<parquet::FileMetaData> > fileMetaDataMap;
@@ -165,7 +165,8 @@ class InputNode : public Node {
 
     int rowCount = 0; // How many rows we processed
     int numRows = 0;  // Total number of rows 
-    int columnCount = 0;    
+    int columnCount = 0;
+    int rowGroupCount = 0;
     std::shared_ptr<parquet::ColumnReader> * columnReaders;
     
     Column::DataType * columnTypes;
@@ -173,7 +174,7 @@ class InputNode : public Node {
     InputNode(Poco::JSON::Object::Ptr pObject, DikeProcessorConfig & dikeProcessorConfig, DikeIO * output);
     virtual ~InputNode();
 
-    virtual void Init() override;
+    virtual void Init(int rowGroupIndex) override;
     virtual bool Step() override;
 };
 
@@ -201,11 +202,20 @@ class ProjectionNode : public Node {
 
 class OutputNode : public Node {
     public:
+    enum {
+        HEADER_LEN = 4*sizeof(int)
+    };
     bool compressionEnabled = false;
+
+    uint64_t schema[128]; // Schema and column count to be reported at Init() time
+    uint32_t nCol = 0;
 
     DikeIO * output = NULL;
     uint8_t * lenBuffer = NULL;
+    uint8_t * resultLenBuffer = NULL;
+
     uint8_t * dataBuffer = NULL;
+    uint8_t * resultDataBuffer = NULL;
 
     uint8_t * compressedBuffer = NULL;
     int64_t compressedLen = 0;
@@ -235,21 +245,24 @@ class OutputNode : public Node {
             if(compressionType.compare("ZSTD") == 0){
                 compressionEnabled = true;
                 compressionLevel = pObject->getValue<int>("CompressionLevel");
-                compressedBufferLen = ZSTD_compressBound(Column::MAX_TEXT_SIZE);
+                compressedBufferLen = ZSTD_compressBound(Column::MAX_TEXT_SIZE) + HEADER_LEN; 
                 compressedBuffer = new uint8_t [compressedBufferLen]; // Max text lenght + compression header                
             }
         }
 
-        lenBuffer = new uint8_t [Column::MAX_SIZE];
-        dataBuffer = new uint8_t [Column::MAX_TEXT_SIZE]; // Max text lenght        
+        resultLenBuffer = new uint8_t [Column::MAX_SIZE + HEADER_LEN];
+        lenBuffer = resultLenBuffer + HEADER_LEN;
+
+        resultDataBuffer = new uint8_t [Column::MAX_TEXT_SIZE + HEADER_LEN];  // Max text lenght
+        dataBuffer = resultDataBuffer + HEADER_LEN;        
     }
 
     virtual ~OutputNode(){
-        if(lenBuffer){
-            delete [] lenBuffer;
+        if(resultLenBuffer){
+            delete [] resultLenBuffer;
         }
-        if(dataBuffer){
-            delete [] dataBuffer;
+        if(resultDataBuffer){
+            delete [] resultDataBuffer;
         }
         if(compressedBuffer){
             delete [] compressedBuffer;
@@ -258,12 +271,14 @@ class OutputNode : public Node {
             ZSTD_freeCCtx(ZSTD_Context[i]);
         }
     }
-
+    
+    virtual void Init(int rowGroupIndex) override;
     virtual void UpdateColumnMap(Frame * frame) override;
     virtual bool Step() override;
-    void CompressZlib(uint8_t * data, uint32_t len, bool is_binary);
-    void CompressLZ4(uint8_t * data, uint32_t len);
-    void CompressZSTD(int id, uint8_t * data, uint32_t len);
+    //void CompressZlib(uint8_t * data, uint32_t len, bool is_binary);
+    //void CompressLZ4(uint8_t * data, uint32_t len);
+    //void CompressZSTD(int id, uint8_t * data, uint32_t len);
+    void CompressZSTD(int id, uint8_t * data_in, uint32_t len, uint8_t * data_out);
 
     void TranslateBE64(void * in_data, uint8_t * out_data, uint32_t len);
     void Send(void * data, uint32_t len, bool is_binary);

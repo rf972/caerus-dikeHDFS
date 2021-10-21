@@ -39,7 +39,7 @@
     <property>
         <!-- Max concurent requests -->
         <name>dike.storage.max.requests</name>
-        <value>4</value>
+        <value>64</value>
     </property> 
 
     </dike>

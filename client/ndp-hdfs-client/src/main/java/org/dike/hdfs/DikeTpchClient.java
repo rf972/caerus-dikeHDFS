@@ -159,7 +159,7 @@ public class DikeTpchClient
 
            case 14:
                 fname = "/tpch-test-parquet/lineitem.parquet";
-                param = getQ14Param(fname);
+                param = getQ14Param(fname, Integer.parseInt(args[1]));
             break;
 
             case 21:
@@ -187,6 +187,10 @@ public class DikeTpchClient
         xmlw.writeCharacters("Lambda");
         xmlw.writeEndElement(); // Name
         
+        xmlw.writeStartElement("ID");
+        xmlw.writeCharacters("Super unique ID");
+        xmlw.writeEndElement(); // ID
+
         xmlw.writeStartElement("Configuration");
 
         xmlw.writeStartElement("DAG");
@@ -1007,7 +1011,7 @@ public static String getQ12Param(String name)
      {"Name":"TPC-H Test Q14","Type":"_PROJECTION","ProjectionArray":["l_partkey","l_extendedprice","l_discount"]},
      {"Name":"OutputNode","Type":"_OUTPUT","CompressionType":"None","CompressionLevel":"-100"}]}
     */
-    public static String getQ14Param(String name)    
+    public static String getQ14Param(String name, int rgIndex)    
     {
         try {
         XMLOutputFactory xmlof = XMLOutputFactory.newInstance();
@@ -1020,6 +1024,10 @@ public static String getQ12Param(String name)
         xmlw.writeCharacters("Lambda");
         xmlw.writeEndElement(); // Name
         
+        xmlw.writeStartElement("ID");
+        xmlw.writeCharacters("Super unique ID");
+        xmlw.writeEndElement(); // ID
+                
         xmlw.writeStartElement("Configuration");
 
         xmlw.writeStartElement("DAG");
@@ -1109,7 +1117,8 @@ public static String getQ12Param(String name)
         xmlw.writeEndElement(); // DAG
 
         xmlw.writeStartElement("RowGroupIndex");
-        xmlw.writeCharacters("100");
+        //xmlw.writeCharacters("100"); //rgIndex
+        xmlw.writeCharacters(String.valueOf(rgIndex));
         xmlw.writeEndElement(); // RowGroupIndex
 
         xmlw.writeStartElement("LastAccessTime");
@@ -1284,8 +1293,11 @@ public static String getQ12Param(String name)
             int dataTypes[];
             long nCols = dis.readLong();
             System.out.println("nCols : " + String.valueOf(nCols));
+            if (nCols > 32) {
+                return;
+            }
             dataTypes = new int [(int)nCols];
-            for( int i = 0 ; i < nCols; i++){
+            for( int i = 0 ; i < nCols && i < 32; i++){
                 dataTypes[i] = (int)dis.readLong();
                 System.out.println(String.valueOf(i) + " : " + String.valueOf(dataTypes[i]));
             }
@@ -1539,10 +1551,14 @@ public static String getQ12Param(String name)
 // Q21
 // java -classpath target/ndp-hdfs-client-1.0-jar-with-dependencies.jar org.dike.hdfs.DikeTpchClient 21
 
-
+ 
 
 // export DIKE_TRACE_RECORD_MAX=36865
 // export DIKE_COMPRESSION=ZSTD
 // export DIKE_COMPRESSION_LEVEL=3
 // export DIKE_PATH=DP3
 
+/*
+for i in $(seq 0 2) ; do ( java -classpath target/ndp-hdfs-client-1.0-jar-with-dependencies.jar org.dike.hdfs.DikeTpchClient 14 $i & ); done
+
+*/
