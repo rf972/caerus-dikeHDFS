@@ -296,6 +296,12 @@ public:
                 dikeSQLConfig["dike.node.type"] = dikeConfig["dike.node.type"];
             }
 
+            if(dikeConfig.count("dike.storage.processor.workers") > 0) {
+                dikeSQLConfig["dike.storage.processor.workers"] = dikeConfig["dike.storage.processor.workers"];
+            } else {
+                dikeSQLConfig["dike.storage.processor.workers"] = std::to_string(1);
+            }
+
             Poco::URI uri = Poco::URI(req.getURI());
             Poco::URI::QueryParameters uriParams = uri.getQueryParameters();
             dikeSQLConfig["BlockOffset"] = "0";
