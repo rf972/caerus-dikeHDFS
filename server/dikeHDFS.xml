@@ -48,5 +48,11 @@
         <value>2</value>
     </property> 
 
+    <property>
+        <!-- Concurent ReadAhead loopback will simply report results of first partition -->
+        <name>dike.storage.processor.loopback</name>
+        <value>1</value>
+    </property> 
+
     </dike>
 </configuration>

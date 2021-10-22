@@ -19,10 +19,11 @@
 
 using namespace lambda;
 
+static LambdaBufferPool lambdaBufferPool;
+
 class LambdaResultOutput : public DikeIO {
     public:
-    LambdaResult * result = NULL;
-    static LambdaBufferPool lambdaBufferPool;
+    LambdaResult * result = NULL;    
 
     LambdaResultOutput(LambdaResult * result) {
         this->result = result;
@@ -67,6 +68,24 @@ void LambdaProcessorReadAhead::Init(DikeProcessorConfig & dikeProcessorConfig, D
 int LambdaProcessorReadAhead::Run(DikeProcessorConfig & dikeProcessorConfig, DikeIO * output)
 {    
     int rowGroupIndex = std::stoi(dikeProcessorConfig["Configuration.RowGroupIndex"]);
+
+    int loopback =  std::stoi(dikeProcessorConfig["dike.storage.processor.loopback"]);
+
+    if(loopback == 1) {
+        LambdaResult * res = lambdaResultVector->resultVector[0];
+        sem_wait(&res->sem); // This will guarantee that results are available
+        // Send results to output        
+        for(int i = 0; i < res->buffers.size(); i++){
+            output->write((const char * )res->buffers[i]->ptr, res->buffers[i]->len);
+        }
+        // Note that we do not free results
+        // We will raise semaphore for to have it next time
+        for(int i = 0; i < 4; i++){
+            sem_post(&res->sem); // Spark can use as many cores as he wants
+        }
+        return 0;        
+    }
+    
     //std::string resp("LambdaProcessorReadAhead::Run [" + dikeProcessorConfig["ID"] + "]");
     //std::cout << resp << " " << rowGroupIndex << std::endl;    
     
@@ -82,7 +101,7 @@ int LambdaProcessorReadAhead::Run(DikeProcessorConfig & dikeProcessorConfig, Dik
             output->write((const char * )res->buffers[i]->ptr, res->buffers[i]->len);
         }
         //std::cout << "LambdaProcessorReadAhead::Run Sending for " << rowGroupIndex << " completed " << std::endl;
-        LambdaResultOutput::lambdaBufferPool.Free(res->buffers);
+        lambdaBufferPool.Free(res->buffers);
     } else {
         lambdaResultVector->lock.unlock();
     }
@@ -135,4 +154,7 @@ void LambdaProcessorReadAhead::Worker(LambdaProcessor * lambdaProcessor)
     //std::cout << "LambdaProcessorReadAhead::Worker Done" << std::endl;
 }
 
-LambdaBufferPool LambdaResultOutput::lambdaBufferPool;
+LambdaResult::~LambdaResult(){
+    sem_destroy(&sem);
+    lambdaBufferPool.Free(buffers);
+}
