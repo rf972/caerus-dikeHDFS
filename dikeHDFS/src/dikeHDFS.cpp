@@ -302,6 +302,12 @@ public:
                 dikeSQLConfig["dike.storage.processor.workers"] = std::to_string(1);
             }
 
+            if(dikeConfig.count("dike.storage.processor.loopback") > 0) {
+                dikeSQLConfig["dike.storage.processor.loopback"] = dikeConfig["dike.storage.processor.loopback"];
+            } else {
+                dikeSQLConfig["dike.storage.processor.loopback"] = std::to_string(0); // Disabled by default
+            }
+            
             Poco::URI uri = Poco::URI(req.getURI());
             Poco::URI::QueryParameters uriParams = uri.getQueryParameters();
             dikeSQLConfig["BlockOffset"] = "0";

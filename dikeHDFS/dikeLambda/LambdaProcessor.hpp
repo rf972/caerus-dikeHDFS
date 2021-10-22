@@ -92,9 +92,7 @@ class LambdaResult {
         this->state = state;
         sem_init(&sem, 0, 0);
     }
-    ~LambdaResult(){
-        sem_destroy(&sem);
-    }
+    ~LambdaResult();
 };
 
 class LambdaResultVector {
