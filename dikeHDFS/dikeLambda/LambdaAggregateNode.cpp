@@ -219,6 +219,8 @@ void AggregateNode::AggregateGroup(uint64_t group_index, Frame * inFrame, int ro
 
 void AggregateNode::Init(int rowGroupIndex)
 {
+    done = false;
+    
     groupingHashMap.clear();
     groupCount = 0;
     
@@ -267,7 +269,9 @@ bool AggregateNode::Step()
 
     if(inFrame->lastFrame){        
         done = true;
-        std::cout << "aggregateCount " << aggregateCount << std::endl;
+        if(verbose){
+            std::cout << "aggregateCount " << aggregateCount << std::endl;
+        }
         for(int i = 0; i < frameArray.size(); i++){
             if(i == frameArray.size() - 1) { // Our last frame
                 frameArray[i]->lastFrame = true;
