@@ -8,7 +8,8 @@ add_library(libdikeLambda STATIC
                                  LambdaProcessorReadAhead.cpp 
                                  LambdaNode.cpp 
                                  LambdaFrame.cpp
-                                 LambdaFilterNode.cpp)
+                                 LambdaFilterNode.cpp
+                                 LambdaAggregateNode.cpp)
 
 include_directories(
         . 

@@ -126,6 +126,11 @@ class Node {
         return frame;           
     }
 
+    void clearFramePool() { // Be carefull here. Make sure you know what you are doing
+        while(sem_trywait(&framePoolSem) == 0){}
+        while(!framePool.empty()) {framePool.pop();}
+    }
+
     void freeFrame(Frame * frame) {
         //std::cout << "Push frame  " << frame <<  " Node " << name << std::endl;
         framePoolMutex.lock();
