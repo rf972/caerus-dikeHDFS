@@ -12,6 +12,7 @@
 
 #include "LambdaNode.hpp"
 #include "LambdaFilterNode.hpp"
+#include "LambdaAggregateNode.hpp"
 
 using namespace lambda;
 
@@ -449,6 +450,9 @@ Node * lambda::CreateNode(Poco::JSON::Object::Ptr pObject, DikeProcessorConfig &
     if(typeStr.compare("_FILTER") == 0){
         return new FilterNode(pObject, dikeProcessorConfig, output);
     }
+    if(typeStr.compare("_AGGREGATE") == 0){
+        return new AggregateNode(pObject, dikeProcessorConfig, output);
+    }    
     if(typeStr.compare("_PROJECTION") == 0){
         return new ProjectionNode(pObject, dikeProcessorConfig, output);
     }

@@ -119,22 +119,6 @@ class Column {
         }
     }
 
-#if 0
-    void fillTextBuffer(int offset, int size) {
-        if(offset == 0) {
-            textBufferPtr = textBuffer;
-        }
-
-        for (int i = offset; i < offset + size; i++){
-            for(int j = 0; j < ba_values[i].len; j++){
-                textBufferPtr[j] =  ba_values[i].ptr[j];                
-            }
-            ba_values[i].ptr = textBufferPtr;
-            textBufferPtr += ba_values[i].len;
-        }
-    }
-#endif
-
     ~Column() {
         if(!initialized){
             return;
@@ -168,6 +152,37 @@ class Column {
         case BYTE_ARRAY:
         _ApplyFilter(ba_values, filter);        
         break;
+        }
+    }
+
+    uint64_t GetHash(int row) {        
+        uint64_t hash = 0;
+        switch(data_type) {
+        case INT64:
+            hash = std::hash<double>{}(*(double *)&int64_values[row]);
+            break;
+        case DOUBLE:
+            hash = std::hash<double>{}(double_values[row]);
+            break;
+        case BYTE_ARRAY:
+            hash = std::hash<std::string>{}(string_values[row]);            
+            break;
+        }
+        return hash;
+    }
+
+    void CopyRow(uint64_t dst_row, Column * src_col, uint64_t src_row) {
+        switch(data_type) {
+        case INT64:
+            int64_values[dst_row] = src_col->int64_values[src_row];
+            break;
+        case DOUBLE:
+            double_values[dst_row] = src_col->double_values[src_row];
+            break;
+        case BYTE_ARRAY:            
+            ba_values[dst_row] = src_col->ba_values[src_row];
+            UpdateStringValues(dst_row, 1); // This will copy data and update ba->ptr
+            break;
         }
     }
 
