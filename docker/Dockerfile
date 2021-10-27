@@ -134,8 +134,8 @@ RUN curl -L https://downloads.apache.org/hadoop/common/hadoop-${ENV_HADOOP_VERSI
 
 RUN mkdir -p /opt/orc
 #RUN curl -L https://downloads.apache.org/orc/orc-1.6.9/orc-1.6.9.tar.gz | tar -xz -C /opt/orc
-RUN curl -L https://downloads.apache.org/orc/orc-1.6.10/orc-1.6.10.tar.gz | tar -xz -C /opt/orc \
-    && cd /opt/orc/orc-1.6.10 \
+RUN curl -L https://downloads.apache.org/orc/orc-1.6.11/orc-1.6.11.tar.gz | tar -xz -C /opt/orc \
+    && cd /opt/orc/orc-1.6.11 \
     && mkdir build \
     && cd build \
     && cmake .. -DBUILD_JAVA=OFF \
