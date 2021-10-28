@@ -53,11 +53,13 @@ AggregateNode::AggregateNode(Poco::JSON::Object::Ptr pObject, DikeProcessorConfi
 
 AggregateNode::~AggregateNode()
 {
+#if 0    
     for ( auto it = groupingHashMap.begin(); it != groupingHashMap.end(); ++it ) {
          if(it->second.size() > 1) {
             std::cout << "Warning !!! Hash collision detected ..." << std::endl;
         }
     }
+#endif    
 }
 
 int AggregateNode::StrToOp(std::string & str) 
@@ -146,6 +148,12 @@ void AggregateNode::UpdateColumnMap(Frame * inFrame)
 uint64_t AggregateNode::GetRowHash(Frame * frame, int row)
 {
     uint64_t hash = 0;
+    if(groupingMapSize == 1){
+        int col = groupingMap[0];
+        hash = frame->columns[col]->GetHash(row);
+        return hash;
+    }
+
     for(int i = 0; i < groupingMapSize; i++){
         int col = groupingMap[i];
         hash ^= frame->columns[col]->GetHash(row);
@@ -252,15 +260,16 @@ bool AggregateNode::Step()
     // Iterate over all rows in frame
     for(int row = 0; row < inFrame->columns[groupingMap[0]]->row_count ; row++) {
         // Calculate row hash
-        uint64_t hash = GetRowHash(inFrame, row);        
+        uint64_t hash = GetRowHash(inFrame, row);
+        //uint64_t hash = inFrame->columns[groupingMap[0]]->int64_values[row];
         // Check if this hash present in our map
         auto group = groupingHashMap.find(hash);
         if(group != groupingHashMap.end()) { // We found group for our hash
             aggregateCount++;
-            AggregateGroup(group->second[0], inFrame, row);
+            AggregateGroup(group->second, inFrame, row);
         } else { // This hash does not exists
             int group_index = AddGroup(inFrame, row);
-            groupingHashMap[hash].push_back(group_index);
+            groupingHashMap[hash] = group_index;
             //int frame_index = group_index / Column::config::MAX_SIZE;
             //int row_index = group_index - (frame_index * Column::config::MAX_SIZE);
             //std::cout << "Adding " << group_index << " : " << frameArray[frame_index]->columns[0]->int64_values[row_index] << std::endl;

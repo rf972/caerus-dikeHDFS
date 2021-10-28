@@ -68,6 +68,7 @@ DOCKER_RUN="docker run --rm=true ${DOCKER_IT} \
   -v ${ROOT_DIR}/etc/hadoop/hdfs-site.xml:${HADOOP_HOME}/etc/hadoop/hdfs-site.xml \
   -v ${ROOT_DIR}/scripts/start-hadoop.sh:${HADOOP_HOME}/bin/start-hadoop.sh \
   -v ${ROOT_DIR}/server:/server \
+  -v ${ROOT_DIR}/external:${DOCKER_HOME_DIR}/dikeHDFS/external \
   -w ${HADOOP_HOME} \
   -e HADOOP_HOME=${HADOOP_HOME} \
   -e HADOOP_CONF_DIR=${HADOOP_HOME}/etc/hadoop \
