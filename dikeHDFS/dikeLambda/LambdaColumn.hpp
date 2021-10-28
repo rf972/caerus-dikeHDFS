@@ -159,7 +159,8 @@ class Column {
         uint64_t hash = 0;
         switch(data_type) {
         case INT64:
-            hash = std::hash<double>{}(*(double *)&int64_values[row]);
+            //hash = std::hash<double>{}(*(double *)&int64_values[row]);
+            hash = int64_values[row];
             break;
         case DOUBLE:
             hash = std::hash<double>{}(double_values[row]);

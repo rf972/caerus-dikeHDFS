@@ -30,7 +30,7 @@ class AggregateNode : public Node {
     std::vector<int> aggregateOP;
 
     std::vector<Frame *> frameArray;
-    std::unordered_map< uint64_t, std::vector<int> > groupingHashMap;
+    std::unordered_map< uint64_t, int > groupingHashMap;
 
     int groupCount = 0; // Number of valid groups
 
