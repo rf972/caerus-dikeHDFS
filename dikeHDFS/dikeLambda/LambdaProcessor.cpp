@@ -110,3 +110,5 @@ void LambdaProcessor::Finish()
         delete nodeVector[i];
     }
 }
+
+LambdaBufferPool lambdaBufferPool;

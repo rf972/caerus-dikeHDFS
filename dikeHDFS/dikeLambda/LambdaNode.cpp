@@ -102,7 +102,7 @@ void InputNode::Init(int rowGroupIndex)
             Column * col = new Column(this, i, name,  columnTypes[i]); 
             frame->Add(col);
         }    
-
+        frame->totalRowGroups = rowGroupCount;
         // This will send update request down to graph
         UpdateColumnMap(frame);
         
@@ -210,10 +210,6 @@ InputNode::~InputNode()
 
 void ProjectionNode::UpdateColumnMap(Frame * inFrame) 
 {
-    if(initialized) {
-        return;
-    }
-
     for(int i = 0; i < columnCount; i++){
         for(int j = 0; j < inFrame->columns.size(); j++){
             if(projection[i].compare(inFrame->columns[j]->name) == 0){
@@ -222,6 +218,7 @@ void ProjectionNode::UpdateColumnMap(Frame * inFrame)
             }
         }
     }
+
     Frame * outFrame = new Frame(this);
     outFrame->columns.resize(columnCount);
     for(int i = 0; i < columnCount; i++) {
@@ -239,8 +236,7 @@ void ProjectionNode::UpdateColumnMap(Frame * inFrame)
             outFrame->columns[i] = inFrame->columns[columnMap[i]];
         }
         freeFrame(outFrame); // this will put this frame on framePool
-    }
-    initialized = true;
+    }    
 }
 
 bool ProjectionNode::Step()

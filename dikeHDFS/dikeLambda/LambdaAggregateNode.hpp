@@ -17,7 +17,9 @@ class AggregateNode : public Node {
         _COUNT = 3, 
         _SUM = 4, 
     };
-    public:    
+    public:
+    int totalRowGroups = 0; // Total row groups in file
+    int rowGroupCounter = 0; // Barrier node will have to count "done" frames
     std::vector<std::string> groupingColumns;
     std::vector<int> groupingMap;
     int groupingMapSize = 0;

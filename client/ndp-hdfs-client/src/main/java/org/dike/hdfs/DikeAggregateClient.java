@@ -138,10 +138,15 @@ public class DikeAggregateClient
 
                 String clearAllParam = ReadParam.GetReadParam(fname, "LambdaClearAll", 0, "");
                 String readAheadParam = ReadParam.GetReadParam(fname, "LambdaReadAhead", 0, dag);
+                String readTotalParam = ReadParam.GetReadParam(fname, "LambdaTotal", 0, dag);
                 String getPartitionsParam = ReadParam.GetReadParam(fname, "LambdaInfo", 0, "");
 
                 InitReadAheadProcessor(dikehdfsPath, fname, conf, clearAllParam);
-                InitReadAheadProcessor(dikehdfsPath, fname, conf, readAheadParam);
+                if(args.length < 1){
+                    return;
+                }
+                //InitReadAheadProcessor(dikehdfsPath, fname, conf, readAheadParam);
+                InitReadAheadProcessor(dikehdfsPath, fname, conf, readTotalParam);
                 InitReadAheadProcessor(dikehdfsPath, fname, conf, getPartitionsParam);
                 try {                        
                     Thread.sleep(500);
@@ -156,7 +161,7 @@ public class DikeAggregateClient
                     }   
                     System.out.println("===");
                     String readParam = ReadParam.GetReadParam(fname, "Lambda", i, dag);
-                    TpchTest(dikehdfsPath, fname, conf, readParam);
+                    //TpchTest(dikehdfsPath, fname, conf, readParam);
                 }
                 
                 break;
@@ -172,9 +177,15 @@ public class DikeAggregateClient
         out = "{\"Name\":\"DAG Projection\",\"NodeArray\":[";
         out += "{\"Name\":\"InputNode\",\"Type\":\"_INPUT\",\"File\":\"ndphdfs://dikehdfs/tpch-test-parquet//lineitem.parquet\"},";
         out += "{\"Type\":\"_FILTER\",\"FilterArray\":[{\"Expression\":\"IsNotNull\",\"Arg\":{\"ColumnReference\":\"l_orderkey\"}}],\"Name\":\"Filter Q18\"},";
+
         out += "{\"Name\":\"Aggregate Q18\", \"Type\":\"_AGGREGATE\",";
         out += "\"GroupingArray\":[{\"ColumnReference\":\"l_orderkey\"}],";
-        out += "\"AggregateArray\":[{\"Aggregate\":\"sum\",\"Expression\":{\"ColumnReference\":\"l_quantity\"}}]},";        
+        out += "\"AggregateArray\":[{\"Aggregate\":\"sum\",\"Expression\":{\"ColumnReference\":\"l_quantity\"}}]},";
+
+        out += "{\"Name\":\"Aggregate Q18 barrier\", \"Type\":\"_AGGREGATE\", \"Barrier\":\"1\",";
+        out += "\"GroupingArray\":[{\"ColumnReference\":\"l_orderkey\"}],";
+        out += "\"AggregateArray\":[{\"Aggregate\":\"sum\",\"Expression\":{\"ColumnReference\":\"sum(l_quantity)\"}}]},";
+       
         out += "{\"Name\":\"OutputNode\",\"Type\":\"_OUTPUT\",\"CompressionType\":\"ZSTD\",\"CompressionLevel\":\"2\"}]}";        
 
         return out;        
@@ -290,7 +301,7 @@ public class DikeAggregateClient
 // mvn package -o
 // Q18
 // java -classpath target/ndp-hdfs-client-1.0-jar-with-dependencies.jar org.dike.hdfs.DikeAggregateClient 18
-// java -classpath target/ndp-hdfs-client-1.0-jar-with-dependencies.jar org.dike.hdfs.DikeAggregateClient 18 2
+// java -classpath target/ndp-hdfs-client-1.0-jar-with-dependencies.jar org.dike.hdfs.DikeAggregateClient 18 1
 
 // export DIKE_TRACE_RECORD_MAX=36865
 // export DIKE_COMPRESSION=ZSTD

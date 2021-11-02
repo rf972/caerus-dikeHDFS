@@ -47,6 +47,7 @@ class Node {
     bool done = false;
     int verbose = 0;
     bool initialized = false;
+    int barrier = 0; // This node will aggregate all branches from above
 
     // Statistics
     int stepCount = 0;
@@ -58,8 +59,11 @@ class Node {
         name = pObject->getValue<std::string>("Name");
         std::string typeStr = pObject->getValue<std::string>("Type");        
         verbose = std::stoi(dikeProcessorConfig["system.verbose"]);
+        if(pObject->has("Barrier")) {
+            barrier = std::stoi(pObject->getValue<std::string>("Barrier")); 
+        }
         if(verbose){
-            std::cout << "Node " << name << " type " << typeStr << std::endl;
+            std::cout << "Node " << name << " type " << typeStr << " barrier " << barrier << std::endl;
         }
         sem_init(&frameQueueSem, 0, 0);
         sem_init(&framePoolSem, 0, 0);
@@ -116,6 +120,20 @@ class Node {
         if(framePool.empty()){
             framePoolMutex.unlock();
             std::cout << "Frame pool is empty on  Node " << name << std::endl;
+            return NULL;
+        }
+        Frame * frame = framePool.front();
+        framePool.pop();
+        framePoolMutex.unlock();
+        //std::cout << "Pop frame  " << frame <<  " Node " << name << std::endl;
+        frame->lastFrame = false;
+        return frame;           
+    }
+
+    Frame * tryAllocFrame() {        
+        framePoolMutex.lock();
+        if(framePool.empty()){
+            framePoolMutex.unlock();            
             return NULL;
         }
         Frame * frame = framePool.front();

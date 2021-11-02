@@ -437,14 +437,10 @@ FilterNode::~FilterNode()
 
 void FilterNode::UpdateColumnMap(Frame * inFrame) 
 {
-    if(initialized){
-        return;
-    }
     for(int i = 0; i < filterArray.size(); i++){
         filterArray[i]->UpdateColumnMap(inFrame);
     }
-    Node::UpdateColumnMap(inFrame);
-    initialized = true;
+    Node::UpdateColumnMap(inFrame);    
 }
 
 bool FilterNode::Step()

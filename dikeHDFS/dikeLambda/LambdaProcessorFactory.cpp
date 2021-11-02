@@ -43,17 +43,22 @@ int LambdaProcessorFactory::Run(DikeProcessorConfig & dikeProcessorConfig, DikeI
         LambdaProcessorReadAhead * lambdaProcessorReadAhead = new LambdaProcessorReadAhead;
         lambdaProcessorReadAhead->Init(dikeProcessorConfig, output);
         processorMap[dikeProcessorConfig["ID"]] = lambdaProcessorReadAhead;        
+    } else  if (dikeProcessorConfig["Name"].compare("LambdaTotal") == 0) { // Lambda Whole file processor
+        // Allocate Total
+        LambdaProcessorTotal * lambdaProcessorTotal = new LambdaProcessorTotal;
+        lambdaProcessorTotal->Init(dikeProcessorConfig, output);
+        processorMap[dikeProcessorConfig["ID"]] = lambdaProcessorTotal;
     } else   if (dikeProcessorConfig["Name"].compare("LambdaInfo") == 0) { // Lambda Info request
         std::string resp;
         if(processorMap.count(dikeProcessorConfig["ID"]) > 0) {
-            LambdaProcessorReadAhead * lambdaProcessorReadAhead = processorMap[dikeProcessorConfig["ID"]];            
-            resp = "PartitionCount = " + std::to_string(lambdaProcessorReadAhead->rowGroupCount) + "\n";
+            LambdaProcessor * lambdaProcessor = processorMap[dikeProcessorConfig["ID"]];            
+            resp = "PartitionCount = " + std::to_string(lambdaProcessor->totalResults) + "\n";
         } else {
             resp = "Uknown ID " + dikeProcessorConfig["ID"];
         }
         output->write(resp.c_str(), resp.length());
     } else  if (dikeProcessorConfig["Name"].compare("LambdaClearAll") == 0) { // Lambda Clear All 
-        for (std::pair<std::string, LambdaProcessorReadAhead *> it : processorMap) {
+        for (auto it : processorMap) {
             //std::cout << "Deleting " << it.first << std::endl;
             delete it.second;
         }
@@ -64,4 +69,4 @@ int LambdaProcessorFactory::Run(DikeProcessorConfig & dikeProcessorConfig, DikeI
     return 0;
 }
 
-std::map<std::string, LambdaProcessorReadAhead *> LambdaProcessorFactory::processorMap;
+std::map<std::string, LambdaProcessor *> LambdaProcessorFactory::processorMap;

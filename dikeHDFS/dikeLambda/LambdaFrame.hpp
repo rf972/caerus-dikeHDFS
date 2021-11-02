@@ -18,6 +18,8 @@ class Frame {
     int refCount;
     Frame * parentFrame = NULL;
     bool lastFrame = false;
+    
+    int totalRowGroups = 0;
 
     Frame(Node * ownerNode);
     ~Frame();
