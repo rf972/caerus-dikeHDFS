@@ -58,6 +58,8 @@ if [ "$RUNNING_MODE" = "interactive" ]; then
 fi
 
 DOCKER_RUN="docker run --rm=true ${DOCKER_IT} \
+  --init \
+  --ulimit core=-1 \
   -v ${ROOT_DIR}/data:/data \
   -v "${ROOT_DIR}/dikeHDFS:${DOCKER_HOME_DIR}/dikeHDFS" \
   -v ${ROOT_DIR}/volume/namenode:/opt/volume/namenode \

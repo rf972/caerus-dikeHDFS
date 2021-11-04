@@ -34,6 +34,10 @@ class AggregateNode : public Node {
     std::vector<Frame *> frameArray;
     std::unordered_map< uint64_t, int > groupingHashMap;
 
+    // This is temporary hack to evaluate min / max approach
+    uint64_t groupingHashMapMin = std::numeric_limits<uint64_t>::max();
+    uint64_t groupingHashMapMax = 0;
+
     int groupCount = 0; // Number of valid groups
 
     // Stats

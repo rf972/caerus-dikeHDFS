@@ -55,6 +55,12 @@ void LambdaProcessorTotal::CreateGraphs(DikeProcessorConfig & dikeProcessorConfi
             nodeTree[n][i]->Connect(nodeTree[0][i+1]);
         }
     }
+
+    // UpdateColumnMap
+    for(int n = 0; n < nWorkers; n++){
+        nodeTree[n][0]->UpdateColumnMap(NULL);
+    }
+
 }
 
 void LambdaProcessorTotal::Init(DikeProcessorConfig & dikeProcessorConfig, DikeIO * output)
@@ -140,8 +146,7 @@ int LambdaProcessorTotal::Run(DikeProcessorConfig & dikeProcessorConfig, DikeIO 
 }
 
 void LambdaProcessorTotal::Worker(int workerID)
-{   
-    LambdaResultOutput output = LambdaResultOutput(lambdaResultVector->resultVector[0]);
+{       
     int result_index;
 
     std::vector<Node *> branch;
@@ -222,7 +227,7 @@ void LambdaProcessorTotal::TrunkWorker()
         step_done = trunk[0]->Step();
         sem_post(&lambdaResultVector->sem);
     }
-    
+
     std::cout << "LambdaProcessorTotal::TrunkWorker " << " Barrier Done " << std::endl;
 
     // Run the rest of the graph

@@ -67,6 +67,7 @@ class Node {
         }
         sem_init(&frameQueueSem, 0, 0);
         sem_init(&framePoolSem, 0, 0);
+        initialized = false;
     }
 
     virtual ~Node() {
@@ -85,7 +86,7 @@ class Node {
 
     virtual void Init(int rowGroupIndex) {        
         done = false;
-    }
+    }    
 
     virtual void UpdateColumnMap(Frame * frame) {
         //std::cout << "UpdateColumnMap " << name  << std::endl;
@@ -199,6 +200,8 @@ class InputNode : public Node {
 
     virtual void Init(int rowGroupIndex) override;
     virtual bool Step() override;
+
+    virtual void UpdateColumnMap(Frame * _unused) override; // This will initiate UpdateColumnMap sequence
 };
 
 class ProjectionNode : public Node {
@@ -243,7 +246,7 @@ class OutputNode : public Node {
     uint8_t * compressedBuffer = NULL;
     int64_t compressedLen = 0;
     uint32_t compressedBufferLen = Column::MAX_TEXT_SIZE + 1024;
-    uint8_t lz4_state_memory [32<<10] __attribute__((aligned(128))); // see (int LZ4_sizeofState(void);)
+    //uint8_t lz4_state_memory [32<<10] __attribute__((aligned(128))); // see (int LZ4_sizeofState(void);)
     std::vector<ZSTD_CCtx *> ZSTD_Context;
     int compressionLevel = 3;
     int dikeNodeType = 0;
@@ -252,6 +255,7 @@ class OutputNode : public Node {
         : Node(pObject, dikeProcessorConfig, output) 
     {        
         this->output = output;
+        initialized = false;
 
         if(dikeProcessorConfig.count("dike.node.type") > 0) {            
             dikeNodeType = std::stoi(dikeProcessorConfig["dike.node.type"]);

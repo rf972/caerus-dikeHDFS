@@ -127,7 +127,7 @@ public class DikeAggregateClient
 
         switch(Integer.parseInt(testNumber)) {
            case 18:
-                String fname = "/tpch-test-parquet/lineitem.parquet";
+                String fname = "/tpch-test-parquet/lineitem.parquet";                
                 String dag = getQ18DAG(fname);
 
                 if(args.length < 2) {
@@ -142,7 +142,7 @@ public class DikeAggregateClient
                 String getPartitionsParam = ReadParam.GetReadParam(fname, "LambdaInfo", 0, "");
 
                 InitReadAheadProcessor(dikehdfsPath, fname, conf, clearAllParam);
-                if(args.length < 1){
+                if(args[1].equals("ClearAll")){
                     return;
                 }
                 //InitReadAheadProcessor(dikehdfsPath, fname, conf, readAheadParam);
@@ -161,7 +161,7 @@ public class DikeAggregateClient
                     }   
                     System.out.println("===");
                     String readParam = ReadParam.GetReadParam(fname, "Lambda", i, dag);
-                    //TpchTest(dikehdfsPath, fname, conf, readParam);
+                    TpchTest(dikehdfsPath, fname, conf, readParam);
                 }
                 
                 break;

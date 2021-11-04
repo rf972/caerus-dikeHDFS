@@ -75,7 +75,8 @@ class LambdaBufferPool {
     void Free(std::vector<LambdaBuffer *> & buffers) {
         lock.lock();
         for(int i = 0; i < buffers.size(); i++){            
-            queue.push(buffers[i]);
+            //queue.push(buffers[i]);
+            delete buffers[i];
             buffers[i] = NULL;
         }
         lock.unlock();
@@ -136,6 +137,7 @@ class LambdaProcessor{
     int rowGroupCount = 0;
     int totalResults = 0;
     LambdaProcessor(){}
+    virtual ~LambdaProcessor(){}
 
     virtual void Init(DikeProcessorConfig & dikeProcessorConfig, DikeIO * output);
     virtual int Run(int rowGroupIndex, DikeIO * output);
@@ -150,7 +152,7 @@ class LambdaProcessorReadAhead : public LambdaProcessor{
     bool done = false;
 
     LambdaProcessorReadAhead(){};
-    ~LambdaProcessorReadAhead() {
+    virtual ~LambdaProcessorReadAhead() {
         //std::cout << "~LambdaProcessorReadAhead()" << std::endl;
         done = true;
         // Do it for each worker
@@ -182,7 +184,7 @@ class LambdaProcessorTotal : public LambdaProcessor{
     std::vector<std::vector<lambda::Node *>> nodeTree;
 
     LambdaProcessorTotal(){};
-    ~LambdaProcessorTotal();
+    virtual ~LambdaProcessorTotal();
 
     virtual void Init(DikeProcessorConfig & dikeProcessorConfig, DikeIO * output) override;
     virtual int Run(DikeProcessorConfig & dikeProcessorConfig, DikeIO * output) override;

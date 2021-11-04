@@ -193,6 +193,13 @@ int AggregateNode::AddGroup(Frame * inFrame, int row)
     }
 
     // Update all relevant counters
+    if(inFrame->columns[groupingMap[0]]->int64_values[row] < groupingHashMapMin) {
+        groupingHashMapMin = inFrame->columns[groupingMap[0]]->int64_values[row];
+    }
+    if(inFrame->columns[groupingMap[0]]->int64_values[row] > groupingHashMapMax){
+        groupingHashMapMax = inFrame->columns[groupingMap[0]]->int64_values[row];
+    }    
+
     groupCount++;
     return group_index;
 }
@@ -233,9 +240,7 @@ void AggregateNode::AggregateGroup(uint64_t group_index, Frame * inFrame, int ro
 
 void AggregateNode::Init(int rowGroupIndex)
 {
-    done = false;
-    
-    groupingHashMap.clear();
+    done = false;        
     groupCount = 0;
     
     //clearFramePool(); // This will simply drop our frames
@@ -256,8 +261,23 @@ bool AggregateNode::Step()
 
         std::chrono::high_resolution_clock::time_point t1 =  std::chrono::high_resolution_clock::now();    
 
+        uint64_t columnMin = std::numeric_limits<uint64_t>::max();
+        uint64_t columnMax = 0;
+
         // Iterate over all rows in frame
         for(int row = 0; row < inFrame->columns[groupingMap[0]]->row_count ; row++) {
+            if(inFrame->columns[groupingMap[0]]->int64_values[row] < columnMin){
+                columnMin = inFrame->columns[groupingMap[0]]->int64_values[row];
+            }
+            if(inFrame->columns[groupingMap[0]]->int64_values[row] > columnMax){
+                columnMax = inFrame->columns[groupingMap[0]]->int64_values[row];
+            }
+            if(inFrame->columns[groupingMap[0]]->int64_values[row] > groupingHashMapMax) { // There is no need for lookup
+                uint64_t hash = GetRowHash(inFrame, row);
+                int group_index = AddGroup(inFrame, row);
+                groupingHashMap[hash] = group_index;
+                continue;
+            }
             // Calculate row hash
             uint64_t hash = GetRowHash(inFrame, row);
             //uint64_t hash = inFrame->columns[groupingMap[0]]->int64_values[row];
@@ -274,19 +294,22 @@ bool AggregateNode::Step()
                 //std::cout << "Adding " << group_index << " : " << frameArray[frame_index]->columns[0]->int64_values[row_index] << std::endl;
             }
         }
+        //std::cout << "MIN " << columnMin << " MAX " << columnMax << std::endl;
 
         lastFrame = inFrame->lastFrame;
         if(inFrame->lastFrame){                
             if(barrier == 0) {
                 done = true;
+                groupingHashMap.clear();
             } else {
                 rowGroupCounter++;
                 if(rowGroupCounter >= totalRowGroups) {
                     done = true;
+                    groupingHashMap.clear();
                 }
                 std::cout << this->name << " rowGroupCounter " << rowGroupCounter << " totalRowGroups " << totalRowGroups << std::endl;
-                std::cout << this->name << " GroupCount " << groupCount << std::endl;
-                std::cout << this->name << " AggregateCount " << aggregateCount << std::endl;
+                //std::cout << this->name << " GroupCount " << groupCount << std::endl;
+                //std::cout << this->name << " AggregateCount " << aggregateCount << std::endl;
             }
         }
         inFrame->Free();
