@@ -302,6 +302,9 @@ public class DikeAggregateClient
 // Q18
 // java -classpath target/ndp-hdfs-client-1.0-jar-with-dependencies.jar org.dike.hdfs.DikeAggregateClient 18
 // java -classpath target/ndp-hdfs-client-1.0-jar-with-dependencies.jar org.dike.hdfs.DikeAggregateClient 18 1
+// java -classpath target/ndp-hdfs-client-1.0-jar-with-dependencies.jar org.dike.hdfs.DikeAggregateClient 18 ClearAll
+
+// for i in $(seq 0 10) ; do java -classpath target/ndp-hdfs-client-1.0-jar-with-dependencies.jar org.dike.hdfs.DikeAggregateClient 18 1; done
 
 // export DIKE_TRACE_RECORD_MAX=36865
 // export DIKE_COMPRESSION=ZSTD

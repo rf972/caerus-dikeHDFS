@@ -17,7 +17,8 @@ class ReadableFile : public arrow::io::RandomAccessFile {
     uint64_t fileLength;    
     arrow::MemoryPool* pool_ = arrow::default_memory_pool();
 
-    ReadableFile(std::string path) {        
+    ReadableFile(std::string path) {
+        //std::cout << __FUNCTION__ << " : " << __LINE__ << std::endl;
         //stream = orc::readFile(path);
         stream = orc::readHdfsFile(path);
         fileLength =  static_cast<uint64_t>(stream->getLength());

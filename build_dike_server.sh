@@ -74,4 +74,5 @@ popd
 # "-L${CMAKE_SOURCE_DIR}/external/build-aws-debug/lib -laws-c-event-stream  -laws-checksums -laws-c-common"
 # valgrind --tool=memcheck /server/dikeHDFS
 # valgrind --leak-check=full --gen-suppressions=all --log-file=/data/memcheck.log /server/dikeHDFS
+# valgrind --leak-check=full --show-leak-kinds=all --log-file=/data/memcheck.log /server/dikeHDFS
 # valgrind --leak-check=full --suppressions=/data/suppressions.conf --log-file=/data/memcheck.log /server/dikeHDFS

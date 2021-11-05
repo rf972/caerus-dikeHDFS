@@ -47,11 +47,11 @@ void LambdaProcessorTotal::CreateGraphs(DikeProcessorConfig & dikeProcessorConfi
     for(int n = 0; n < nWorkers; n++){
         int i;
         for(i = 0; i < nodeTree[n].size() - 1; i++) {
-            std::cout << "Connect " << nodeTree[n][i]->name << " to " << nodeTree[n][i+1]->name << std::endl;
+            //std::cout << "Connect " << nodeTree[n][i]->name << " to " << nodeTree[n][i+1]->name << std::endl;
             nodeTree[n][i]->Connect(nodeTree[n][i+1]);            
         }
         if( n > 0) { // Connect last node to barrier
-            std::cout << "Connect " << nodeTree[n][i]->name << " to " << nodeTree[0][i+1]->name << std::endl;
+            //std::cout << "Connect " << nodeTree[n][i]->name << " to " << nodeTree[0][i+1]->name << std::endl;
             nodeTree[n][i]->Connect(nodeTree[0][i+1]);
         }
     }
@@ -90,7 +90,7 @@ void LambdaProcessorTotal::Init(DikeProcessorConfig & dikeProcessorConfig, DikeI
 }
 
 LambdaProcessorTotal::~LambdaProcessorTotal() {
-    std::cout << "~LambdaProcessorTotal()" << std::endl;
+    //std::cout << "~LambdaProcessorTotal()" << std::endl;
     done = true;
     // Do it for each worker
     for(int i = 0; i < workerThread.size(); i++) {
@@ -109,7 +109,17 @@ LambdaProcessorTotal::~LambdaProcessorTotal() {
         for(int i = nodeTree[n].size() - 1; i >= 0; i--) {
             delete nodeTree[n][i];            
         }
-    }    
+    }
+#if 0    
+    std::cout << "Frame::allocCount " << Frame::allocCount << std::endl;
+    std::cout << "Frame::freeCount  " << Frame::freeCount << std::endl;
+ 
+    std::cout << "Column::allocCount " << Column::allocCount << std::endl;
+    std::cout << "Column::freeCount  " << Column::freeCount << std::endl;
+
+    std::cout << "LambdaBuffer::allocCount " << LambdaBuffer::allocCount << std::endl;
+    std::cout << "LambdaBuffer::freeCount  " << LambdaBuffer::freeCount << std::endl;
+#endif    
 }
 
 // This will simply send back results
@@ -172,7 +182,7 @@ void LambdaProcessorTotal::Worker(int workerID)
             if (res->state == LambdaResult::EMPTY){
                 res->state = LambdaResult::PENDING;
                 result_index = i;
-                std::cout << "LambdaProcessorTotal::Worker " << workerID << " Run on " << result_index << std::endl;
+                //std::cout << "LambdaProcessorTotal::Worker " << workerID << " Run on " << result_index << std::endl;
             }
         }
         lambdaResultVector->lock.unlock();
@@ -195,7 +205,7 @@ void LambdaProcessorTotal::Worker(int workerID)
             //lambdaResultVector->lock.unlock();
         }
     } while(result_index >= 0 && ! done); // Repeat
-    std::cout << "LambdaProcessorTotal::Worker " << workerID << " Done " << std::endl;
+    //std::cout << "LambdaProcessorTotal::Worker " << workerID << " Done " << std::endl;
 }
 
 void LambdaProcessorTotal::TrunkWorker() 
@@ -228,7 +238,7 @@ void LambdaProcessorTotal::TrunkWorker()
         sem_post(&lambdaResultVector->sem);
     }
 
-    std::cout << "LambdaProcessorTotal::TrunkWorker " << " Barrier Done " << std::endl;
+    //std::cout << "LambdaProcessorTotal::TrunkWorker " << " Barrier Done " << std::endl;
 
     // Run the rest of the graph
     step_done = false;
@@ -244,5 +254,5 @@ void LambdaProcessorTotal::TrunkWorker()
 
     sem_post(&res->sem);
 
-    std::cout << "LambdaProcessorTotal::TrunkWorker " << " Done " << std::endl;
+    //std::cout << "LambdaProcessorTotal::TrunkWorker " << " Done " << std::endl;
 }

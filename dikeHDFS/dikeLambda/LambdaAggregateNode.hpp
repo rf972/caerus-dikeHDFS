@@ -44,7 +44,7 @@ class AggregateNode : public Node {
     uint64_t aggregateCount = 0; // How many rows we aggregated
     
     AggregateNode(Poco::JSON::Object::Ptr pObject, DikeProcessorConfig & dikeProcessorConfig, DikeIO * output);
-    ~AggregateNode();
+    virtual ~AggregateNode();
 
     int StrToOp(std::string & str);
     std::string OpToStr(int op);

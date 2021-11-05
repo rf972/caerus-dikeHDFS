@@ -9,7 +9,8 @@ class Filter;
 
 class FilterNode : public Node {
     public:
-
+    static std::atomic<int> allocCount;
+    static std::atomic<int> freeCount;
     uint8_t * result = NULL;
     std::vector<Filter *> filterArray;
     FilterNode(Poco::JSON::Object::Ptr pObject, DikeProcessorConfig & dikeProcessorConfig, DikeIO * output);

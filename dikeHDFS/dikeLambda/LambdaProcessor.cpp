@@ -112,3 +112,5 @@ void LambdaProcessor::Finish()
 }
 
 LambdaBufferPool lambdaBufferPool;
+std::atomic<int> LambdaBuffer::allocCount;
+std::atomic<int> LambdaBuffer::freeCount;

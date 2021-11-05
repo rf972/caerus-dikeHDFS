@@ -59,7 +59,7 @@ int LambdaProcessorFactory::Run(DikeProcessorConfig & dikeProcessorConfig, DikeI
         output->write(resp.c_str(), resp.length());
     } else  if (dikeProcessorConfig["Name"].compare("LambdaClearAll") == 0) { // Lambda Clear All 
         for (auto it : processorMap) {
-            std::cout << "Deleting " << it.first << std::endl;
+            //std::cout << "Deleting " << it.first << std::endl;
             delete it.second;
         }
         processorMap.clear();

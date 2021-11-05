@@ -53,6 +53,7 @@ AggregateNode::AggregateNode(Poco::JSON::Object::Ptr pObject, DikeProcessorConfi
 
 AggregateNode::~AggregateNode()
 {
+    //std::cout << "AggregateNode::~AggregateNode " << this->name << std::endl;
 
 }
 
@@ -241,9 +242,7 @@ void AggregateNode::AggregateGroup(uint64_t group_index, Frame * inFrame, int ro
 void AggregateNode::Init(int rowGroupIndex)
 {
     done = false;        
-    groupCount = 0;
-    
-    //clearFramePool(); // This will simply drop our frames
+    groupCount = 0;        
 }
 
 bool AggregateNode::Step()

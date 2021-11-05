@@ -5,6 +5,7 @@
 #include <mutex>
 #include <semaphore.h>
 #include <vector>
+#include <atomic>
 
 #include "DikeProcessor.hpp"
 #include "LambdaNode.hpp"
@@ -15,7 +16,12 @@ class LambdaBuffer {
     uint32_t len = 0; // data len
     uint32_t size = 0; // memory size
 
-    LambdaBuffer(){}
+    static std::atomic<int> allocCount;
+    static std::atomic<int> freeCount;
+
+    LambdaBuffer(){
+        allocCount++;
+    }
 
     void resize(uint32_t new_size) {
         if(size < new_size) {
@@ -36,6 +42,7 @@ class LambdaBuffer {
     }
 
     ~LambdaBuffer() {
+        freeCount++;
         if(ptr != NULL){
             delete [] ptr;
         }

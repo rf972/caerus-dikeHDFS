@@ -80,7 +80,7 @@ InputNode::InputNode(Poco::JSON::Object::Ptr pObject, DikeProcessorConfig & dike
     parquetFileReader = std::move(parquet::ParquetFileReader::Open(inputFile, readerProperties, fileMetaData));
     columnCount = schemaDescriptor->num_columns();
     rowGroupCount = fileMetaData->num_row_groups();
-    rowGroupCount = 4;
+    //rowGroupCount = 4;
     
     columnReaders = new std::shared_ptr<parquet::ColumnReader> [columnCount];
     columnTypes = new Column::DataType[columnCount];    
@@ -303,7 +303,7 @@ void OutputNode::Init(int rowGroupIndex)
     done = false;
     output->write((const char *)schema, (nCol + 1)*sizeof(int64_t));
 
-    std::cout << "OutputNode::Init nCol " << nCol << std::endl;
+    //std::cout << "OutputNode::Init nCol " << nCol << std::endl;
     if(compressionEnabled && !initialized) {
         ZSTD_Context.resize(nCol);            
 

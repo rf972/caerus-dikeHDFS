@@ -12,6 +12,9 @@ class Frame;
 
 class Frame {
     public:
+    static std::atomic<int> allocCount;
+    static std::atomic<int> freeCount;
+
     std::vector<Column *> columns;
     Node * ownerNode = NULL;
 
