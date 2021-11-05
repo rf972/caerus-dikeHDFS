@@ -53,13 +53,8 @@ AggregateNode::AggregateNode(Poco::JSON::Object::Ptr pObject, DikeProcessorConfi
 
 AggregateNode::~AggregateNode()
 {
-#if 0    
-    for ( auto it = groupingHashMap.begin(); it != groupingHashMap.end(); ++it ) {
-         if(it->second.size() > 1) {
-            std::cout << "Warning !!! Hash collision detected ..." << std::endl;
-        }
-    }
-#endif    
+    //std::cout << "AggregateNode::~AggregateNode " << this->name << std::endl;
+
 }
 
 int AggregateNode::StrToOp(std::string & str) 
@@ -105,7 +100,17 @@ std::string AggregateNode::OpToStr(int op)
 
 Frame * AggregateNode::NewFrame()
 {
-    Frame * frame = new Frame(this);
+    Frame * frame;
+    // Check if we have a frame
+    frame = tryAllocFrame();
+    if(frame != NULL) {
+        for(int i = 0; i < frame->columns.size(); i++){
+            frame->columns[i]->row_count = 0;
+        }
+        return frame;
+    }
+
+    frame = new Frame(this);
     int colIdx = 0;
     for(int g = 0; g < groupingColumns.size(); g++){
         Column * col = new Column(this, colIdx++, groupingColumns[g],  groupingColumnTypes[g]);
@@ -123,6 +128,7 @@ Frame * AggregateNode::NewFrame()
 
 void AggregateNode::UpdateColumnMap(Frame * inFrame) 
 {    
+    totalRowGroups = inFrame->totalRowGroups;
     for(int i = 0; i < inFrame->columns.size(); i++){
         for(int g = 0; g < groupingColumns.size(); g++){
             if(groupingColumns[g].compare(inFrame->columns[i]->name) == 0){
@@ -141,6 +147,7 @@ void AggregateNode::UpdateColumnMap(Frame * inFrame)
     }
     Frame * outFrame = NewFrame();
     frameArray.push_back(outFrame);
+    outFrame->totalRowGroups = totalRowGroups;
 
     Node::UpdateColumnMap(outFrame);        
 }
@@ -187,6 +194,13 @@ int AggregateNode::AddGroup(Frame * inFrame, int row)
     }
 
     // Update all relevant counters
+    if(inFrame->columns[groupingMap[0]]->int64_values[row] < groupingHashMapMin) {
+        groupingHashMapMin = inFrame->columns[groupingMap[0]]->int64_values[row];
+    }
+    if(inFrame->columns[groupingMap[0]]->int64_values[row] > groupingHashMapMax){
+        groupingHashMapMax = inFrame->columns[groupingMap[0]]->int64_values[row];
+    }    
+
     groupCount++;
     return group_index;
 }
@@ -227,57 +241,83 @@ void AggregateNode::AggregateGroup(uint64_t group_index, Frame * inFrame, int ro
 
 void AggregateNode::Init(int rowGroupIndex)
 {
-    done = false;
-    
-    groupingHashMap.clear();
-    groupCount = 0;
-    
-    clearFramePool(); // This will simply drop our frames
-
-    // Reinit frameArray
-    for(int i = 0; i < frameArray.size(); i++){
-        frameArray[i]->lastFrame = false;
-        for(int col = 0; col < frameArray[i]->columns.size(); col++){
-            frameArray[i]->columns[col]->row_count = 0;
-        }
-    }
+    done = false;        
+    groupCount = 0;        
 }
 
 bool AggregateNode::Step()
 {
-    //std::cout << "AggregateNode::Step " << stepCount << std::endl;
     if(done) { return done; }
     stepCount++;
 
-    Frame * inFrame = getFrame();
-    if(inFrame == NULL) {
-        std::cout << "Input queue is empty " << std::endl;
-        return done;
-    }
-    
-    std::chrono::high_resolution_clock::time_point t1 =  std::chrono::high_resolution_clock::now();    
-
-    // Iterate over all rows in frame
-    for(int row = 0; row < inFrame->columns[groupingMap[0]]->row_count ; row++) {
-        // Calculate row hash
-        uint64_t hash = GetRowHash(inFrame, row);
-        //uint64_t hash = inFrame->columns[groupingMap[0]]->int64_values[row];
-        // Check if this hash present in our map
-        auto group = groupingHashMap.find(hash);
-        if(group != groupingHashMap.end()) { // We found group for our hash
-            aggregateCount++;
-            AggregateGroup(group->second, inFrame, row);
-        } else { // This hash does not exists
-            int group_index = AddGroup(inFrame, row);
-            groupingHashMap[hash] = group_index;
-            //int frame_index = group_index / Column::config::MAX_SIZE;
-            //int row_index = group_index - (frame_index * Column::config::MAX_SIZE);
-            //std::cout << "Adding " << group_index << " : " << frameArray[frame_index]->columns[0]->int64_values[row_index] << std::endl;
+    bool lastFrame;
+    do {
+        Frame * inFrame = getFrame();
+        if(inFrame == NULL) {
+            std::cout << "Input queue is empty " << std::endl;
+            return done;
         }
-    }
 
-    if(inFrame->lastFrame){        
-        done = true;
+        std::chrono::high_resolution_clock::time_point t1 =  std::chrono::high_resolution_clock::now();    
+
+        uint64_t columnMin = std::numeric_limits<uint64_t>::max();
+        uint64_t columnMax = 0;
+
+        // Iterate over all rows in frame
+        for(int row = 0; row < inFrame->columns[groupingMap[0]]->row_count ; row++) {
+            if(inFrame->columns[groupingMap[0]]->int64_values[row] < columnMin){
+                columnMin = inFrame->columns[groupingMap[0]]->int64_values[row];
+            }
+            if(inFrame->columns[groupingMap[0]]->int64_values[row] > columnMax){
+                columnMax = inFrame->columns[groupingMap[0]]->int64_values[row];
+            }
+            if(inFrame->columns[groupingMap[0]]->int64_values[row] > groupingHashMapMax) { // There is no need for lookup
+                uint64_t hash = GetRowHash(inFrame, row);
+                int group_index = AddGroup(inFrame, row);
+                groupingHashMap[hash] = group_index;
+                continue;
+            }
+            // Calculate row hash
+            uint64_t hash = GetRowHash(inFrame, row);
+            //uint64_t hash = inFrame->columns[groupingMap[0]]->int64_values[row];
+            // Check if this hash present in our map
+            auto group = groupingHashMap.find(hash);
+            if(group != groupingHashMap.end()) { // We found group for our hash
+                aggregateCount++;
+                AggregateGroup(group->second, inFrame, row);
+            } else { // This hash does not exists
+                int group_index = AddGroup(inFrame, row);
+                groupingHashMap[hash] = group_index;
+                //int frame_index = group_index / Column::config::MAX_SIZE;
+                //int row_index = group_index - (frame_index * Column::config::MAX_SIZE);
+                //std::cout << "Adding " << group_index << " : " << frameArray[frame_index]->columns[0]->int64_values[row_index] << std::endl;
+            }
+        }
+        //std::cout << "MIN " << columnMin << " MAX " << columnMax << std::endl;
+
+        lastFrame = inFrame->lastFrame;
+        if(inFrame->lastFrame){                
+            if(barrier == 0) {
+                done = true;
+                groupingHashMap.clear();
+            } else {
+                rowGroupCounter++;
+                if(rowGroupCounter >= totalRowGroups) {
+                    done = true;
+                    groupingHashMap.clear();
+                }
+                //std::cout << this->name << " rowGroupCounter " << rowGroupCounter << " totalRowGroups " << totalRowGroups << std::endl;
+                //std::cout << this->name << " GroupCount " << groupCount << std::endl;
+                //std::cout << this->name << " AggregateCount " << aggregateCount << std::endl;
+            }
+        }
+        inFrame->Free();
+        std::chrono::high_resolution_clock::time_point t2 =  std::chrono::high_resolution_clock::now();
+        runTime += t2 - t1;        
+    } while(barrier > 0 && lastFrame == false); // This will collect at least one rowGroup
+
+    std::chrono::high_resolution_clock::time_point t1 =  std::chrono::high_resolution_clock::now();
+    if(done) {
         if(verbose){
             std::cout << "aggregateCount " << aggregateCount << std::endl;
         }
@@ -287,12 +327,9 @@ bool AggregateNode::Step()
             }
             nextNode->putFrame(frameArray[i]); // Send frame down to graph
         }
-    }
-
-    inFrame->Free();
-
+        frameArray.clear();
+    }            
     std::chrono::high_resolution_clock::time_point t2 =  std::chrono::high_resolution_clock::now();
-    runTime += t2 - t1;        
-
+    runTime += t2 - t1;
     return done;
 }

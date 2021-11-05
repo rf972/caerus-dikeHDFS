@@ -80,9 +80,53 @@ InputNode::InputNode(Poco::JSON::Object::Ptr pObject, DikeProcessorConfig & dike
     parquetFileReader = std::move(parquet::ParquetFileReader::Open(inputFile, readerProperties, fileMetaData));
     columnCount = schemaDescriptor->num_columns();
     rowGroupCount = fileMetaData->num_row_groups();
+    //rowGroupCount = 4;
     
     columnReaders = new std::shared_ptr<parquet::ColumnReader> [columnCount];
     columnTypes = new Column::DataType[columnCount];    
+}
+
+void InputNode::UpdateColumnMap(Frame * _unused)
+{  
+    Frame * frame = new Frame(this);
+    for(int i = 0; i < columnCount; i++){                
+        auto columnRoot = (parquet::schema::PrimitiveNode*)schemaDescriptor->GetColumnRoot(i);
+        std::string name = columnRoot->name();
+        parquet::Type::type physical_type = columnRoot->physical_type();
+        columnTypes[i] = (Column::DataType) physical_type; // TODO type translation
+        Column * col = new Column(this, i, name,  columnTypes[i]); 
+        frame->Add(col);
+    }
+    // barrier nodes will need the info
+    frame->totalRowGroups = rowGroupCount;
+
+    // This will send update request down to graph
+    Node::UpdateColumnMap(frame);
+    
+    for(int i = 0; i < columnCount; i++) {
+        if(frame->columns[i]->useCount > 0) { // Lower nodes need this column
+            columnMap.push_back(i);
+            frame->columns[i]->Init(); // This will allocate memory buffers
+        }
+    }         
+
+    // Create few additional frames
+    for(int j = 0; j < 3; j++) {
+        Frame * f = new Frame(this); // Allocate new frame with data
+        for(int i = 0; i < columnCount; i++){                        
+            auto columnRoot = (parquet::schema::PrimitiveNode*)schemaDescriptor->GetColumnRoot(i);
+            std::string name = columnRoot->name();            
+            Column * col = new Column(this, i, name,  columnTypes[i]);
+            //std::cout << "Create Column " << i <<  " " << name << std::endl;            
+            f->Add(col);
+            if(frame->columns[i]->useCount > 0) {
+                col->Init(); // This will allocate memory buffers
+            }        
+        }
+        freeFrame(f); // this will put this frame on framePool
+    }
+
+    freeFrame(frame); // this will put this frame on framePool    
 }
 
 void InputNode::Init(int rowGroupIndex) 
@@ -90,49 +134,8 @@ void InputNode::Init(int rowGroupIndex)
     std::chrono::high_resolution_clock::time_point t1;
     if(verbose){
         t1 =  std::chrono::high_resolution_clock::now();
-    }
+    }    
     
-    if (!initialized) {        
-        Frame * frame = new Frame(this);
-        for(int i = 0; i < columnCount; i++){                
-            auto columnRoot = (parquet::schema::PrimitiveNode*)schemaDescriptor->GetColumnRoot(i);
-            std::string name = columnRoot->name();
-            parquet::Type::type physical_type = columnRoot->physical_type();
-            columnTypes[i] = (Column::DataType) physical_type; // TODO type tramslation
-            Column * col = new Column(this, i, name,  columnTypes[i]); 
-            frame->Add(col);
-        }    
-
-        // This will send update request down to graph
-        UpdateColumnMap(frame);
-        
-        for(int i = 0; i < columnCount; i++) {
-            if(frame->columns[i]->useCount > 0) {
-                columnMap.push_back(i);
-                frame->columns[i]->Init(); // This will allocate memory buffers
-            }
-        }         
-
-        // Create few additional frames
-        for(int j = 0; j < 3; j++) {
-            Frame * f = new Frame(this); // Allocate new frame with data
-            for(int i = 0; i < columnCount; i++){                        
-                auto columnRoot = (parquet::schema::PrimitiveNode*)schemaDescriptor->GetColumnRoot(i);
-                std::string name = columnRoot->name();            
-                Column * col = new Column(this, i, name,  columnTypes[i]);
-                //std::cout << "Create Column " << i <<  " " << name << std::endl;            
-                f->Add(col);
-                if(frame->columns[i]->useCount > 0) {
-                    col->Init(); // This will allocate memory buffers
-                }        
-            }
-            freeFrame(f); // this will put this frame on framePool
-        }
-
-        freeFrame(frame); // this will put this frame on framePool
-    }
-
-    initialized = true;
     done = false;
     rowGroupReader = std::move(parquetFileReader->RowGroup(rowGroupIndex));
     numRows = rowGroupReader->metadata()->num_rows();
@@ -210,10 +213,6 @@ InputNode::~InputNode()
 
 void ProjectionNode::UpdateColumnMap(Frame * inFrame) 
 {
-    if(initialized) {
-        return;
-    }
-
     for(int i = 0; i < columnCount; i++){
         for(int j = 0; j < inFrame->columns.size(); j++){
             if(projection[i].compare(inFrame->columns[j]->name) == 0){
@@ -222,6 +221,7 @@ void ProjectionNode::UpdateColumnMap(Frame * inFrame)
             }
         }
     }
+
     Frame * outFrame = new Frame(this);
     outFrame->columns.resize(columnCount);
     for(int i = 0; i < columnCount; i++) {
@@ -239,8 +239,7 @@ void ProjectionNode::UpdateColumnMap(Frame * inFrame)
             outFrame->columns[i] = inFrame->columns[columnMap[i]];
         }
         freeFrame(outFrame); // this will put this frame on framePool
-    }
-    initialized = true;
+    }    
 }
 
 bool ProjectionNode::Step()
@@ -304,6 +303,7 @@ void OutputNode::Init(int rowGroupIndex)
     done = false;
     output->write((const char *)schema, (nCol + 1)*sizeof(int64_t));
 
+    //std::cout << "OutputNode::Init nCol " << nCol << std::endl;
     if(compressionEnabled && !initialized) {
         ZSTD_Context.resize(nCol);            
 

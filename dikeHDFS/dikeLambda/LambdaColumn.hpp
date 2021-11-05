@@ -2,6 +2,7 @@
 #define LAMBDA_COLUMN_HPP
 
 #include <iostream>
+#include <atomic>
 
 #include <parquet/column_reader.h>
 
@@ -30,7 +31,9 @@ class Column {
         MAX_TEXT_SIZE = MAX_SIZE * 128,
     };
 
-    public:
+    static std::atomic<int> allocCount;
+    static std::atomic<int> freeCount;
+
     int id;
     std::string name;
     Column::DataType data_type;
@@ -53,7 +56,7 @@ class Column {
         this->id = id;
         this->name = name;
         this->data_type = data_type;
-        
+        allocCount++;
     }
 
     void Init() {        
@@ -120,6 +123,7 @@ class Column {
     }
 
     ~Column() {
+        freeCount++;
         if(!initialized){
             return;
         }

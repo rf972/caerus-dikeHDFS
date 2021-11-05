@@ -54,6 +54,9 @@ void LambdaProcessor::Init(DikeProcessorConfig & dikeProcessorConfig, DikeIO * o
         nodeVector[i]->Connect(nodeVector[i+1]);
     }
 
+    // UpdateColumnMap    
+    nodeVector[0]->UpdateColumnMap(NULL);
+
     // Get rowGroupCount from INPUT node
     rowGroupCount = ((InputNode *)nodeVector[0])->rowGroupCount;
 }
@@ -110,3 +113,7 @@ void LambdaProcessor::Finish()
         delete nodeVector[i];
     }
 }
+
+LambdaBufferPool lambdaBufferPool;
+std::atomic<int> LambdaBuffer::allocCount;
+std::atomic<int> LambdaBuffer::freeCount;

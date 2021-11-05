@@ -127,7 +127,7 @@ public class DikeAggregateClient
 
         switch(Integer.parseInt(testNumber)) {
            case 18:
-                String fname = "/tpch-test-parquet/lineitem.parquet";
+                String fname = "/tpch-test-parquet/lineitem.parquet";                
                 String dag = getQ18DAG(fname);
 
                 if(args.length < 2) {
@@ -138,10 +138,15 @@ public class DikeAggregateClient
 
                 String clearAllParam = ReadParam.GetReadParam(fname, "LambdaClearAll", 0, "");
                 String readAheadParam = ReadParam.GetReadParam(fname, "LambdaReadAhead", 0, dag);
+                String readTotalParam = ReadParam.GetReadParam(fname, "LambdaTotal", 0, dag);
                 String getPartitionsParam = ReadParam.GetReadParam(fname, "LambdaInfo", 0, "");
 
                 InitReadAheadProcessor(dikehdfsPath, fname, conf, clearAllParam);
-                InitReadAheadProcessor(dikehdfsPath, fname, conf, readAheadParam);
+                if(args[1].equals("ClearAll")){
+                    return;
+                }
+                //InitReadAheadProcessor(dikehdfsPath, fname, conf, readAheadParam);
+                InitReadAheadProcessor(dikehdfsPath, fname, conf, readTotalParam);
                 InitReadAheadProcessor(dikehdfsPath, fname, conf, getPartitionsParam);
                 try {                        
                     Thread.sleep(500);
@@ -172,9 +177,21 @@ public class DikeAggregateClient
         out = "{\"Name\":\"DAG Projection\",\"NodeArray\":[";
         out += "{\"Name\":\"InputNode\",\"Type\":\"_INPUT\",\"File\":\"ndphdfs://dikehdfs/tpch-test-parquet//lineitem.parquet\"},";
         out += "{\"Type\":\"_FILTER\",\"FilterArray\":[{\"Expression\":\"IsNotNull\",\"Arg\":{\"ColumnReference\":\"l_orderkey\"}}],\"Name\":\"Filter Q18\"},";
+
         out += "{\"Name\":\"Aggregate Q18\", \"Type\":\"_AGGREGATE\",";
         out += "\"GroupingArray\":[{\"ColumnReference\":\"l_orderkey\"}],";
-        out += "\"AggregateArray\":[{\"Aggregate\":\"sum\",\"Expression\":{\"ColumnReference\":\"l_quantity\"}}]},";        
+        out += "\"AggregateArray\":[{\"Aggregate\":\"sum\",\"Expression\":{\"ColumnReference\":\"l_quantity\"}}]},";
+
+        out += "{\"Name\":\"Aggregate Q18 barrier\", \"Type\":\"_AGGREGATE\", \"Barrier\":\"1\",";
+        out += "\"GroupingArray\":[{\"ColumnReference\":\"l_orderkey\"}],";
+        out += "\"AggregateArray\":[{\"Aggregate\":\"sum\",\"Expression\":{\"ColumnReference\":\"sum(l_quantity)\"}}]},";
+       
+        out += "{\"Name\":\"TPC-H Test Q18\",\"Type\":\"_FILTER\",";
+        out += "\"FilterArray\":[{\"Expression\":\"IsNotNull\",\"Arg\":{\"ColumnReference\":\"sum(sum(l_quantity))\"}}, ";
+        out += "{\"Expression\":\"GreaterThan\",\"Left\":{\"ColumnReference\":\"sum(sum(l_quantity))\"},\"Right\":{\"Literal\":\"300.0\"}}]},";
+
+        out += "{\"Name\":\"TPC-H Test Q18\",\"Type\":\"_PROJECTION\",\"ProjectionArray\":[\"l_orderkey\"]},";
+
         out += "{\"Name\":\"OutputNode\",\"Type\":\"_OUTPUT\",\"CompressionType\":\"ZSTD\",\"CompressionLevel\":\"2\"}]}";        
 
         return out;        
@@ -290,9 +307,26 @@ public class DikeAggregateClient
 // mvn package -o
 // Q18
 // java -classpath target/ndp-hdfs-client-1.0-jar-with-dependencies.jar org.dike.hdfs.DikeAggregateClient 18
-// java -classpath target/ndp-hdfs-client-1.0-jar-with-dependencies.jar org.dike.hdfs.DikeAggregateClient 18 2
+// java -classpath target/ndp-hdfs-client-1.0-jar-with-dependencies.jar org.dike.hdfs.DikeAggregateClient 18 1
+// java -classpath target/ndp-hdfs-client-1.0-jar-with-dependencies.jar org.dike.hdfs.DikeAggregateClient 18 ClearAll
+
+// for i in $(seq 0 10) ; do java -classpath target/ndp-hdfs-client-1.0-jar-with-dependencies.jar org.dike.hdfs.DikeAggregateClient 18 1; done
 
 // export DIKE_TRACE_RECORD_MAX=36865
 // export DIKE_COMPRESSION=ZSTD
 // export DIKE_COMPRESSION_LEVEL=3
 // export DIKE_PATH=DP3
+
+
+/*
+6882,303.0,
+29158,305.0,
+502886,312.0,
+551136,308.0,
+565574,301.0,
+735366,309.0,
+857959,305.0,
+967334,301.0,
+983201,304.0,
+1263015,320.0,
+*/

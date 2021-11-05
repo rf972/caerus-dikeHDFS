@@ -12,12 +12,17 @@ class Frame;
 
 class Frame {
     public:
+    static std::atomic<int> allocCount;
+    static std::atomic<int> freeCount;
+
     std::vector<Column *> columns;
     Node * ownerNode = NULL;
 
     int refCount;
     Frame * parentFrame = NULL;
     bool lastFrame = false;
+    
+    int totalRowGroups = 0;
 
     Frame(Node * ownerNode);
     ~Frame();

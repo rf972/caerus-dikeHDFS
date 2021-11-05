@@ -5,7 +5,8 @@ project(dikeLambda VERSION 0.1.0)
 add_library(libdikeLambda STATIC 
                                  LambdaProcessorFactory.cpp
                                  LambdaProcessor.cpp
-                                 LambdaProcessorReadAhead.cpp 
+                                 LambdaProcessorReadAhead.cpp
+                                 LambdaProcessorTotal.cpp 
                                  LambdaNode.cpp 
                                  LambdaFrame.cpp
                                  LambdaFilterNode.cpp

@@ -19,29 +19,6 @@
 
 using namespace lambda;
 
-static LambdaBufferPool lambdaBufferPool;
-
-class LambdaResultOutput : public DikeIO {
-    public:
-    LambdaResult * result = NULL;    
-
-    LambdaResultOutput(LambdaResult * result) {
-        this->result = result;
-    }
-
-    ~LambdaResultOutput(){ }
-    virtual int write(const char * buf, uint32_t size) override {
-        // Allocate buffer
-        LambdaBuffer * buffer = lambdaBufferPool.Allocate(size);
-        // Copy memory        
-        buffer->copy(buf, size);
-        // Push buffer to result
-        result->buffers.push_back(buffer);
-        return size;
-    }
-    virtual int read(char * buf, uint32_t size){return -1;};    
-};
-
 void LambdaProcessorReadAhead::Init(DikeProcessorConfig & dikeProcessorConfig, DikeIO * output)
 {
     std::string resp("LambdaProcessorReadAhead::Init [" + dikeProcessorConfig["ID"] + "]");
@@ -58,6 +35,7 @@ void LambdaProcessorReadAhead::Init(DikeProcessorConfig & dikeProcessorConfig, D
         
         if(i == 0){
             rowGroupCount = lambdaProcessor->rowGroupCount;
+            totalResults = rowGroupCount;
             lambdaResultVector = new LambdaResultVector(rowGroupCount, 2*nWorkers);
         }
         workerThread[i] = std::thread([=] { Worker(lambdaProcessor); });
@@ -152,9 +130,4 @@ void LambdaProcessorReadAhead::Worker(LambdaProcessor * lambdaProcessor)
     delete lambdaProcessor;
 
     //std::cout << "LambdaProcessorReadAhead::Worker Done" << std::endl;
-}
-
-LambdaResult::~LambdaResult(){
-    sem_destroy(&sem);
-    lambdaBufferPool.Free(buffers);
 }

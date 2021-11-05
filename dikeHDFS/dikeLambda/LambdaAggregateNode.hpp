@@ -17,7 +17,9 @@ class AggregateNode : public Node {
         _COUNT = 3, 
         _SUM = 4, 
     };
-    public:    
+    public:
+    int totalRowGroups = 0; // Total row groups in file
+    int rowGroupCounter = 0; // Barrier node will have to count "done" frames
     std::vector<std::string> groupingColumns;
     std::vector<int> groupingMap;
     int groupingMapSize = 0;
@@ -32,13 +34,17 @@ class AggregateNode : public Node {
     std::vector<Frame *> frameArray;
     std::unordered_map< uint64_t, int > groupingHashMap;
 
+    // This is temporary hack to evaluate min / max approach
+    uint64_t groupingHashMapMin = std::numeric_limits<uint64_t>::max();
+    uint64_t groupingHashMapMax = 0;
+
     int groupCount = 0; // Number of valid groups
 
     // Stats
     uint64_t aggregateCount = 0; // How many rows we aggregated
     
     AggregateNode(Poco::JSON::Object::Ptr pObject, DikeProcessorConfig & dikeProcessorConfig, DikeIO * output);
-    ~AggregateNode();
+    virtual ~AggregateNode();
 
     int StrToOp(std::string & str);
     std::string OpToStr(int op);

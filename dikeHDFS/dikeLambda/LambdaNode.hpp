@@ -47,6 +47,7 @@ class Node {
     bool done = false;
     int verbose = 0;
     bool initialized = false;
+    int barrier = 0; // This node will aggregate all branches from above
 
     // Statistics
     int stepCount = 0;
@@ -58,11 +59,15 @@ class Node {
         name = pObject->getValue<std::string>("Name");
         std::string typeStr = pObject->getValue<std::string>("Type");        
         verbose = std::stoi(dikeProcessorConfig["system.verbose"]);
+        if(pObject->has("Barrier")) {
+            barrier = std::stoi(pObject->getValue<std::string>("Barrier")); 
+        }
         if(verbose){
-            std::cout << "Node " << name << " type " << typeStr << std::endl;
+            std::cout << "Node " << name << " type " << typeStr << " barrier " << barrier << std::endl;
         }
         sem_init(&frameQueueSem, 0, 0);
         sem_init(&framePoolSem, 0, 0);
+        initialized = false;
     }
 
     virtual ~Node() {
@@ -81,7 +86,7 @@ class Node {
 
     virtual void Init(int rowGroupIndex) {        
         done = false;
-    }
+    }    
 
     virtual void UpdateColumnMap(Frame * frame) {
         //std::cout << "UpdateColumnMap " << name  << std::endl;
@@ -126,9 +131,18 @@ class Node {
         return frame;           
     }
 
-    void clearFramePool() { // Be carefull here. Make sure you know what you are doing
-        while(sem_trywait(&framePoolSem) == 0){}
-        while(!framePool.empty()) {framePool.pop();}
+    Frame * tryAllocFrame() {        
+        framePoolMutex.lock();
+        if(framePool.empty()){
+            framePoolMutex.unlock();            
+            return NULL;
+        }
+        Frame * frame = framePool.front();
+        framePool.pop();
+        framePoolMutex.unlock();
+        //std::cout << "Pop frame  " << frame <<  " Node " << name << std::endl;
+        frame->lastFrame = false;
+        return frame;           
     }
 
     void freeFrame(Frame * frame) {
@@ -181,6 +195,8 @@ class InputNode : public Node {
 
     virtual void Init(int rowGroupIndex) override;
     virtual bool Step() override;
+
+    virtual void UpdateColumnMap(Frame * _unused) override; // This will initiate UpdateColumnMap sequence
 };
 
 class ProjectionNode : public Node {
@@ -225,7 +241,7 @@ class OutputNode : public Node {
     uint8_t * compressedBuffer = NULL;
     int64_t compressedLen = 0;
     uint32_t compressedBufferLen = Column::MAX_TEXT_SIZE + 1024;
-    uint8_t lz4_state_memory [32<<10] __attribute__((aligned(128))); // see (int LZ4_sizeofState(void);)
+    //uint8_t lz4_state_memory [32<<10] __attribute__((aligned(128))); // see (int LZ4_sizeofState(void);)
     std::vector<ZSTD_CCtx *> ZSTD_Context;
     int compressionLevel = 3;
     int dikeNodeType = 0;
@@ -234,6 +250,7 @@ class OutputNode : public Node {
         : Node(pObject, dikeProcessorConfig, output) 
     {        
         this->output = output;
+        initialized = false;
 
         if(dikeProcessorConfig.count("dike.node.type") > 0) {            
             dikeNodeType = std::stoi(dikeProcessorConfig["dike.node.type"]);

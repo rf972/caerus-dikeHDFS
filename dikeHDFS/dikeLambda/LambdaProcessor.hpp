@@ -5,6 +5,7 @@
 #include <mutex>
 #include <semaphore.h>
 #include <vector>
+#include <atomic>
 
 #include "DikeProcessor.hpp"
 #include "LambdaNode.hpp"
@@ -15,7 +16,12 @@ class LambdaBuffer {
     uint32_t len = 0; // data len
     uint32_t size = 0; // memory size
 
-    LambdaBuffer(){}
+    static std::atomic<int> allocCount;
+    static std::atomic<int> freeCount;
+
+    LambdaBuffer(){
+        allocCount++;
+    }
 
     void resize(uint32_t new_size) {
         if(size < new_size) {
@@ -23,6 +29,9 @@ class LambdaBuffer {
                 delete [] ptr;
             }
             ptr = new uint8_t [new_size];
+            if(ptr == NULL){
+                std::cout << "Failed to allocate memory" << std::endl;
+            }
             size = new_size;
         }
     }
@@ -33,6 +42,7 @@ class LambdaBuffer {
     }
 
     ~LambdaBuffer() {
+        freeCount++;
         if(ptr != NULL){
             delete [] ptr;
         }
@@ -56,6 +66,9 @@ class LambdaBufferPool {
         lock.unlock();
         if(buffer == NULL){ // Q was empty
             buffer = new LambdaBuffer;
+            if(buffer == NULL){
+                std::cout << "Can't allocate LambdaBuffer "  << std::endl;
+            }
         }
         buffer->resize(size);
         return buffer;        
@@ -69,13 +82,16 @@ class LambdaBufferPool {
     void Free(std::vector<LambdaBuffer *> & buffers) {
         lock.lock();
         for(int i = 0; i < buffers.size(); i++){            
-            queue.push(buffers[i]);
+            //queue.push(buffers[i]);
+            delete buffers[i];
             buffers[i] = NULL;
         }
         lock.unlock();
         buffers.clear();
     }
 };
+
+extern LambdaBufferPool lambdaBufferPool;
 
 class LambdaResult {
     public:
@@ -92,7 +108,10 @@ class LambdaResult {
         this->state = state;
         sem_init(&sem, 0, 0);
     }
-    ~LambdaResult();
+    ~LambdaResult() {
+        sem_destroy(&sem);
+        lambdaBufferPool.Free(buffers);
+    }
 };
 
 class LambdaResultVector {
@@ -123,23 +142,24 @@ class LambdaProcessor{
     int verbose = 0;
     std::vector<lambda::Node *> nodeVector;
     int rowGroupCount = 0;
+    int totalResults = 0;
     LambdaProcessor(){}
+    virtual ~LambdaProcessor(){}
 
-    void Init(DikeProcessorConfig & dikeProcessorConfig, DikeIO * output);
-    int Run(int rowGroupIndex, DikeIO * output);
-    void Finish();
+    virtual void Init(DikeProcessorConfig & dikeProcessorConfig, DikeIO * output);
+    virtual int Run(int rowGroupIndex, DikeIO * output);
+    virtual int Run(DikeProcessorConfig & dikeProcessorConfig, DikeIO * output){ return 0;};
+    virtual void Finish();
 };
 
-class LambdaProcessorReadAhead {    
+class LambdaProcessorReadAhead : public LambdaProcessor{    
     public:
-    int verbose = 0;
-    int rowGroupCount = 0;
     LambdaResultVector * lambdaResultVector  = NULL;
     std::vector<std::thread> workerThread;
     bool done = false;
 
     LambdaProcessorReadAhead(){};
-    ~LambdaProcessorReadAhead() {
+    virtual ~LambdaProcessorReadAhead() {
         //std::cout << "~LambdaProcessorReadAhead()" << std::endl;
         done = true;
         // Do it for each worker
@@ -156,20 +176,62 @@ class LambdaProcessorReadAhead {
         }
     }
 
-    void Init(DikeProcessorConfig & dikeProcessorConfig, DikeIO * output);
-    int Run(DikeProcessorConfig & dikeProcessorConfig, DikeIO * output);
+    virtual void Init(DikeProcessorConfig & dikeProcessorConfig, DikeIO * output) override;
+    virtual int Run(DikeProcessorConfig & dikeProcessorConfig, DikeIO * output) override;
     void Worker(LambdaProcessor * lambdaProcessor);
+};
+
+class LambdaProcessorTotal : public LambdaProcessor{    
+    public:
+    LambdaResultVector * lambdaResultVector  = NULL;
+    std::vector<std::thread> workerThread;
+    bool done = false;
+    int nWorkers = 0;
+
+    std::vector<std::vector<lambda::Node *>> nodeTree;
+
+    LambdaProcessorTotal(){};
+    virtual ~LambdaProcessorTotal();
+
+    virtual void Init(DikeProcessorConfig & dikeProcessorConfig, DikeIO * output) override;
+    virtual int Run(DikeProcessorConfig & dikeProcessorConfig, DikeIO * output) override;
+    void Worker(int workerID);
+    void TrunkWorker();
+
+    void CreateGraphs(DikeProcessorConfig & dikeProcessorConfig);
 };
 
 class LambdaProcessorFactory {    
     public:
     int verbose = 0;
-    static std::map<std::string, LambdaProcessorReadAhead *> processorMap;
+    static std::map<std::string, LambdaProcessor *> processorMap;
     LambdaProcessorFactory(){};
 
     void Init(DikeProcessorConfig & dikeProcessorConfig, DikeIO * output);
     int Run(DikeProcessorConfig & dikeProcessorConfig, DikeIO * output);
 };
 
+
+class LambdaResultOutput : public DikeIO {
+    public:
+    LambdaResult * result = NULL;    
+
+    LambdaResultOutput(LambdaResult * result) {
+        this->result = result;
+    }
+
+    ~LambdaResultOutput(){ }
+    virtual int write(const char * buf, uint32_t size) override {
+        //std::cout << "LambdaResultOutput::write " << size << " bytes" << std::endl;
+        // Allocate buffer
+        LambdaBuffer * buffer = lambdaBufferPool.Allocate(size);
+        // Copy memory        
+        buffer->copy(buf, size);
+        // Push buffer to result
+        result->buffers.push_back(buffer);
+        return size;
+    }
+    virtual int read(char * buf, uint32_t size){return -1;};    
+};
 
 #endif /* LAMBDA_PROCESSOR */

@@ -51,6 +51,9 @@ enum {
     STORAGE_NODE = 1,
 };
 
+
+ServerApplication * serverApplication = NULL;
+
 static std::atomic<int> dataNodeReqCount(0);
 static int dikeStorageMaxRequests = 2;
 
@@ -359,6 +362,7 @@ public:
   }   
 };
 
+
 class NameNodeHandlerFactory : public HTTPRequestHandlerFactory {
 public:
   int verbose = 0;
@@ -380,14 +384,15 @@ class DataNodeHandlerFactory : public HTTPRequestHandlerFactory {
 public:
   int verbose = 0;
   DikeConfig dikeConfig;
+
   DataNodeHandlerFactory(int verbose, DikeConfig& dikeConfig):HTTPRequestHandlerFactory() {
     this->verbose = verbose;
     this->dikeConfig = dikeConfig;
   }
 
-  virtual HTTPRequestHandler* createRequestHandler(const HTTPServerRequest & req) {
-    return new DataNodeHandler(verbose, dikeConfig);
-  }
+    virtual HTTPRequestHandler* createRequestHandler(const HTTPServerRequest & req) {
+        return new DataNodeHandler(verbose, dikeConfig);
+    }
 };
 
 class DikeServerApp : public ServerApplication
@@ -490,9 +495,10 @@ class DikeServerApp : public ServerApplication
 };
 
 int main(int argc, char** argv)
-{  
+{      
     DikeServerApp app;
-  
+    serverApplication = (ServerApplication *)&app;
+
     #pragma omp parallel
     {
         #pragma omp single
