@@ -186,6 +186,12 @@ public class DikeAggregateClient
         out += "\"GroupingArray\":[{\"ColumnReference\":\"l_orderkey\"}],";
         out += "\"AggregateArray\":[{\"Aggregate\":\"sum\",\"Expression\":{\"ColumnReference\":\"sum(l_quantity)\"}}]},";
        
+        out += "{\"Name\":\"TPC-H Test Q18\",\"Type\":\"_FILTER\",";
+        out += "\"FilterArray\":[{\"Expression\":\"IsNotNull\",\"Arg\":{\"ColumnReference\":\"sum(sum(l_quantity))\"}}, ";
+        out += "{\"Expression\":\"GreaterThan\",\"Left\":{\"ColumnReference\":\"sum(sum(l_quantity))\"},\"Right\":{\"Literal\":\"300.0\"}}]},";
+
+        out += "{\"Name\":\"TPC-H Test Q18\",\"Type\":\"_PROJECTION\",\"ProjectionArray\":[\"l_orderkey\"]},";
+
         out += "{\"Name\":\"OutputNode\",\"Type\":\"_OUTPUT\",\"CompressionType\":\"ZSTD\",\"CompressionLevel\":\"2\"}]}";        
 
         return out;        
@@ -310,3 +316,17 @@ public class DikeAggregateClient
 // export DIKE_COMPRESSION=ZSTD
 // export DIKE_COMPRESSION_LEVEL=3
 // export DIKE_PATH=DP3
+
+
+/*
+6882,303.0,
+29158,305.0,
+502886,312.0,
+551136,308.0,
+565574,301.0,
+735366,309.0,
+857959,305.0,
+967334,301.0,
+983201,304.0,
+1263015,320.0,
+*/
