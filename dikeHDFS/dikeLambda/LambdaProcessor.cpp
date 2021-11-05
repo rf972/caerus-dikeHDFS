@@ -54,6 +54,9 @@ void LambdaProcessor::Init(DikeProcessorConfig & dikeProcessorConfig, DikeIO * o
         nodeVector[i]->Connect(nodeVector[i+1]);
     }
 
+    // UpdateColumnMap    
+    nodeVector[0]->UpdateColumnMap(NULL);
+
     // Get rowGroupCount from INPUT node
     rowGroupCount = ((InputNode *)nodeVector[0])->rowGroupCount;
 }

@@ -306,7 +306,7 @@ bool AggregateNode::Step()
                     done = true;
                     groupingHashMap.clear();
                 }
-                std::cout << this->name << " rowGroupCounter " << rowGroupCounter << " totalRowGroups " << totalRowGroups << std::endl;
+                //std::cout << this->name << " rowGroupCounter " << rowGroupCounter << " totalRowGroups " << totalRowGroups << std::endl;
                 //std::cout << this->name << " GroupCount " << groupCount << std::endl;
                 //std::cout << this->name << " AggregateCount " << aggregateCount << std::endl;
             }

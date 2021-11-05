@@ -11,6 +11,8 @@
 #include <Poco/JSON/Parser.h>
 #include <Poco/Dynamic/Var.h>
 
+#include <malloc.h> // for malloc_trim
+
 #include "DikeUtil.hpp"
 #include "LambdaProcessor.hpp"
 #include "LambdaFrame.hpp"
@@ -62,6 +64,7 @@ int LambdaProcessorFactory::Run(DikeProcessorConfig & dikeProcessorConfig, DikeI
             //std::cout << "Deleting " << it.first << std::endl;
             delete it.second;
         }
+        malloc_trim(0);
         processorMap.clear();
         std::string resp("All clear");
         output->write(resp.c_str(), resp.length());
