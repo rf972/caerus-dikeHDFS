@@ -123,10 +123,10 @@ if __name__ == '__main__':
             'part-00000-badcef81-d816-44c1-b936-db91dae4c15f-c000.snappy.parquet'
     user = getpass.getuser()
     config = dict()
-    config['use_ndp'] = 'False'
+    config['use_ndp'] = 'True'
     config['row_group'] = '0'
     config['query'] = "SELECT l_partkey, l_extendedprice, l_discount FROM arrow WHERE l_shipdate >= '1995-09-01' AND l_shipdate < '1995-10-01'"
-    config['url'] = f'http://dikehdfs:9870/{fname}?op=SELECTCONTENT&user.name={user}'
+    config['url'] = f'http://dikehdfs:9860/{fname}?op=SELECTCONTENT&user.name={user}'
 
     start = time.time()
     tpchSQL = TpchSQL(config)

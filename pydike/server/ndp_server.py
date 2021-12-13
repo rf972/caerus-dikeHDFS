@@ -1,3 +1,5 @@
+#!/usr/bin/python3 -u
+
 import argparse
 import json
 import numpy
@@ -57,7 +59,7 @@ class NdpRequestHandler(http.server.BaseHTTPRequestHandler):
         config['url'] = f'http://{netloc}{url.path}?{url.query}'
         config['use_ndp'] = 'False'
         print(config['url'])
-        tpch_sql = dike.client.tpch.TpchSQL(config)
+        tpch_sql = pydike.client.tpch.TpchSQL(config)
         self.send_response(HTTPStatus.OK)
         self.send_header('Transfer-Encoding', 'chunked')
         self.end_headers()
@@ -98,7 +100,7 @@ class NdpRequestHandler(http.server.BaseHTTPRequestHandler):
 
     def get_ndp_info(self):
         netloc = self.server.config.webhdfs
-        f = dike.core.webhdfs.WebHdfsFile(f'webhdfs://{netloc}/{self.path}', user=self.user)
+        f = pydike.core.webhdfs.WebHdfsFile(f'webhdfs://{netloc}/{self.path}', user=self.user)
         pf = pyarrow.parquet.ParquetFile(f)
         info = dict()
         info['columns'] = pf.schema_arrow.names
