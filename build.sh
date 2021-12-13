@@ -17,11 +17,9 @@
 
 set -e # exit on error
 
-git submodule init
-git submodule update --recursive --progress
+# git submodule init
+# git submodule update --recursive --progress
 
 source ./config.sh
 
 ./docker/build.sh || (echo "*** hadoop/docker/build.sh failed with $?" ; exit 1)
-./build_dike_server.sh || (echo "*** dike server build failed with $?" ; exit 1)
-./build_ndp_client.sh || (echo "*** ndp client build failed with $?" ; exit 1)

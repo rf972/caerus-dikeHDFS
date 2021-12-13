@@ -22,7 +22,7 @@ export CLASSPATH=$(bin/hadoop classpath)
 
 export HADOOP_CONF_DIR=$HADOOP_HOME/etc/hadoop
 
-/server/dikeHDFS &
+# /server/dikeHDFS &
 
 if [ "$RUNNING_MODE" = "daemon" ]; then
     sleep infinity
