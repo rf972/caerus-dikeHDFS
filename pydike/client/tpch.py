@@ -1,4 +1,6 @@
 import time
+import os
+import getpass
 import http.client
 import json
 from concurrent.futures import ThreadPoolExecutor
@@ -119,4 +121,15 @@ class TpchSQL:
 if __name__ == '__main__':
     fname = '/tpch-test-parquet-1g/lineitem.parquet/' \
             'part-00000-badcef81-d816-44c1-b936-db91dae4c15f-c000.snappy.parquet'
-    # TODO add test with timing
+    user = getpass.getuser()
+    config = dict()
+    config['use_ndp'] = 'False'
+    config['row_group'] = '0'
+    config['query'] = "SELECT l_partkey, l_extendedprice, l_discount FROM arrow WHERE l_shipdate >= '1995-09-01' AND l_shipdate < '1995-10-01'"
+    config['url'] = f'http://dikehdfs:9870/{fname}?op=SELECTCONTENT&user.name={user}'
+
+    start = time.time()
+    tpchSQL = TpchSQL(config)
+    end = time.time()
+    print(f"Query time is: {end - start:.3f} secs")
+

@@ -16,9 +16,7 @@
 # limitations under the License.
 
 set -e # exit on error
-
 source ./config.sh
-
 pushd "$(dirname "$0")" # connect to root
 
 ROOT_DIR=$(pwd)
@@ -29,7 +27,6 @@ USER_ID=$(id -u "${USER_NAME}")
 
 # Set the home directory in the Docker container.
 DOCKER_HOME_DIR=${DOCKER_HOME_DIR:-/home/${USER_NAME}}
-
 HADOOP_HOME=/opt/hadoop/hadoop-${HADOOP_VERSION}
 
 # Create NameNode and DataNode mount points
@@ -56,12 +53,11 @@ if [ "$RUNNING_MODE" = "interactive" ]; then
 fi
 
 DOCKER_RUN="docker run --rm=true ${DOCKER_IT} \
-  --init \
-  --ulimit core=-1 \
   -v ${ROOT_DIR}/data:/data \
   -v ${ROOT_DIR}/volume/namenode:/opt/volume/namenode \
   -v ${ROOT_DIR}/volume/datanode0:/opt/volume/datanode \
   -v ${ROOT_DIR}/volume/status:/opt/volume/status \
+  -v ${ROOT_DIR}/pydike:/opt/volume/python3/packages/pydike \
   -v ${ROOT_DIR}/volume/logs:${HADOOP_HOME}/logs \
   -v ${ROOT_DIR}/etc/hadoop/core-site.xml:${HADOOP_HOME}/etc/hadoop/core-site.xml \
   -v ${ROOT_DIR}/etc/hadoop/hdfs-site.xml:${HADOOP_HOME}/etc/hadoop/hdfs-site.xml \
@@ -70,6 +66,7 @@ DOCKER_RUN="docker run --rm=true ${DOCKER_IT} \
   -e HADOOP_HOME=${HADOOP_HOME} \
   -e HADOOP_CONF_DIR=${HADOOP_HOME}/etc/hadoop \
   -e RUNNING_MODE=${RUNNING_MODE} \
+  -e PYTHONPATH=/opt/volume/python3/packages \
   -u ${USER_ID} \
   --network dike-net \
   --name dikehdfs  --hostname dikehdfs --ip 172.18.0.100 \
