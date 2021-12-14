@@ -34,7 +34,8 @@ export CLASSPATH=$(bin/hadoop classpath)
 export HADOOP_CONF_DIR=$HADOOP_HOME/etc/hadoop
 
 sleep 1
-/server/dikeHDFS &
+
+/opt/volume/python3/packages/pydike/server/ndp_server.py &
 
 echo "HADOOP_READY"
 echo "HADOOP_READY" > /opt/volume/status/HADOOP_STATE

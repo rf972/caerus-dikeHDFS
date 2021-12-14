@@ -18,3 +18,5 @@
 # Configuration file for build scripts
 
 export HADOOP_VERSION=3.3.0
+export DIKE_DOCKER=dike_3.0
+
