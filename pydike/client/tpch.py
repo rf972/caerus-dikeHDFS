@@ -1,5 +1,6 @@
 import time
 import os
+import threading
 import struct
 import getpass
 import http.client
@@ -34,6 +35,13 @@ def read_col(pf, rg, col):
 
 def read_parallel(f, rg, columns):
     pf = pyarrow.parquet.ParquetFile(f)
+    # Serial reading
+    res = list()
+    for col in columns:
+        res.append(read_col(pf, rg, col).column(0))
+
+    return res
+
     executor = ThreadPoolExecutor(max_workers=len(columns))
     futures = list()
     for col in columns:
@@ -43,6 +51,8 @@ def read_parallel(f, rg, columns):
 
     return [r.result().column(0) for r in futures]
 
+
+logging_lock = threading.Lock()
 
 class TpchSQL:
     def __init__(self, config):
@@ -56,7 +66,9 @@ class TpchSQL:
 
     def log_message(self, msg):
         if self.config['verbose']:
+            logging_lock.acquire()
             print(msg)
+            logging_lock.release()
 
     def remote_run(self):
         url = urllib.parse.urlparse(self.config['url'])
@@ -65,6 +77,7 @@ class TpchSQL:
         conn.request("POST", self.config['url'], json.dumps(self.config), headers)
         response = conn.getresponse()
         self.ndp_data = response.read()
+        print(f'Received {len(self.ndp_data)} bytes')
         conn.close()
 
     def local_run(self):
@@ -125,19 +138,28 @@ class TpchSQL:
         outfile.write(header.byteswap().newbyteorder().tobytes())
         outfile.write(data)
 
-
-if __name__ == '__main__':
+def run_test(row_group):
     fname = '/tpch-test-parquet-1g/lineitem.parquet/' \
             'part-00000-badcef81-d816-44c1-b936-db91dae4c15f-c000.snappy.parquet'
     user = getpass.getuser()
     config = dict()
     config['use_ndp'] = 'True'
-    config['row_group'] = '0'
+    config['row_group'] = str(row_group)
     config['query'] = "SELECT l_partkey, l_extendedprice, l_discount FROM arrow WHERE l_shipdate >= '1995-09-01' AND l_shipdate < '1995-10-01'"
     config['url'] = f'http://dikehdfs:9860/{fname}?op=SELECTCONTENT&user.name={user}'
 
+    return TpchSQL(config)
+
+
+if __name__ == '__main__':
+    rg_count = 3
     start = time.time()
-    tpchSQL = TpchSQL(config)
+    executor = ThreadPoolExecutor(max_workers=rg_count)
+    futures = list()
+    for i in range(0, rg_count):
+        futures.append(executor.submit(run_test, i))
+
+    res = [f.result() for f in futures]
     end = time.time()
     print(f"Query time is: {end - start:.3f} secs")
 
