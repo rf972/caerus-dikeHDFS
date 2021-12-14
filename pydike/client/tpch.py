@@ -1,5 +1,7 @@
 import time
 import os
+import threading
+import struct
 import getpass
 import http.client
 import json
@@ -11,7 +13,6 @@ import numpy
 import duckdb
 import sqlparse
 
-from pyspark.serializers import write_with_length
 from pydike.core.webhdfs import WebHdfsFile
 
 
@@ -34,6 +35,13 @@ def read_col(pf, rg, col):
 
 def read_parallel(f, rg, columns):
     pf = pyarrow.parquet.ParquetFile(f)
+    # Serial reading
+    res = list()
+    for col in columns:
+        res.append(read_col(pf, rg, col).column(0))
+
+    return res
+
     executor = ThreadPoolExecutor(max_workers=len(columns))
     futures = list()
     for col in columns:
@@ -44,37 +52,45 @@ def read_parallel(f, rg, columns):
     return [r.result().column(0) for r in futures]
 
 
+logging_lock = threading.Lock()
+
 class TpchSQL:
     def __init__(self, config):
         self.df = None
         self.ndp_data = None
+        self.config = config
         if config['use_ndp'] == 'True':
-            self.remote_run(config)
+            self.remote_run()
         else:
-            self.local_run(config)
+            self.local_run()
 
-    def remote_run(self, config):
-        url = urllib.parse.urlparse(config['url'])
+    def log_message(self, msg):
+        if self.config['verbose']:
+            logging_lock.acquire()
+            print(msg)
+            logging_lock.release()
+
+    def remote_run(self):
+        url = urllib.parse.urlparse(self.config['url'])
         conn = http.client.HTTPConnection(url.netloc)
         headers = {'Content-type': 'application/json'}
-        conn.request("POST", config['url'], json.dumps(config), headers)
+        conn.request("POST", self.config['url'], json.dumps(self.config), headers)
         response = conn.getresponse()
         self.ndp_data = response.read()
+        print(f'Received {len(self.ndp_data)} bytes')
         conn.close()
 
-    def local_run(self, config):
-        f = WebHdfsFile(config['url'])
+    def local_run(self):
+        f = WebHdfsFile(self.config['url'])
         pf = pyarrow.parquet.ParquetFile(f)
-        tokens = sqlparse.parse(config['query'])[0].flatten()
+        tokens = sqlparse.parse(self.config['query'])[0].flatten()
         sql_columns = set([t.value for t in tokens if t.ttype in [sqlparse.tokens.Token.Name]])
         columns = [col for col in pf.schema_arrow.names if col in sql_columns]
-        if config['verbose']:
-            print(columns)
-        rg = int(config['row_group'])
+        self.log_message(columns)
+        rg = int(self.config['row_group'])
         tbl = pyarrow.Table.from_arrays(read_parallel(f, rg, columns), names=columns)
-        self.df = duckdb.from_arrow_table(tbl).query("arrow", config['query']).fetchdf()
-        if config['verbose']:
-            print(f'Computed df {self.df.shape}')
+        self.df = duckdb.from_arrow_table(tbl).query("arrow", self.config['query']).fetchdf()
+        self.log_message(f'Computed df {self.df.shape}')
 
     def to_spark(self, outfile):
         if self.df is None:
@@ -89,7 +105,10 @@ class TpchSQL:
             header[i] = t
             i += 1
 
-        write_with_length(header.byteswap().newbyteorder().tobytes(), outfile)
+        buffer = header.byteswap().newbyteorder().tobytes()
+        outfile.write(struct.pack("!i", len(buffer)))
+        outfile.write(buffer)
+
         for col in self.df.columns:
             self.write_column(col, outfile)
 
@@ -119,19 +138,28 @@ class TpchSQL:
         outfile.write(header.byteswap().newbyteorder().tobytes())
         outfile.write(data)
 
-
-if __name__ == '__main__':
+def run_test(row_group):
     fname = '/tpch-test-parquet-1g/lineitem.parquet/' \
             'part-00000-badcef81-d816-44c1-b936-db91dae4c15f-c000.snappy.parquet'
     user = getpass.getuser()
     config = dict()
     config['use_ndp'] = 'True'
-    config['row_group'] = '0'
+    config['row_group'] = str(row_group)
     config['query'] = "SELECT l_partkey, l_extendedprice, l_discount FROM arrow WHERE l_shipdate >= '1995-09-01' AND l_shipdate < '1995-10-01'"
     config['url'] = f'http://dikehdfs:9860/{fname}?op=SELECTCONTENT&user.name={user}'
 
+    return TpchSQL(config)
+
+
+if __name__ == '__main__':
+    rg_count = 3
     start = time.time()
-    tpchSQL = TpchSQL(config)
+    executor = ThreadPoolExecutor(max_workers=rg_count)
+    futures = list()
+    for i in range(0, rg_count):
+        futures.append(executor.submit(run_test, i))
+
+    res = [f.result() for f in futures]
     end = time.time()
     print(f"Query time is: {end - start:.3f} secs")
 

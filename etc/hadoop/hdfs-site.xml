@@ -44,6 +44,13 @@
       <description>Block Replication factor</description>
     </property>
 
+    <property>
+      <name>dfs.datanode.handler.count</name>
+      <value>1024</value>
+      <description>Block Replication factor</description>
+    </property>
+
+
     <!--
     <prope
     <property>
