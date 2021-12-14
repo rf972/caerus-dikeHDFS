@@ -68,11 +68,13 @@ class TpchSQL:
         tokens = sqlparse.parse(config['query'])[0].flatten()
         sql_columns = set([t.value for t in tokens if t.ttype in [sqlparse.tokens.Token.Name]])
         columns = [col for col in pf.schema_arrow.names if col in sql_columns]
-        print(columns)
+        if config['verbose']:
+            print(columns)
         rg = int(config['row_group'])
         tbl = pyarrow.Table.from_arrays(read_parallel(f, rg, columns), names=columns)
         self.df = duckdb.from_arrow_table(tbl).query("arrow", config['query']).fetchdf()
-        print(f'Computed df {self.df.shape}')
+        if config['verbose']:
+            print(f'Computed df {self.df.shape}')
 
     def to_spark(self, outfile):
         if self.df is None:

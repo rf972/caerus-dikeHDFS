@@ -49,16 +49,22 @@ class NdpRequestHandler(http.server.BaseHTTPRequestHandler):
 
 
     def do_POST(self):
-        print('POST', self.path)
+        if self.server.config.verbose:
+            print('POST', self.path)
         self.parse_url()
         data = self.rfile.read(int(self.headers['Content-Length']))
         config = json.loads(data)
-        print(config)
+        if self.server.config.verbose:
+            print(config)
+
         url = urllib.parse.urlparse(config['url'])
         netloc = self.server.config.webhdfs
         config['url'] = f'http://{netloc}{url.path}?{url.query}'
         config['use_ndp'] = 'False'
-        print(config['url'])
+        if self.server.config.verbose:
+            print(config['url'])
+
+        config['verbose'] = self.server.config.verbose
         tpch_sql = pydike.client.tpch.TpchSQL(config)
         self.send_response(HTTPStatus.OK)
         self.send_header('Transfer-Encoding', 'chunked')
@@ -123,6 +129,7 @@ if __name__ == '__main__':
     parser = argparse.ArgumentParser(description='Run NDP server.')
     parser.add_argument('-w', '--webhdfs', default='127.0.0.1:9870', help='Namenode http-address')
     parser.add_argument('-p', '--port', type=int, default='9860', help='Server port')
+    parser.add_argument('-v', '--verbose', type=int, default='0', help='Verbose mode')
     config = parser.parse_args()
     print(f'Listening to port:{config.port} HDFS:{config.webhdfs}')
     ndp_server = NdpServer(('', config.port), NdpRequestHandler, config)
