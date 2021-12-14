@@ -1,25 +1,22 @@
 import pickle
 import json
+import struct
 import pydike.client.spark_driver
 import pydike.client.tpch
-
-from pyspark.serializers import write_with_length, write_int, read_long, read_bool, \
-    write_long, read_int, SpecialLengths, UTF8Deserializer, PickleSerializer, \
-    BatchedSerializer
 
 
 def ndp_reader(split_index, config_json):
     config = json.loads(config_json)
     print(config)
-    return dike.client.tpch.TpchSQL(config)
-
-
-utf8_deserializer = UTF8Deserializer()
+    return pydike.client.tpch.TpchSQL(config)
 
 
 class DeSerializer:
     def load_stream(self, infile):
-        return utf8_deserializer.loads(infile)
+        length = infile.read(4)
+        length = struct.unpack("!i", length)[0]
+        s = infile.read(length)
+        return s
 
 
 class Serializer:

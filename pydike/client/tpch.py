@@ -1,5 +1,6 @@
 import time
 import os
+import struct
 import getpass
 import http.client
 import json
@@ -11,7 +12,6 @@ import numpy
 import duckdb
 import sqlparse
 
-from pyspark.serializers import write_with_length
 from pydike.core.webhdfs import WebHdfsFile
 
 
@@ -48,33 +48,36 @@ class TpchSQL:
     def __init__(self, config):
         self.df = None
         self.ndp_data = None
+        self.config = config
         if config['use_ndp'] == 'True':
-            self.remote_run(config)
+            self.remote_run()
         else:
-            self.local_run(config)
+            self.local_run()
 
-    def remote_run(self, config):
-        url = urllib.parse.urlparse(config['url'])
+    def log_message(self, msg):
+        if self.config['verbose']:
+            print(msg)
+
+    def remote_run(self):
+        url = urllib.parse.urlparse(self.config['url'])
         conn = http.client.HTTPConnection(url.netloc)
         headers = {'Content-type': 'application/json'}
-        conn.request("POST", config['url'], json.dumps(config), headers)
+        conn.request("POST", self.config['url'], json.dumps(self.config), headers)
         response = conn.getresponse()
         self.ndp_data = response.read()
         conn.close()
 
-    def local_run(self, config):
-        f = WebHdfsFile(config['url'])
+    def local_run(self):
+        f = WebHdfsFile(self.config['url'])
         pf = pyarrow.parquet.ParquetFile(f)
-        tokens = sqlparse.parse(config['query'])[0].flatten()
+        tokens = sqlparse.parse(self.config['query'])[0].flatten()
         sql_columns = set([t.value for t in tokens if t.ttype in [sqlparse.tokens.Token.Name]])
         columns = [col for col in pf.schema_arrow.names if col in sql_columns]
-        if config['verbose']:
-            print(columns)
-        rg = int(config['row_group'])
+        self.log_message(columns)
+        rg = int(self.config['row_group'])
         tbl = pyarrow.Table.from_arrays(read_parallel(f, rg, columns), names=columns)
-        self.df = duckdb.from_arrow_table(tbl).query("arrow", config['query']).fetchdf()
-        if config['verbose']:
-            print(f'Computed df {self.df.shape}')
+        self.df = duckdb.from_arrow_table(tbl).query("arrow", self.config['query']).fetchdf()
+        self.log_message(f'Computed df {self.df.shape}')
 
     def to_spark(self, outfile):
         if self.df is None:
@@ -89,7 +92,10 @@ class TpchSQL:
             header[i] = t
             i += 1
 
-        write_with_length(header.byteswap().newbyteorder().tobytes(), outfile)
+        buffer = header.byteswap().newbyteorder().tobytes()
+        outfile.write(struct.pack("!i", len(buffer)))
+        outfile.write(buffer)
+
         for col in self.df.columns:
             self.write_column(col, outfile)
 
