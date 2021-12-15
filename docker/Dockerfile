@@ -56,7 +56,7 @@ RUN curl -L https://downloads.apache.org/hadoop/common/hadoop-${ENV_HADOOP_VERSI
 # Install dikeV3 dependencies
 RUN apt-get -q update \
     && apt-get -q install -y --no-install-recommends \
-        python3-pip
+        python3-pip python3-venv python3-wheel
 
 RUN pip3 install pandas sqlparse duckdb pyarrow
 
