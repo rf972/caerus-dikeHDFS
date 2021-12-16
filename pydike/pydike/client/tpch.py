@@ -124,18 +124,9 @@ class TpchSQL:
         header = None
         if data.dtype == 'object' and isinstance(data[0], str):
             s = data.astype(dtype=numpy.bytes_)
-            l = numpy.char.str_len(s).astype(dtype=numpy.ubyte)
-            fixed_len = numpy.all(l == l[0])
             data = s.tobytes()
-            if fixed_len:
-                data_type = DataTypes.FIXED_LEN_BYTE_ARRAY
-                header = numpy.array([data_type, l[0], len(data), 0], numpy.int32)
-            else:
-                data_type = DataTypes.BYTE_ARRAY
-                h = numpy.array([data_type, 0, len(l), 0], numpy.int32)
-                outfile.write(h.byteswap().newbyteorder().tobytes())
-                outfile.write(l.tobytes())
-                header = numpy.array([data_type, 0, len(data), 0], numpy.int32)
+            data_type = DataTypes.FIXED_LEN_BYTE_ARRAY
+            header = numpy.array([data_type, s.dtype.itemsize, len(data), 0], numpy.int32)
 
         else:  # Binary type
             data = data.byteswap().newbyteorder().tobytes()
