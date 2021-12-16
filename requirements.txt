@@ -1,0 +1,4 @@
+pyarrow
+numpy
+duckdb
+sqlparse
