@@ -57,7 +57,7 @@ DOCKER_RUN="docker run --rm=true ${DOCKER_IT} \
   -v ${ROOT_DIR}/volume/namenode:/opt/volume/namenode \
   -v ${ROOT_DIR}/volume/datanode0:/opt/volume/datanode \
   -v ${ROOT_DIR}/volume/status:/opt/volume/status \
-  -v ${ROOT_DIR}/pydike:/opt/volume/python3/packages/pydike \
+  -v ${ROOT_DIR}/pydike/pydike:/opt/volume/python3/packages/pydike \
   -v ${ROOT_DIR}/volume/logs:${HADOOP_HOME}/logs \
   -v ${ROOT_DIR}/etc/hadoop/core-site.xml:${HADOOP_HOME}/etc/hadoop/core-site.xml \
   -v ${ROOT_DIR}/etc/hadoop/hdfs-site.xml:${HADOOP_HOME}/etc/hadoop/hdfs-site.xml \

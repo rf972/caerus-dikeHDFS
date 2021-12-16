@@ -1,5 +1,7 @@
 import time
 import os
+import sys
+import pathlib
 import threading
 import struct
 import getpass
@@ -12,6 +14,13 @@ import pyarrow.parquet
 import numpy
 import duckdb
 import sqlparse
+
+'''
+# This will add parent to the path
+file = pathlib.Path(__file__).resolve()
+parent, root = file.parent, file.parents[2]  # Two levels up
+sys.path.append(str(root))
+'''
 
 from pydike.core.webhdfs import WebHdfsFile
 
