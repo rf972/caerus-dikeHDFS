@@ -1,7 +1,5 @@
 import time
-import os
-import sys
-import pathlib
+import argparse
 import threading
 import struct
 import getpass
@@ -14,13 +12,6 @@ import pyarrow.parquet
 import numpy
 import duckdb
 import sqlparse
-
-'''
-# This will add parent to the path
-file = pathlib.Path(__file__).resolve()
-parent, root = file.parent, file.parents[2]  # Two levels up
-sys.path.append(str(root))
-'''
 
 from pydike.core.webhdfs import WebHdfsFile
 
@@ -39,7 +30,10 @@ class DataTypes:
 
 
 def read_col(pf, rg, col):
-    return pf.read_row_group(rg, columns=[col])
+    print(f'Read rg {rg}[{col}]')
+    data = pf.read_row_group(rg, columns=[col])
+    print(f'Read rg {rg}[{col}] done')
+    return data
 
 
 def read_parallel(f, rg, columns):
@@ -48,7 +42,6 @@ def read_parallel(f, rg, columns):
     res = list()
     for col in columns:
         res.append(read_col(pf, rg, col).column(0))
-
     return res
 
     executor = ThreadPoolExecutor(max_workers=len(columns))
@@ -62,6 +55,8 @@ def read_parallel(f, rg, columns):
 
 
 logging_lock = threading.Lock()
+pyarrow_lock = threading.Lock()
+
 
 class TpchSQL:
     def __init__(self, config):
@@ -97,7 +92,10 @@ class TpchSQL:
         columns = [col for col in pf.schema_arrow.names if col in sql_columns]
         self.log_message(columns)
         rg = int(self.config['row_group'])
-        tbl = pyarrow.Table.from_arrays(read_parallel(f, rg, columns), names=columns)
+        # tbl = pyarrow.Table.from_arrays(read_parallel(f, rg, columns), names=columns)
+        pyarrow_lock.acquire()
+        tbl = pf.read_row_group(rg, columns)
+        pyarrow_lock.release()
         self.df = duckdb.from_arrow_table(tbl).query("arrow", self.config['query']).fetchdf()
         self.log_message(f'Computed df {self.df.shape}')
 
@@ -147,7 +145,7 @@ class TpchSQL:
         outfile.write(header.byteswap().newbyteorder().tobytes())
         outfile.write(data)
 
-def run_test(row_group):
+def run_test(row_group, args):
     fname = '/tpch-test-parquet-1g/lineitem.parquet/' \
             'part-00000-badcef81-d816-44c1-b936-db91dae4c15f-c000.snappy.parquet'
     user = getpass.getuser()
@@ -155,18 +153,24 @@ def run_test(row_group):
     config['use_ndp'] = 'True'
     config['row_group'] = str(row_group)
     config['query'] = "SELECT l_partkey, l_extendedprice, l_discount FROM arrow WHERE l_shipdate >= '1995-09-01' AND l_shipdate < '1995-10-01'"
-    config['url'] = f'http://dikehdfs:9860/{fname}?op=SELECTCONTENT&user.name={user}'
+    config['url'] = f'http://{args.server}/{fname}?op=SELECTCONTENT&user.name={user}'
 
     return TpchSQL(config)
 
 
 if __name__ == '__main__':
-    rg_count = 3
+    parser = argparse.ArgumentParser(description='Run NDP server.')
+    parser.add_argument('-s', '--server', default='dikehdfs:9860', help='NDP server http-address')
+    parser.add_argument('-v', '--verbose', type=int, default='0', help='Verbose mode')
+    parser.add_argument('-r', '--rg_count', type=int, default='1', help='Number of row groups to read')
+    args = parser.parse_args()
+
+    rg_count = args.rg_count
     start = time.time()
     executor = ThreadPoolExecutor(max_workers=rg_count)
     futures = list()
     for i in range(0, rg_count):
-        futures.append(executor.submit(run_test, i))
+        futures.append(executor.submit(run_test, i, args))
 
     res = [f.result() for f in futures]
     end = time.time()

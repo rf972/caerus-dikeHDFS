@@ -1,5 +1,5 @@
 #!/usr/bin/python3 -u
-
+import threading
 import argparse
 import json
 import numpy
@@ -25,9 +25,18 @@ class ChunkedWriter:
         self.wfile.write('0\r\n\r\n'.encode())
 
 
+logging_lock = threading.Lock()
+
+
 class NdpRequestHandler(http.server.BaseHTTPRequestHandler):
     def log_message(self, format, *args):
         pass
+
+    def log(self, msg):
+        if self.server.config.verbose:
+            logging_lock.acquire()
+            print(msg)
+            logging_lock.release()
 
     def send_name_node_request(self):
         conn = http.client.HTTPConnection(self.server.config.webhdfs)
@@ -49,20 +58,17 @@ class NdpRequestHandler(http.server.BaseHTTPRequestHandler):
 
 
     def do_POST(self):
-        if self.server.config.verbose:
-            print('POST', self.path)
+        self.log(f'POST {self.path}')
         self.parse_url()
         data = self.rfile.read(int(self.headers['Content-Length']))
         config = json.loads(data)
-        if self.server.config.verbose:
-            print(config)
+        self.log(f'config {config}')
 
         url = urllib.parse.urlparse(config['url'])
         netloc = self.server.config.webhdfs
         config['url'] = f'http://{netloc}{url.path}?{url.query}'
         config['use_ndp'] = 'False'
-        if self.server.config.verbose:
-            print(config['url'])
+        self.log(f'config.url {config["url"]}')
 
         config['verbose'] = self.server.config.verbose
         tpch_sql = pydike.client.tpch.TpchSQL(config)
